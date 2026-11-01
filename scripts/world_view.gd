@@ -58,6 +58,7 @@ var shake := 0.0
 # camera state (world units, prototype space)
 var cam_t := Vector3.ZERO     # target (x, h, y)
 var cam_vis := 1450.0         # visible height in world units
+var menu_cover_px := 0.0      # screen pixels on the left hidden by the menu panel
 var _vert_mat: StandardMaterial3D
 
 func _ready() -> void:
@@ -727,8 +728,11 @@ func update_camera(race: Race, phase: String, dt: float, snap := false) -> void:
 	var vis: float
 	var b := track.bounds
 	if phase == "menu" or race == null:
-		target = Vector3(b.get_center().x, 0, b.get_center().y)
-		vis = maxf(b.size.y, b.size.x / aspect) * 0.95
+		# frame the track in the part of the screen the menu panel leaves free
+		var free_w := maxf(200.0, vp.x - menu_cover_px)
+		vis = maxf(b.size.y, b.size.x / (free_w / maxf(1.0, vp.y))) * 1.02
+		var upp := vis / maxf(1.0, vp.y)
+		target = Vector3(b.get_center().x - menu_cover_px * 0.5 * upp, 0, b.get_center().y)
 	else:
 		var hs: Array = []
 		for c in race.cars:

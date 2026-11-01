@@ -57,9 +57,10 @@ func rec_key() -> String:
 func _preview() -> void:
 	track = TrackData.new(Defs.TRACKS[track_idx], variant)
 	view.build(track)
-	view.update_camera(null, "menu", 0.0, true)
 	ui.show_menu()
 	_refresh_menu()
+	view.menu_cover_px = ui.menu_cover_px()
+	view.update_camera(null, "menu", 0.0, true)
 
 func _refresh_menu() -> void:
 	if phase != "menu":
@@ -162,6 +163,7 @@ func _process(delta: float) -> void:
 			_update_hud()
 	var me = race.cars[0] if race and race.cars.size() else null
 	sfx.set_engine(me.vel.length() if me else 0.0, phase == "race")
+	view.menu_cover_px = ui.menu_cover_px() if phase == "menu" else 0.0
 	if view.track:
 		view.sync(race, phase, _ghost_sample(), _aims(), dt)
 		view.update_camera(race if phase != "menu" else null, phase, dt)

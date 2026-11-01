@@ -31,20 +31,25 @@ var results: Control
 var hud: HBoxContainer
 var big: RichTextLabel
 var minimap: TrackMap
-var track_grid: GridContainer
+var side: PanelContainer
+var swipe_area: Control
+var swipe_hint: Label
+var track_name: Label
+var track_note: Label
+var track_count: Label
+var track_rec: Label
+var cur_track := 0
+var _swipe_from := Vector2.ZERO
+var _swiping := false
 var variant_row: GridContainer
 var mode_row: GridContainer
 var player_row: GridContainer
 var players_label: Label
-var controls_note: Label
 var sound_btn: Button
 var res_title: Label
 var res_table: GridContainer
 var res_note: Label
 var hud_vals := {}
-var thumbs: Array = []
-var track_btns: Array = []
-var _thumb_cache := {}
 
 func _ready() -> void:
 	root = Control.new()
@@ -145,14 +150,9 @@ func _overlay() -> Array:
 	ov.color = Color(0.024, 0.055, 0.06, 0.5)
 	ov.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.add_child(ov)
-	var scroll := ScrollContainer.new()
-	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	ov.add_child(scroll)
 	var center := CenterContainer.new()
-	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.add_child(center)
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	ov.add_child(center)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, 16)
@@ -189,47 +189,92 @@ func _grid(cols: int) -> GridContainer:
 	g.add_theme_constant_override("v_separation", 8)
 	return g
 
+# One landscape screen, nothing to scroll: a side panel with every choice and a big
+# Start button, and the selected track live in 3D on the right (swipe there to change track).
+const PANEL_W := 420.0
+const VARIANT_SUBS := {
+	"standard": "plain layout", "reverse": "other way round",
+	"obstacles": "breakable posts, +1 s", "collect": "gem line, +0.25 s per miss",
+}
+
 func _build_menu() -> void:
-	var r := _overlay()
-	menu = r[0]
-	var vb: VBoxContainer = r[1]
-	vb.add_child(_label("PIVOT RUSH", 48, C_POST, f_display))
-	vb.add_child(_label("Your car only drives straight. Hook a spinning tower, let the tether whip you round the bend, then let go and slide out down the next stretch."))
-	vb.add_child(_label("Hold to hook the nearest tower ahead, release to let go. The tether never gets longer than when you grabbed, and it takes up any slack if you swing in closer, so your line is set by when you grab. Hit a jump ramp at speed to clear the gap, or you drop in and restart behind it.", 14, C_MUTED))
-	vb.add_child(_caps("Track"))
-	track_grid = _grid(4)
-	var tg := ButtonGroup.new()
-	for i in Defs.TRACKS.size():
-		var d: Dictionary = Defs.TRACKS[i]
-		var b := Button.new()
-		b.toggle_mode = true
-		b.button_group = tg
-		b.custom_minimum_size = Vector2(120, 168)
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var box := VBoxContainer.new()
-		box.set_anchors_preset(Control.PRESET_FULL_RECT)
-		box.offset_left = 8; box.offset_top = 8; box.offset_right = -8; box.offset_bottom = -8
-		box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var th := TrackMap.new()
-		th.custom_minimum_size = Vector2(96, 96)
-		th.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		th.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		box.add_child(th)
-		box.add_child(_label(d["name"], 15, C_FG, f_bold))
-		var note := _label(d["note"], 12, C_MUTED)
-		box.add_child(note)
-		b.add_child(box)
-		b.set_meta("note", note)
-		b.pressed.connect(func(): track_picked.emit(i))
-		track_grid.add_child(b)
-		track_btns.append(b)
-		thumbs.append(th)
-	vb.add_child(track_grid)
+	menu = Control.new()
+	menu.set_anchors_preset(Control.PRESET_FULL_RECT)
+	menu.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(menu)
+	# swipe catcher over the 3D preview
+	swipe_area = Control.new()
+	swipe_area.set_anchors_preset(Control.PRESET_FULL_RECT)
+	swipe_area.mouse_filter = Control.MOUSE_FILTER_PASS
+	swipe_area.gui_input.connect(_on_swipe_input)
+	menu.add_child(swipe_area)
+
+	side = PanelContainer.new()
+	var ps := StyleBoxFlat.new()
+	ps.bg_color = C_PANEL
+	ps.set_corner_radius_all(14)
+	ps.content_margin_left = 20; ps.content_margin_right = 20
+	ps.content_margin_top = 16; ps.content_margin_bottom = 16
+	ps.shadow_color = Color(0, 0, 0, 0.45)
+	ps.shadow_size = 24
+	side.add_theme_stylebox_override("panel", ps)
+	menu.add_child(side)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 8)
+	side.add_child(vb)
+
+	var title_row := HBoxContainer.new()
+	var title := _label("PIVOT RUSH", 40, C_POST, f_display)
+	title.autowrap_mode = TextServer.AUTOWRAP_OFF
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_row.add_child(title)
+	sound_btn = Button.new()
+	sound_btn.toggle_mode = true
+	sound_btn.button_pressed = true
+	sound_btn.text = "SOUND ON"
+	sound_btn.custom_minimum_size = Vector2(112, 44)
+	sound_btn.add_theme_font_size_override("font_size", 13)
+	sound_btn.toggled.connect(func(on: bool):
+		sound_btn.text = "SOUND ON" if on else "SOUND OFF"
+		sound_toggled.emit(on))
+	title_row.add_child(sound_btn)
+	vb.add_child(title_row)
+	vb.add_child(_label("Hold to hook the tower ahead, let go to slide out.", 14, C_MUTED))
+
+	# track picker: big arrows either side of the name
+	var picker := HBoxContainer.new()
+	picker.add_theme_constant_override("separation", 8)
+	var prev := _arrow("<")
+	prev.pressed.connect(func(): track_picked.emit(posmod(cur_track - 1, Defs.TRACKS.size())))
+	picker.add_child(prev)
+	var mid := VBoxContainer.new()
+	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mid.add_theme_constant_override("separation", 0)
+	mid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	track_count = _label("", 12, C_MUTED, f_bold)
+	track_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	mid.add_child(track_count)
+	track_name = _label("", 26, C_FG, f_bold)
+	track_name.autowrap_mode = TextServer.AUTOWRAP_OFF
+	track_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	mid.add_child(track_name)
+	track_note = _label("", 13, C_MUTED)
+	track_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	mid.add_child(track_note)
+	picker.add_child(mid)
+	var nxt := _arrow(">")
+	nxt.pressed.connect(func(): track_picked.emit(posmod(cur_track + 1, Defs.TRACKS.size())))
+	picker.add_child(nxt)
+	vb.add_child(picker)
+	track_rec = _label("", 15, C_POST, f_bold)
+	track_rec.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(track_rec)
+
 	vb.add_child(_caps("Variant"))
 	variant_row = _grid(2)
 	var vg := ButtonGroup.new()
 	for v in Defs.VARIANTS:
-		var b := _choice(v[1], v[2], vg)
+		var b := _choice(v[1], VARIANT_SUBS.get(v[0], v[2]), vg)
 		b.set_meta("key", v[0])
 		b.pressed.connect(func(): variant_picked.emit(v[0]))
 		variant_row.add_child(b)
@@ -237,7 +282,7 @@ func _build_menu() -> void:
 	vb.add_child(_caps("Mode"))
 	mode_row = _grid(2)
 	var mg := ButtonGroup.new()
-	for m in [["trial", "Time trial", "solo vs your ghost, sets records"], ["race", "Race", "vs 3 rivals"]]:
+	for m in [["trial", "Time trial", "solo vs your ghost"], ["race", "Race", "vs AI rivals"]]:
 		var b := _choice(m[1], m[2], mg)
 		b.set_meta("key", m[0])
 		b.pressed.connect(func(): mode_picked.emit(m[0]))
@@ -248,32 +293,100 @@ func _build_menu() -> void:
 	player_row = _grid(2)
 	var pg := ButtonGroup.new()
 	for n in [1, 2]:
-		var b := _choice("%d player%s" % [n, "s" if n > 1 else ""], "vs 3 rivals" if n == 1 else "vs 2 rivals", pg)
+		var b := _choice("%d player%s" % [n, "s" if n > 1 else ""], "vs 3 rivals" if n == 1 else "split screen halves", pg)
 		b.set_meta("key", n)
 		b.pressed.connect(func(): players_picked.emit(n))
 		player_row.add_child(b)
 	vb.add_child(player_row)
-	controls_note = _label("", 14, C_MUTED)
-	vb.add_child(controls_note)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
+	var fill := Control.new()
+	fill.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vb.add_child(fill)
 	var go := Button.new()
 	go.text = "START"
-	go.custom_minimum_size = Vector2(0, 52)
-	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	go.custom_minimum_size = Vector2(0, 64)
 	_style_go(go)
+	go.add_theme_font_size_override("font_size", 28)
 	go.pressed.connect(func(): start_pressed.emit())
-	row.add_child(go)
-	sound_btn = Button.new()
-	sound_btn.text = "Sound on"
-	sound_btn.toggle_mode = true
-	sound_btn.button_pressed = true
-	sound_btn.custom_minimum_size = Vector2(130, 52)
-	sound_btn.toggled.connect(func(on: bool):
-		sound_btn.text = "Sound on" if on else "Sound off"
-		sound_toggled.emit(on))
-	row.add_child(sound_btn)
-	vb.add_child(row)
+	vb.add_child(go)
+
+	# swipe hint on the preview side
+	swipe_hint = _label("Swipe to change track", 14, Color(C_FG, 0.7), f_bold)
+	swipe_hint.autowrap_mode = TextServer.AUTOWRAP_OFF
+	menu.add_child(swipe_hint)
+	layout_menu()
+
+var _laid_out_for := Vector2.ZERO
+
+# re-lay the screen whenever the viewport size changes (rotation, window resize, first frame)
+func _process(_dt: float) -> void:
+	# also every frame while the menu shows: wrapped labels can briefly report a tall
+	# minimum size on the first layout pass, and a Control never shrinks back on its own
+	if root.get_viewport_rect().size != _laid_out_for or (menu and menu.visible):
+		layout_menu()
+
+func _arrow(t: String) -> Button:
+	var b := Button.new()
+	b.text = t
+	b.custom_minimum_size = Vector2(64, 64)
+	b.add_theme_font_override("font", f_display)
+	b.add_theme_font_size_override("font_size", 28)
+	b.add_theme_color_override("font_color", C_POST)
+	b.add_theme_color_override("font_hover_color", C_POST)
+	b.add_theme_color_override("font_pressed_color", C_POST)
+	return b
+
+# keep clear of notches / rounded corners
+func safe_insets() -> Dictionary:
+	var ins := { "l": 0.0, "t": 0.0, "r": 0.0, "b": 0.0 }
+	if not OS.has_feature("mobile"):
+		return ins
+	var win := DisplayServer.window_get_size()
+	var safe := DisplayServer.get_display_safe_area()
+	var vp := root.get_viewport_rect().size
+	if win.x <= 0 or win.y <= 0:
+		return ins
+	var k := vp.x / float(win.x)
+	ins["l"] = maxf(0.0, safe.position.x) * k
+	ins["t"] = maxf(0.0, safe.position.y) * k
+	ins["r"] = maxf(0.0, win.x - safe.end.x) * k
+	ins["b"] = maxf(0.0, win.y - safe.end.y) * k
+	return ins
+
+func layout_menu() -> void:
+	if side == null:
+		return
+	var vp := root.get_viewport_rect().size
+	_laid_out_for = vp
+	var ins := safe_insets()
+	var m := 16.0
+	var w := minf(PANEL_W, vp.x * 0.5)
+	side.position = Vector2(m + ins["l"], m + ins["t"])
+	side.custom_minimum_size = Vector2(w, 0)
+	side.size = Vector2(w, vp.y - 2 * m - ins["t"] - ins["b"])
+	var right_x: float = side.position.x + w
+	swipe_hint.position = Vector2(right_x + (vp.x - right_x) * 0.5 - 85.0, vp.y - 44.0 - ins["b"])
+	hud.offset_left = 16 + ins["l"]
+	hud.offset_right = -16 - ins["r"]
+	minimap.offset_right = -16 - ins["r"]
+	minimap.offset_left = minimap.offset_right - 140
+
+# how many screen pixels on the left the menu covers (the camera frames the track beside it)
+func menu_cover_px() -> float:
+	if not menu.visible or side == null:
+		return 0.0
+	return side.position.x + side.size.x
+
+func _on_swipe_input(e: InputEvent) -> void:
+	if e is InputEventScreenTouch or (e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT):
+		if e.pressed:
+			_swipe_from = e.position
+			_swiping = true
+		elif _swiping:
+			_swiping = false
+			var d: Vector2 = e.position - _swipe_from
+			if absf(d.x) > 60.0 and absf(d.x) > absf(d.y):
+				track_picked.emit(posmod(cur_track + (-1 if d.x > 0 else 1), Defs.TRACKS.size()))
 
 func _style_go(b: Button) -> void:
 	for st in ["normal", "hover", "pressed", "hover_pressed"]:
@@ -313,21 +426,14 @@ func _build_results() -> void:
 	results.visible = false
 
 # ---------------------------------------------------------------- menu state
-func thumb_track(i: int) -> TrackData:
-	if not _thumb_cache.has(i):
-		_thumb_cache[i] = TrackData.new(Defs.TRACKS[i], "standard")
-	return _thumb_cache[i]
-
 func refresh_menu(track_idx: int, variant: String, mode: String, humans: int, records: Array) -> void:
-	var w := root.get_viewport_rect().size.x
-	track_grid.columns = 4 if w >= 620 else 3 if w >= 460 else 2
-	for i in track_btns.size():
-		var b: Button = track_btns[i]
-		b.set_pressed_no_signal(i == track_idx)
-		var rec: float = records[i]
-		(b.get_meta("note") as Label).text = ("Record " + fmt(rec)) if rec > 0.0 else Defs.TRACKS[i]["note"]
-		if thumbs[i].track == null:
-			thumbs[i].set_track(thumb_track(i))
+	cur_track = track_idx
+	var d: Dictionary = Defs.TRACKS[track_idx]
+	track_count.text = "TRACK %d / %d" % [track_idx + 1, Defs.TRACKS.size()]
+	track_name.text = d["name"]
+	track_note.text = d["note"]
+	var rec: float = records[track_idx]
+	track_rec.text = "%d laps  ·  %s" % [int(d.get("laps", 3)), ("record " + fmt2(rec)) if rec > 0.0 else "no record yet"]
 	for b in variant_row.get_children():
 		b.set_pressed_no_signal(b.get_meta("key") == variant)
 	for b in mode_row.get_children():
@@ -336,10 +442,7 @@ func refresh_menu(track_idx: int, variant: String, mode: String, humans: int, re
 		b.set_pressed_no_signal(b.get_meta("key") == humans)
 	players_label.visible = mode != "trial"
 	player_row.visible = mode != "trial"
-	if humans == 1 or mode == "trial":
-		controls_note.text = "Touch and hold anywhere to hook, let go to release. Keyboard: hold Space."
-	else:
-		controls_note.text = "Player 1: left half of the screen or Space. Player 2: right half or Enter. The camera zooms out to keep you both in view."
+	layout_menu()
 
 func show_menu() -> void:
 	menu.visible = true

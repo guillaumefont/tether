@@ -79,6 +79,8 @@ The game uses the Mobile renderer on phones and the Compatibility renderer on th
 
 ## Screenshots
 
+![Menu](docs/menu.png)
+
 ![Two players racing on Coil](docs/race-2p.png)
 ![Time trial on Knot, Obstacles variant](docs/trial-obstacles.png)
 ![Collect variant on Pretzel](docs/collect.png)
