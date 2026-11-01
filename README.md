@@ -55,6 +55,17 @@ SHOT_DIR=/tmp/shots xvfb-run -a godot --path . --rendering-method gl_compatibili
 
 `--demo=<track index>,<variant>,<seconds>[,race,<players>]` drives the game on autopilot and saves PNGs.
 
+## Try it on a phone or in a browser
+
+Every push to `main` (and to the port branch while it is open) runs the **Builds** workflow, which exports
+the Web build and a debug-signed Android APK and publishes both to the `gh-pages` branch.
+Turn on GitHub Pages once (Settings > Pages > Deploy from a branch > `gh-pages`, folder `/`), then:
+
+- Play in a browser: https://guillaumefont.github.io/tether/
+- Install on Android: https://guillaumefont.github.io/tether/pivot-rush.apk (allow installs from your browser when asked)
+
+The APK is also attached to each workflow run as the `pivot-rush-apk` artifact.
+
 ## Exporting
 
 Presets for Android, iOS and Web are in `export_presets.cfg`. Install the 4.7.2 export templates
