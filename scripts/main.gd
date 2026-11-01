@@ -1,0 +1,329 @@
+# Game flow: menu -> countdown -> race -> finish -> results. Owns the race
+# simulation, feeds it touch/keyboard input, and drives the 3D view, UI and sound.
+extends Node
+
+const TrackData = preload("res://scripts/track.gd")
+const Race = preload("res://scripts/race.gd")
+const Defs = preload("res://scripts/track_defs.gd")
+const Records = preload("res://scripts/records.gd")
+const WorldView = preload("res://scripts/world_view.gd")
+const UI = preload("res://scripts/ui.gd")
+const Sfx = preload("res://scripts/sfx.gd")
+
+var view: WorldView
+var ui: UI
+var sfx: Sfx
+
+var track_idx := 0
+var variant := "standard"
+var mode := "trial"          # single player Time Trial is the default
+var humans := 1
+var track: TrackData
+var race: Race = null
+var phase := "menu"
+var countdown := 0.0
+var last_beep := 4
+var end_timer := 0.0
+var flash_t := 0.0
+var ghost: Array = []
+var new_record := false
+var touch_owner := {}        # touch index -> player
+
+func _ready() -> void:
+	view = WorldView.new()
+	add_child(view)
+	sfx = Sfx.new()
+	add_child(sfx)
+	ui = UI.new()
+	add_child(ui)
+	ui.track_picked.connect(func(i): track_idx = i; _preview())
+	ui.variant_picked.connect(func(v): variant = v; _preview())
+	ui.mode_picked.connect(func(m): mode = m; _refresh_menu())
+	ui.players_picked.connect(func(n): humans = n; _refresh_menu())
+	ui.sound_toggled.connect(func(on): sfx.enabled = on)
+	ui.start_pressed.connect(new_race)
+	ui.again_pressed.connect(new_race)
+	ui.menu_pressed.connect(func(): phase = "menu"; race = null; _preview())
+	get_viewport().size_changed.connect(_refresh_menu)
+	_preview()
+	# automation hooks for headless screenshots: --  --demo=<track>,<variant>,<seconds>
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--demo="):
+			_run_demo(a.substr(7))
+
+func rec_key() -> String:
+	return Records.key(Defs.TRACKS[track_idx]["name"], variant)
+
+func _preview() -> void:
+	track = TrackData.new(Defs.TRACKS[track_idx], variant)
+	view.build(track)
+	ui.show_menu()
+	_refresh_menu()
+	view.menu_cover_px = ui.menu_cover_px()
+	view.update_camera(null, "menu", 0.0, true)
+
+func _refresh_menu() -> void:
+	if phase != "menu":
+		return
+	var recs: Array = []
+	for d in Defs.TRACKS:
+		recs.append(Records.get_best(Records.key(d["name"], variant)))
+	ui.refresh_menu(track_idx, variant, mode, humans, recs)
+
+func new_race() -> void:
+	track = TrackData.new(Defs.TRACKS[track_idx], variant)
+	view.build(track)
+	race = Race.new(track, mode, humans)
+	ghost = Records.get_ghost(rec_key()) if mode == "trial" else []
+	view.setup_cars(race, mode == "trial")
+	new_record = false
+	countdown = 3.2
+	last_beep = 4
+	end_timer = 0.0
+	flash_t = 0.0
+	phase = "count"
+	touch_owner.clear()
+	ui.build_hud(race, track.tokens.size() > 0)
+	view.update_camera(race, "count", 0.0, true)
+
+# ---------------------------------------------------------------- input
+func _input(e: InputEvent) -> void:
+	if race == null:
+		return
+	if e is InputEventScreenTouch:
+		if e.pressed:
+			if phase != "race":
+				return
+			var w := get_viewport().get_visible_rect().size.x
+			var p := 1 if (race.humans > 1 and e.position.x > w / 2.0) else 0
+			touch_owner[e.index] = p
+			race.press(p)
+		elif touch_owner.has(e.index):
+			var p: int = touch_owner[e.index]
+			touch_owner.erase(e.index)
+			if not touch_owner.values().has(p):
+				race.release(p)
+	elif e is InputEventKey and not e.echo:
+		var p := -1
+		match e.physical_keycode:
+			KEY_SPACE, KEY_Z: p = 0
+			KEY_ENTER, KEY_KP_ENTER, KEY_M: p = 1
+		if p < 0 or p >= race.humans:
+			return
+		if e.pressed and phase == "race":
+			race.press(p)
+		elif not e.pressed:
+			race.release(p)
+		get_viewport().set_input_as_handled()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and race:
+		race.release(0)
+		race.release(1)
+		touch_owner.clear()
+
+# ---------------------------------------------------------------- loop
+func _process(delta: float) -> void:
+	var dt := minf(delta, 1.0 / 30.0)
+	if track:
+		Race.spin_anchors(track, dt)
+	match phase:
+		"count":
+			countdown -= dt
+			var n := ceili(countdown - 0.2)
+			if n != last_beep:
+				last_beep = n
+				sfx.blip(440.0 if n > 0 else 880.0, 0.15 if n > 0 else 0.35, "square", 0.07)
+			ui.set_big(str(n) if n > 0 else "GO")
+			if countdown <= 0.2:
+				phase = "race"
+		"race", "done":
+			race.update(dt)
+			_handle_events()
+			if race.clock > 0.7 and flash_t <= 0.0 and phase == "race":
+				ui.set_big("")
+			if flash_t > 0.0:
+				flash_t -= dt
+				if flash_t <= 0.0 and phase == "race":
+					ui.set_big("")
+			var hs: Array = race.cars.filter(func(c): return c.human >= 0)
+			if phase == "race" and hs.all(func(c): return c.finished):
+				phase = "done"
+				end_timer = 0.0
+				if mode == "trial" or race.humans > 1:
+					ui.set_big("FINISH")
+				else:
+					ui.set_big(_ordinal(race.standings().find(hs[0]) + 1))
+			if phase == "done":
+				end_timer += dt
+				if end_timer > 1.5 and flash_t <= 0.0:
+					ui.set_big("")
+				if race.cars.all(func(c): return c.finished) or end_timer > 6.0:
+					_show_results()
+			_update_hud()
+	var me = race.cars[0] if race and race.cars.size() else null
+	sfx.set_engine(me.vel.length() if me else 0.0, phase == "race")
+	view.menu_cover_px = ui.menu_cover_px() if phase == "menu" else 0.0
+	if view.track:
+		view.sync(race, phase, _ghost_sample(), _aims(), dt)
+		view.update_camera(race if phase != "menu" else null, phase, dt)
+
+func _aims() -> Dictionary:
+	var aims := {}
+	if phase != "race" or race == null:
+		return aims
+	for c in race.cars:
+		if c.human >= 0 and c.hook < 0 and not c.finished:
+			var p := race.find_anchor(c)
+			if p >= 0:
+				if not aims.has(p):
+					aims[p] = []
+				aims[p].append(c.color)
+	return aims
+
+func _ghost_sample():
+	if ghost.is_empty() or race == null or phase == "menu":
+		return null
+	var c0 = race.cars[0]
+	var k := int((race.clock - c0.lap_start if c0.lap >= 1 else 0.0) * 30.0)
+	return ghost[k] if k < ghost.size() else null
+
+func _handle_events() -> void:
+	for e in race.events:
+		match e["t"]:
+			"blip":
+				sfx.blip(e["f"], e["d"], e["w"], e["v"], e["s"])
+			"lap":
+				if mode == "trial" and e["car"].human >= 0:
+					_trial_lap(e["car"], e["lt"], e["trace"])
+			"finish":
+				if mode == "trial" and e["car"].human >= 0 and track.tokens.size() > 0:
+					_trial_run(e["car"])
+			_:
+				view.handle_event(e)
+	race.events.clear()
+
+# lap records and ghosts come only from solo Time Trial
+func _trial_lap(c, lt: float, trace: Array) -> void:
+	var collect := track.tokens.size() > 0
+	var prev := Records.get_lap(rec_key()) if collect else Records.get_best(rec_key())
+	var has_prev := prev > 0.0
+	if not has_prev or lt < prev:
+		if collect:
+			Records.set_lap(rec_key(), lt)
+		else:
+			Records.set_best(rec_key(), lt)
+			new_record = true
+			sfx.blip(1320, 0.25, "square", 0.06, 300)
+		ghost = trace
+		Records.set_ghost(rec_key(), ghost)
+	var lines := "[font_size=54]%s[/font_size]" % UI.fmt2(lt)
+	if track.obstacles.size() > 0 and c.last_hits > 0:
+		lines += "\n[font_size=22][color=#d4452f]+%d s, %d post%s touched[/color][/font_size]" % [c.last_hits, c.last_hits, "s" if c.last_hits > 1 else ""]
+	if collect:
+		lines += "\n[font_size=22][color=#7fe3d0]+%d gems this lap, %d/%d in all[/color][/font_size]" % [c.last_got, c.gems, track.tokens.size()]
+	if has_prev:
+		var delta := lt - prev
+		lines += "\n[font_size=40][color=%s]%s%.2f[/color][/font_size]" % ["#5fd38d" if delta < 0.0 else "#e2574c", "−" if delta < 0.0 else "+", absf(delta)]
+	ui.set_big(lines)
+	flash_t = 1.6
+
+func _trial_run(c) -> void:
+	var prev := Records.get_best(rec_key())
+	if prev <= 0.0 or c.finish_time < prev:
+		Records.set_best(rec_key(), c.finish_time)
+		new_record = true
+		sfx.blip(1320, 0.25, "square", 0.06, 300)
+
+func _update_hud() -> void:
+	var gems := track.tokens.size() > 0
+	if gems:
+		ui.set_hud("gems", "%d/%d" % [race.cars[0].gems, track.tokens.size()])
+	if mode == "trial":
+		var c = race.cars[0]
+		var rec := Records.get_best(rec_key())
+		ui.set_hud("lap0", "%d/%d" % [clampi(c.lap, 1, race.laps_total), race.laps_total])
+		ui.set_hud("time", UI.fmt2(race.clock if gems else (race.clock - c.lap_start if c.lap >= 1 and not c.finished else 0.0)))
+		ui.set_hud("rec", UI.fmt2(rec) if rec > 0.0 else "--")
+		return
+	var st := race.standings()
+	for c in race.cars:
+		if c.human >= 0:
+			ui.set_hud("lap%d" % c.human, "%d/%d" % [clampi(c.lap, 1, race.laps_total), race.laps_total])
+			ui.set_hud("pos%d" % c.human, _ordinal(st.find(c) + 1))
+	ui.set_hud("time", UI.fmt(race.clock))
+
+static func _ordinal(n: int) -> String:
+	var suf := ["th", "st", "nd", "rd"]
+	return str(n) + (suf[n] if n < 4 else "th")
+
+func _show_results() -> void:
+	phase = "results"
+	var name: String = Defs.TRACKS[track_idx]["name"]
+	if mode == "trial":
+		var c = race.cars[0]
+		var rec := Records.get_best(rec_key())
+		var rows: Array = []
+		for k in c.laps.size():
+			rows.append({ "cells": ["Lap %d" % (k + 1), "", UI.fmt2(c.laps[k])], "hl": c.laps[k] == c.best_lap })
+		if track.obstacles.size() > 0:
+			rows.append({ "cells": ["Posts hit", "", "%d (+%d s)" % [c.hits, c.hits]] })
+		if track.tokens.size() > 0:
+			rows.append({ "cells": ["Gems", "", "%d/%d" % [c.gems, track.tokens.size()]] })
+			rows.append({ "cells": ["Missed", "", "+%.2f s" % c.pen] })
+			rows.append({ "cells": ["Score", "", UI.fmt2(c.finish_time)], "hl": true })
+		var note := ""
+		if rec > 0.0:
+			if track.tokens.size() > 0:
+				note = "Record on %s (Collect): %s. Score = total time + 0.25 s per gem missed." % [name, UI.fmt2(rec)]
+			else:
+				note = "Record on %s: %s. Your best lap becomes the ghost you chase next time." % [name, UI.fmt2(rec)]
+		ui.show_results("New record" if new_record else "Time trial", rows, note)
+		return
+	var st := race.standings()
+	var winner = st[0]
+	var title := ""
+	if winner.human >= 0 or race.humans > 1:
+		title = winner.name + " wins"
+	else:
+		title = _ordinal(st.find(race.cars.filter(func(c): return c.human >= 0)[0]) + 1) + " place"
+	var rows2: Array = []
+	for k in st.size():
+		var c = st[k]
+		rows2.append({ "cells": [str(k + 1), c.name, ("best " + UI.fmt(c.best_lap) + "   " if c.best_lap > 0.0 else "") + (UI.fmt(c.finish_time) if c.finished else "DNF")], "hl": c.human >= 0, "color": c.color })
+	ui.show_results(title, rows2, "Race times don't count for records. Lap records come from Time trial.")
+
+# ---------------------------------------------------------------- demo / screenshots
+# Drives the real game with a scripted player so a headless run can capture frames.
+func _run_demo(arg: String) -> void:
+	var parts := arg.split(",")
+	track_idx = int(parts[0])
+	variant = parts[1] if parts.size() > 1 else "standard"
+	mode = parts[3] if parts.size() > 3 else "trial"
+	humans = int(parts[4]) if parts.size() > 4 else 1
+	var secs := float(parts[2]) if parts.size() > 2 else 8.0
+	var out := OS.get_environment("SHOT_DIR")
+	if out == "":
+		out = "user://"
+	await get_tree().process_frame
+	_preview()
+	await get_tree().create_timer(0.5).timeout
+	await RenderingServer.frame_post_draw
+	get_viewport().get_texture().get_image().save_png(out.path_join("menu.png"))
+	new_race()
+	var t := 0.0
+	var shot := 0
+	while t < secs:
+		await get_tree().process_frame
+		t += get_process_delta_time()
+		if phase == "race":
+			for c in race.cars:
+				if c.human >= 0:
+					race.ai_think(c)  # autopilot for the demo
+					race.inputs[c.human]["held"] = c.hook >= 0
+					race.inputs[c.human]["press_t"] = race.clock
+		if t > (shot + 1) * secs / 4.0:
+			shot += 1
+			await RenderingServer.frame_post_draw
+			get_viewport().get_texture().get_image().save_png(out.path_join("race_%d.png" % shot))
+	get_tree().quit()
