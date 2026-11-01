@@ -22,3 +22,5 @@ jobs:
         run: ./godot --headless --path . --script tests/sim_test.gd
       - name: Bends stay level (bridge ramps only on straights)
         run: ./godot --headless --path . --script tests/levels_test.gd
+      - name: Hooking picks the tower of the current bend
+        run: ./godot --headless --path . --script tests/hook_test.gd

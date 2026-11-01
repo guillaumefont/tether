@@ -134,30 +134,26 @@ func release(i: int) -> void:
 
 # ---------- hooking ----------
 func find_anchor(c: Car) -> int:
+	# the tower of the bend the car is on, or of the next bend when it is on a straight
+	# (never a nearer tower of another part of the track)
 	if c.air > 0.0 or c.fall > 0.0:
 		return -1
 	var best := -1
-	var bd := INF
-	var sp := c.vel.length()
-	if sp <= 0.0:
-		sp = 1.0
-	var v := c.vel / sp if sp > 5.0 else Vector2.from_angle(c.h)
+	var ba := track.n + 1
 	for idx in track.anchors.size():
-		var a: TrackData.Anchor = track.anchors[idx]
-		var dv := a.pos - c.pos
-		var d := dv.length()
-		var score := d - (a.r - TrackData.TURN_R)  # wide curves reach further
-		if d < maxf(RANGE, a.r + 200.0) and score < bd and dv.dot(v) > -0.5 * d:
-			bd = score
+		var ah := _ahead(c.seg, track.anchors[idx].exit)
+		if ah < ba:
+			ba = ah
 			best = idx
-	if best >= 0:  # on a shared tower, take the curve whose radius matches where the car is
-		var b: TrackData.Anchor = track.anchors[best]
-		var d := b.pos.distance_to(c.pos)
-		for idx in track.anchors.size():
-			var a: TrackData.Anchor = track.anchors[idx]
-			if a.home == b.home and absf(d - a.r) < absf(d - track.anchors[best].r):
-				best = idx
-	return best
+	if best < 0:
+		return -1
+	var a: TrackData.Anchor = track.anchors[best]
+	var dv := a.pos - c.pos
+	var d := dv.length()
+	var v := c.vel.normalized() if c.vel.length() > 5.0 else Vector2.from_angle(c.h)
+	if d < maxf(RANGE, a.r + 200.0) and dv.dot(v) > -0.5 * d:
+		return best
+	return -1
 
 func attach(c: Car, idx: int) -> void:
 	var a: TrackData.Anchor = track.anchors[idx]
