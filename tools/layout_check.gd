@@ -27,6 +27,12 @@ static func check(d: Dictionary) -> Dictionary:
 			elif not _near_crossing(T, i) or not _near_crossing(T, j):
 				why["stack"] = why.get("stack", 0) + 1
 				bad += 50.0   # long stacked overlap: the lower road would be hidden
+	# two curves on one tower need clearly different radii, or one hides the other
+	for i in T.anchors.size():
+		for j in range(i + 1, T.anchors.size()):
+			var A = T.anchors[i]; var B = T.anchors[j]
+			if A.pos.distance_to(B.pos) < 1.0 and absf(A.r - B.r) < 300.0:
+				bad += 5000.0; why["same_r"] = why.get("same_r", 0) + 1
 	# towers clear of every road
 	for a in T.anchors:
 		for p in T.P:

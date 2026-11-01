@@ -20,3 +20,5 @@ jobs:
         run: ./godot --headless --path . --import
       - name: Tracks build and AI finishes every track and variant
         run: ./godot --headless --path . --script tests/sim_test.gd
+      - name: Bends stay level (bridge ramps only on straights)
+        run: ./godot --headless --path . --script tests/levels_test.gd
