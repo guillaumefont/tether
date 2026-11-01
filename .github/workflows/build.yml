@@ -77,30 +77,33 @@ jobs:
       - name: Import project
         run: $RUNNER_TEMP/godot --headless --path . --import
 
+      # outputs go outside the project folder, so Godot never imports them as assets
       - name: Export Web
         run: |
-          mkdir -p build/web
-          $RUNNER_TEMP/godot --headless --path . --export-release Web build/web/index.html
-          test -s build/web/index.wasm
+          echo "OUT=$RUNNER_TEMP/out" >> "$GITHUB_ENV"
+          OUT="$RUNNER_TEMP/out"
+          mkdir -p "$OUT/web"
+          $RUNNER_TEMP/godot --headless --path . --export-release Web "$OUT/web/index.html"
+          test -s "$OUT/web/index.wasm"
 
       - name: Export Android (debug-signed APK)
         run: |
-          mkdir -p build/android
-          $RUNNER_TEMP/godot --headless --path . --export-debug Android build/android/pivot-rush.apk
-          test -s build/android/pivot-rush.apk
+          mkdir -p "$OUT/android"
+          $RUNNER_TEMP/godot --headless --path . --export-debug Android "$OUT/android/pivot-rush.apk"
+          test -s "$OUT/android/pivot-rush.apk"
 
       - uses: actions/upload-artifact@v4
         with:
           name: pivot-rush-apk
-          path: build/android/pivot-rush.apk
+          path: ${{ runner.temp }}/out/android/pivot-rush.apk
 
       - name: Publish to gh-pages
         run: |
-          mkdir -p build/pages
-          cp -r build/web/. build/pages/
-          cp build/android/pivot-rush.apk build/pages/
-          touch build/pages/.nojekyll
-          cd build/pages
+          mkdir -p "$OUT/pages"
+          cp -r "$OUT/web/." "$OUT/pages/"
+          cp "$OUT/android/pivot-rush.apk" "$OUT/pages/"
+          touch "$OUT/pages/.nojekyll"
+          cd "$OUT/pages"
           git init -q -b gh-pages
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
