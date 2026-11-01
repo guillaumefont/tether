@@ -38,7 +38,8 @@ var dyn_root: Node3D
 var camera: Camera3D
 var light: DirectionalLight3D
 
-var tower_nodes := {}      # home index -> {spinner, rings: [MeshInstance3D, MeshInstance3D], y}
+var tower_nodes := {}      # anchor (curve) index -> {spinner, rings: [MeshInstance3D, MeshInstance3D]}
+var rotor_h := PackedFloat32Array()  # rotor height of each curve (world units)
 var car_nodes: Array = []  # per car: {root, body, tether, marker}
 var ghost_node: Node3D
 var post_nodes: Array = []
@@ -46,7 +47,9 @@ var gem_nodes: Array = []
 
 # effects
 var parts: Array = []      # {p: Vector3, v: Vector3, life, col}
-var parts_mm: MultiMeshInstance3D
+const SPARK_MAX := 160
+var spark_pool: Array = []
+var spark_mats := {}
 var skid_mm: MultiMeshInstance3D
 var skid_mat: ShaderMaterial
 var skid_next := 0
@@ -85,6 +88,9 @@ func _ready() -> void:
 	env.ambient_light_energy = 0.55
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.fog_enabled = false
+	env.glow_enabled = true      # soft bloom on the emissive rotors and gems
+	env.glow_intensity = 0.35
+	env.glow_hdr_threshold = 0.9
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
@@ -171,12 +177,20 @@ shader_type spatial;
 render_mode cull_disabled;
 uniform vec3 base_col : source_color;
 uniform vec3 dot_col : source_color;
+uniform vec3 far_col : source_color;
+uniform vec3 near_col : source_color;
 varying vec3 wp;
 void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 void fragment() {
 	vec2 g = fract(wp.xz / 0.8);
 	float d = step(g.x, 0.05) * step(g.y, 0.05);
-	ALBEDO = mix(base_col, dot_col, d);
+	// soft gradient: lighter towards the bottom-centre of the screen, darker at the far edge
+	vec2 uv = SCREEN_UV;
+	float v = clamp(uv.y * 0.9 + 0.1, 0.0, 1.0);
+	vec3 grad = mix(far_col, near_col, v);
+	float vig = smoothstep(0.95, 0.25, length((uv - vec2(0.5, 0.62)) * vec2(1.0, 1.25)));
+	vec3 c = mix(base_col * 0.72, grad, 0.35 + 0.65 * vig);
+	ALBEDO = mix(c, c + (dot_col - base_col), d);
 	ROUGHNESS = 1.0;
 }
 """
@@ -184,6 +198,8 @@ void fragment() {
 	sm.shader = sh
 	sm.set_shader_parameter("base_col", COL_INFIELD)
 	sm.set_shader_parameter("dot_col", COL_DOTS)
+	sm.set_shader_parameter("far_col", COL_INFIELD.darkened(0.25))
+	sm.set_shader_parameter("near_col", COL_INFIELD.lightened(0.12))
 	pm.material = sm
 	var mi := MeshInstance3D.new()
 	mi.mesh = pm
@@ -387,41 +403,67 @@ func _build_start() -> void:
 		g.add_child(bqi)
 	static_root.add_child(g)
 
+# One rotor per curve, at the height of its (flat) bend. A tower that carries two curves
+# shows both rotors stacked: the lower one wide, the upper one narrower, each turning
+# with its own curve.
 func _build_towers() -> void:
+	rotor_h.resize(track.anchors.size())
+	var homes := {}
 	for idx in track.anchors.size():
-		var a: TrackData.Anchor = track.anchors[idx]
-		if a.home != idx:
-			continue
+		var h: int = track.anchors[idx].home
+		if not homes.has(h):
+			homes[h] = []
+		homes[h].append(idx)
+	for h in homes:
+		var curves: Array = homes[h]
+		# lower bend first; on the same level the wider curve goes below
+		curves.sort_custom(func(x, y):
+			var lx: int = track.arc_level[x]; var ly: int = track.arc_level[y]
+			if lx != ly: return lx < ly
+			return track.anchors[x].r > track.anchors[y].r)
+		var a0: TrackData.Anchor = track.anchors[h]
 		var t := Node3D.new()
-		t.position = w3(a.pos, 0.0)
-		t.add_child(cyl(30, TOWER_H, COL_TOWER, Vector3(0, TOWER_H / 2.0, 0), 38))
-		t.add_child(cyl(30, 8, COL_TOWER.lightened(0.15), Vector3(0, TOWER_H + 4, 0)))
-		var spinner := Node3D.new()
-		spinner.position = Vector3(0, TOWER_H + 8, 0) * U
-		spinner.add_child(cyl(25, 6, COL_POST, Vector3(0, 3, 0)))
-		for k in 3:
-			var arm := Node3D.new()
-			arm.rotation.y = TAU * k / 3.0
-			arm.add_child(box(Vector3(22, 4, 6), Color("#3a2a08"), Vector3(11, 7, 0)))
-			spinner.add_child(arm)
-		spinner.add_child(cyl(7, 10, COL_CHALK, Vector3(0, 8, 0)))
-		t.add_child(spinner)
-		var rings: Array = []
-		for m in 2:
-			var tm := TorusMesh.new()
-			tm.inner_radius = (40.0 + m * 10.0) * U
-			tm.outer_radius = (45.0 + m * 10.0) * U
-			tm.rings = 32
-			tm.ring_segments = 6
-			var ri := MeshInstance3D.new()
-			ri.mesh = tm
-			ri.position = Vector3(0, TOWER_H + 8, 0) * U
-			ri.visible = false
-			ri.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			t.add_child(ri)
-			rings.append(ri)
+		t.position = w3(a0.pos, 0.0)
+		var y_prev := 0.0
+		for m in curves.size():
+			var idx: int = curves[m]
+			var road_h: float = track.arc_level[idx] * TrackData.LEVEL_H
+			var y := maxf(road_h + TOWER_H, y_prev + 70.0)
+			rotor_h[idx] = y
+			var wide := 1.0 if m == 0 else 0.68
+			# column up to this rotor, narrowing above the first one
+			var col_r := 32.0 * wide
+			t.add_child(cyl(col_r, y - y_prev, COL_TOWER, Vector3(0, y_prev + (y - y_prev) / 2.0, 0), col_r + (6.0 if m == 0 else 2.0)))
+			t.add_child(cyl(col_r, 8, COL_TOWER.lightened(0.15), Vector3(0, y + 4, 0)))
+			var spinner := Node3D.new()
+			spinner.position = Vector3(0, y + 8, 0) * U
+			var disc := cyl(27 * wide, 6, COL_POST, Vector3(0, 3, 0))
+			disc.mesh.material = mat(COL_POST, false, 0.35)
+			spinner.add_child(disc)
+			for k in 3:
+				var arm := Node3D.new()
+				arm.rotation.y = TAU * k / 3.0
+				arm.add_child(box(Vector3(24 * wide, 4, 6), Color("#3a2a08"), Vector3(12 * wide, 7, 0)))
+				spinner.add_child(arm)
+			spinner.add_child(cyl(7, 10, COL_CHALK, Vector3(0, 8, 0)))
+			t.add_child(spinner)
+			var rings: Array = []
+			for r in 2:
+				var tm := TorusMesh.new()
+				tm.inner_radius = (40.0 * wide + 6.0 + r * 10.0) * U
+				tm.outer_radius = (45.0 * wide + 6.0 + r * 10.0) * U
+				tm.rings = 32
+				tm.ring_segments = 6
+				var ri := MeshInstance3D.new()
+				ri.mesh = tm
+				ri.position = Vector3(0, y + 8, 0) * U
+				ri.visible = false
+				ri.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				t.add_child(ri)
+				rings.append(ri)
+			tower_nodes[idx] = { "spinner": spinner, "rings": rings }
+			y_prev = y + 8.0
 		static_root.add_child(t)
-		tower_nodes[idx] = { "spinner": spinner, "rings": rings }
 
 func _build_posts() -> void:
 	for o in track.obstacles:
@@ -449,22 +491,19 @@ func _build_gems() -> void:
 		gem_nodes.append(mi)
 
 func _build_fx() -> void:
-	parts_mm = MultiMeshInstance3D.new()
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = true
+	# sparks: a small pool of plain boxes with one shared unshaded material per colour
+	# (no per-instance colours, which some mobile GPUs rendered as a stray green cube)
+	spark_pool.clear()
+	spark_mats.clear()
 	var pbox := BoxMesh.new()
 	pbox.size = Vector3(7, 7, 7) * U
-	var pm := StandardMaterial3D.new()
-	pm.vertex_color_use_as_albedo = true
-	pm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	pbox.material = pm
-	mm.mesh = pbox
-	mm.instance_count = 400
-	mm.visible_instance_count = 0
-	parts_mm.multimesh = mm
-	parts_mm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	dyn_root.add_child(parts_mm)
+	for k in SPARK_MAX:
+		var mi := MeshInstance3D.new()
+		mi.mesh = pbox
+		mi.visible = false
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		dyn_root.add_child(mi)
+		spark_pool.append(mi)
 
 	skid_mm = MultiMeshInstance3D.new()
 	var sm := MultiMesh.new()
@@ -495,33 +534,112 @@ void fragment() { ALBEDO = vec3(0.04, 0.05, 0.06); ALPHA = a; }
 	dyn_root.add_child(skid_mm)
 
 # ---------------------------------------------------------------- cars
+# glossy toy-car paint: low roughness, a clear coat and a rim light so the body reads
+# as shaded rather than flat
+static func paint(c: Color, rough := 0.32) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = c
+	m.roughness = rough
+	m.metallic = 0.05
+	m.metallic_specular = 0.6
+	m.rim_enabled = true
+	m.rim = 0.35
+	m.rim_tint = 0.6
+	m.clearcoat_enabled = true
+	m.clearcoat = 0.6
+	m.clearcoat_roughness = 0.2
+	return m
+
+static func pbox(size: Vector3, m: Material, pos: Vector3) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = size * U
+	bm.material = m
+	mi.mesh = bm
+	mi.position = pos * U
+	return mi
+
+var _blob_tex: Texture2D
+
+func _blob_shadow() -> MeshInstance3D:
+	if _blob_tex == null:
+		var g := Gradient.new()
+		g.set_color(0, Color(0, 0, 0, 0.55))
+		g.set_color(1, Color(0, 0, 0, 0))
+		var gt := GradientTexture2D.new()
+		gt.gradient = g
+		gt.fill = GradientTexture2D.FILL_RADIAL
+		gt.fill_from = Vector2(0.5, 0.5)
+		gt.fill_to = Vector2(1.0, 0.5)
+		gt.width = 64
+		gt.height = 64
+		_blob_tex = gt
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = _blob_tex
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	var q := QuadMesh.new()
+	q.size = Vector2(175, 115) * U
+	q.orientation = PlaneMesh.FACE_Y
+	q.material = m
+	var mi := MeshInstance3D.new()
+	mi.mesh = q
+	mi.position = Vector3(0, 1.2, 0) * U
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return mi
+
 func _make_car(col: Color, ghost := false) -> Node3D:
 	var root := Node3D.new()
-	var body := Node3D.new()
-	root.add_child(body)
-	var bc := col
+	var chassis := Node3D.new()   # follows the road slope
+	root.add_child(chassis)
+	var body := Node3D.new()      # sprung: pitch, roll, heave
+	chassis.add_child(body)
 	var parts_list: Array = []
 	if ghost:
-		bc = Color(COL_CHALK, 0.35)
-		parts_list.append(box(Vector3(130, 26, 74), bc, Vector3(0, 24, 0)))
+		var gc := Color(COL_CHALK, 0.35)
+		parts_list.append(box(Vector3(130, 26, 74), gc, Vector3(0, 24, 0)))
 		parts_list.append(box(Vector3(46, 20, 56), Color(COL_INFIELD, 0.35), Vector3(-4, 46, 0)))
 	else:
-		parts_list.append(box(Vector3(130, 24, 74), bc, Vector3(0, 24, 0)))
-		parts_list.append(box(Vector3(30, 8, 80), bc.darkened(0.2), Vector3(-58, 40, 0)))  # rear wing
-		parts_list.append(box(Vector3(46, 20, 54), Color("#1c2026"), Vector3(-4, 44, 0)))  # cabin
-		parts_list.append(box(Vector3(52, 2, 12), Color(1, 1, 1, 1), Vector3(-36, 37, 0)))  # stripe
-		parts_list.append(box(Vector3(4, 6, 14), Color("#fff4c8"), Vector3(65, 26, 24)))
-		parts_list.append(box(Vector3(4, 6, 14), Color("#fff4c8"), Vector3(65, 26, -24)))
-		for wx in [-40.0, 40.0]:
-			for wz in [-38.0, 38.0]:
-				var w := cyl(14, 12, Color("#111111"), Vector3(wx, 14, wz), -1.0, 12)
+		chassis.add_child(_blob_shadow())
+		var top := paint(col)
+		var low := paint(col.darkened(0.38), 0.5)
+		var glass := paint(Color("#1a2330"), 0.08)
+		glass.metallic = 0.4
+		# two-tone body: darker sill, painted upper body, slimmer nose
+		parts_list.append(pbox(Vector3(126, 12, 72), low, Vector3(0, 16, 0)))
+		parts_list.append(pbox(Vector3(118, 16, 70), top, Vector3(-2, 29, 0)))
+		parts_list.append(pbox(Vector3(22, 10, 60), top, Vector3(64, 24, 0)))
+		parts_list.append(pbox(Vector3(48, 18, 54), glass, Vector3(-6, 45, 0)))   # cabin
+		parts_list.append(pbox(Vector3(40, 3, 50), top, Vector3(-8, 55, 0)))      # roof
+		parts_list.append(pbox(Vector3(22, 6, 80), low, Vector3(-58, 44, 0)))     # rear wing
+		parts_list.append(pbox(Vector3(6, 10, 6), low, Vector3(-58, 37, 26)))
+		parts_list.append(pbox(Vector3(6, 10, 6), low, Vector3(-58, 37, -26)))
+		parts_list.append(pbox(Vector3(54, 1.5, 12), paint(Color(1, 1, 1)), Vector3(-30, 38, 0)))  # stripe
+		var lamp := mat(Color("#fff4c8"), true)
+		parts_list.append(pbox(Vector3(3, 5, 14), lamp, Vector3(75, 25, 22)))
+		parts_list.append(pbox(Vector3(3, 5, 14), lamp, Vector3(75, 25, -22)))
+		var tail := mat(Color("#ff4a3a"), false, 1.2)
+		parts_list.append(pbox(Vector3(3, 5, 12), tail, Vector3(-62, 28, 24)))
+		parts_list.append(pbox(Vector3(3, 5, 12), tail, Vector3(-62, 28, -24)))
+		var tyre := paint(Color("#16181c"), 0.8)
+		for wx in [-40.0, 42.0]:
+			for wz in [-37.0, 37.0]:
+				var w := MeshInstance3D.new()
+				var cm := CylinderMesh.new()
+				cm.top_radius = 14 * U; cm.bottom_radius = 14 * U; cm.height = 12 * U
+				cm.radial_segments = 14; cm.rings = 1
+				cm.material = tyre
+				w.mesh = cm
+				w.position = Vector3(wx, 14, wz) * U
 				w.rotation.x = PI / 2
-				parts_list.append(w)
+				chassis.add_child(w)   # wheels stay on the road; the body moves above them
 	for p in parts_list:
 		if ghost:
 			p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		body.add_child(p)
 	root.set_meta("body", body)
+	root.set_meta("chassis", chassis)
 	return root
 
 func setup_cars(race: Race, has_ghost: bool) -> void:
@@ -553,7 +671,9 @@ func setup_cars(race: Race, has_ghost: bool) -> void:
 			marker.mesh.material = mat(c.color, true)
 			marker.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			root.add_child(marker)
-		car_nodes.append({ "root": root, "body": root.get_meta("body"), "tether": tether, "marker": marker, "roll": 0.0 })
+		car_nodes.append({ "root": root, "body": root.get_meta("body"), "chassis": root.get_meta("chassis"), "tether": tether, "marker": marker,
+			"roll": 0.0, "roll_v": 0.0, "pitch": 0.0, "pitch_v": 0.0, "heave": 0.0, "heave_v": 0.0,
+			"slope": 0.0, "was_air": false, "prev_vel": c.vel })
 	if has_ghost:
 		ghost_node = _make_car(COL_CHALK, true)
 		ghost_node.visible = false
@@ -583,10 +703,9 @@ func sync(race: Race, phase: String, ghost_sample, aims: Dictionary, dt: float) 
 		for m in 2:
 			tn["rings"][m].visible = false
 	for idx in aims:
-		var home: int = track.anchors[idx].home
 		var cols: Array = aims[idx]
 		for m in mini(2, cols.size()):
-			var ring: MeshInstance3D = tower_nodes[home]["rings"][m]
+			var ring: MeshInstance3D = tower_nodes[idx]["rings"][m]
 			ring.visible = true
 			if ring.get_meta("col", Color.BLACK) != cols[m]:
 				ring.mesh.material = mat(cols[m], true)
@@ -613,18 +732,7 @@ func sync(race: Race, phase: String, ghost_sample, aims: Dictionary, dt: float) 
 			root.rotation = Vector3(0, -(c.h + spin), 0)
 			var sc := maxf(0.05, c.fall / 0.9) * 0.8 if c.fall > 0.0 else 1.0
 			root.scale = Vector3.ONE * sc
-			# lean out of the swing while hooked
-			var want_roll := 0.0
-			if c.hook >= 0:
-				want_roll = -c.turn_sign * 0.10
-			elif c.slip > 0.3:
-				want_roll = -signf(c.turn_sign) * 0.05 * c.slip
-			cn["roll"] = lerpf(cn["roll"], want_roll, minf(1.0, dt * 8.0))
-			cn["body"].rotation.x = cn["roll"]
-			var pitch := 0.0
-			if c.air > 0.0 and c.air_max > 0.0:
-				pitch = lerpf(0.18, -0.15, 1.0 - c.air / c.air_max)
-			cn["body"].rotation.z = pitch
+			_suspension(c, cn, dt)
 			if cn["marker"]:
 				cn["marker"].visible = phase != "results"
 				cn["marker"].position.y = (120.0 + sin(fx_time * 4.0) * 6.0) * U
@@ -633,7 +741,7 @@ func sync(race: Race, phase: String, ghost_sample, aims: Dictionary, dt: float) 
 			if c.hook >= 0:
 				var a: TrackData.Anchor = track.anchors[c.hook]
 				var dir: Vector2 = (c.pos - a.pos).normalized()
-				var from := w3(a.pos + dir * 20.0, TOWER_H + 12.0)
+				var from := w3(a.pos + dir * 20.0, rotor_h[c.hook] + 12.0)
 				var to := w3(c.pos, y + ROAD_Y + 34.0)
 				var mid := (from + to) * 0.5
 				var len := from.distance_to(to)
@@ -655,6 +763,61 @@ func sync(race: Race, phase: String, ghost_sample, aims: Dictionary, dt: float) 
 			else:
 				ghost_node.visible = false
 	_update_fx(dt)
+
+# Visual suspension (gameplay physics untouched). The chassis follows the road slope;
+# the body sits on springs: it rolls out of the swing and the drift, squats when
+# accelerating, dives when slowed, and bounces on landings and wall hits.
+const SUSP_K := 140.0      # spring stiffness (1/s^2)
+const SUSP_C := 13.0       # damping (1/s): a little under critical, so it settles with one wobble
+const ROLL_PER_ACC := 6.5e-5
+const PITCH_PER_ACC := 5.0e-5
+
+func _spring(cn: Dictionary, key: String, target: float, dt: float) -> float:
+	var x: float = cn[key]
+	var v: float = cn[key + "_v"]
+	v += (SUSP_K * (target - x) - SUSP_C * v) * dt
+	x += v * dt
+	cn[key] = x
+	cn[key + "_v"] = v
+	return x
+
+func _suspension(c, cn: Dictionary, dt: float) -> void:
+	if dt <= 0.0:
+		return
+	var body: Node3D = cn["body"]
+	var chassis: Node3D = cn["chassis"]
+	var hd := Vector2.from_angle(c.h)
+	var acc: Vector2 = (c.vel - cn["prev_vel"]) / dt
+	cn["prev_vel"] = c.vel
+	var a_fwd := acc.dot(hd)
+	var a_side := acc.dot(TrackData.perp(hd))
+	# road slope under the car, signed along the car's heading
+	var dir_sign := 1.0
+	var td: Vector2 = track.seg_dir[c.seg]
+	if td.dot(hd) < 0.0:
+		dir_sign = -1.0
+	var dh := track.height_at(c.s + 45.0) - track.height_at(c.s - 45.0)
+	var slope := atan2(dh * dir_sign, 90.0)
+	if c.air > 0.0 and c.air_max > 0.0:
+		slope = lerpf(0.2, -0.16, 1.0 - c.air / c.air_max)  # nose up off the ramp, down for the landing
+	cn["slope"] = lerpf(cn["slope"], slope, minf(1.0, dt * 12.0))
+	chassis.rotation = Vector3(0, 0, cn["slope"])
+	# landing and wall knocks
+	var airborne: bool = c.air > 0.0
+	if cn["was_air"] and not airborne:
+		cn["heave_v"] -= 260.0
+		cn["pitch_v"] -= 1.6
+	cn["was_air"] = airborne
+	var roll_t := clampf(-a_side * ROLL_PER_ACC, -0.16, 0.16)
+	var pitch_t := clampf(a_fwd * PITCH_PER_ACC, -0.12, 0.12)
+	if airborne:
+		roll_t = 0.0
+		pitch_t = 0.0
+	var roll := _spring(cn, "roll", roll_t, dt)
+	var pitch := _spring(cn, "pitch", pitch_t, dt)
+	var heave := _spring(cn, "heave", 0.0, dt)
+	body.rotation = Vector3(roll, 0, pitch)
+	body.position = Vector3(0, clampf(heave, -10.0, 10.0) * U, 0)
 
 func handle_event(e: Dictionary) -> void:
 	match e["t"]:
@@ -689,14 +852,14 @@ func handle_event(e: Dictionary) -> void:
 			shake = minf(10.0, maxf(shake, e["v"]))
 
 func _spark(p: Vector3, v: Vector3, life: float, col: Color) -> void:
-	if parts.size() >= 400:
+	if parts.size() >= SPARK_MAX:
 		parts.pop_front()
 	parts.append({ "p": p, "v": v, "life": life, "col": col })
 
 func _update_fx(dt: float) -> void:
 	if skid_mat:
 		skid_mat.set_shader_parameter("now", fx_time)
-	if not parts_mm:
+	if spark_pool.is_empty():
 		return
 	var alive: Array = []
 	for p in parts:
@@ -710,12 +873,19 @@ func _update_fx(dt: float) -> void:
 			p["v"] *= 0.5
 		alive.append(p)
 	parts = alive
-	var mm := parts_mm.multimesh
-	mm.visible_instance_count = parts.size()
-	for k in parts.size():
+	for k in SPARK_MAX:
+		var mi: MeshInstance3D = spark_pool[k]
+		if k >= parts.size():
+			mi.visible = false
+			continue
 		var p: Dictionary = parts[k]
-		mm.set_instance_transform(k, Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * minf(1.0, p["life"] * 2.5)), p["p"]))
-		mm.set_instance_color(k, p["col"])
+		var col: Color = p["col"]
+		if not spark_mats.has(col):
+			spark_mats[col] = mat(col, true)
+		mi.material_override = spark_mats[col]
+		mi.position = p["p"]
+		mi.scale = Vector3.ONE * maxf(0.05, minf(1.0, p["life"] * 2.5))
+		mi.visible = true
 	shake *= pow(0.02, dt)
 
 # ---------------------------------------------------------------- camera

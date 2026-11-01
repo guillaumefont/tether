@@ -441,42 +441,162 @@ func _place_tokens(turns: Array) -> void:
 			row.call(pts2)
 
 # ---------- visual heights (3D only; gameplay uses the bridge level index) ----------
-# Bridge decks sit BRIDGE_H up with smooth ramps either side. A pass that runs under
-# another bridge is pinned to the ground there, so packed knots never collide.
-func _arc_dist(i: int, B: Dictionary) -> float:
-	if in_span(i, B):
-		return 0.0
-	var s := seg_s0[i]
-	var d0 := wrap_s(seg_s0[int(B["from"])] - s)   # ahead to deck start
-	var d1 := wrap_s(s - seg_s0[int(B["to"])])     # behind deck end
-	return minf(d0, d1)
+# Every bend is flat (no climbing or dropping while tethered), so ramps only ever sit on
+# straights. Each bend gets a deck level, and so does the deck window round any crossing
+# that lies on a straight. A small search picks levels so that at every crossing the two
+# roads are at different levels, each climb has enough straight to ramp over, and the
+# track stays as low as possible. Which road goes over is free: gameplay only needs the
+# two passes on different layers, and the level index already separates them.
+const LEVEL_H := 150.0       # height of one deck level (world units)
+const MIN_RAMP := 380.0      # straight length needed to climb or drop one level
+const DECK_HALF := HW * 1.3  # flat deck either side of a crossing on a straight
+var arc_level := PackedInt32Array()
+var ramp_report := ""        # empty when every ramp has enough room
+var _iv: Array = []          # flat intervals {s0, s1, v}, sorted by s0
+var _lv := PackedInt32Array()
+
+func _arc_at(sv: float) -> int:
+	for k in arcs.size():
+		if sv >= arcs[k]["s0"] - 0.01 and sv <= arcs[k]["s0"] + arcs[k]["len"] + 0.01:
+			return k
+	return -1
 
 func _build_heights() -> void:
+	var nt := anchors.size()
+	_iv.clear()
+	for k in nt:
+		_iv.append({ "s0": arcs[k]["s0"], "s1": arcs[k]["s0"] + arcs[k]["len"], "v": k })
+	var nvars := nt
+	var cross: Array = []  # [var a, var b]
+	for B in bridges:
+		var f: int = B["from"]
+		var mid := (f + posmod(int(B["to"]) - f, n) / 2) % n
+		var pv: Array[int] = []
+		# a shallow crossing needs a longer deck before the roads part
+		var du := (P[(int(B["under"]) + 1) % n] - P[int(B["under"])]).normalized()
+		var dm := (P[(mid + 1) % n] - P[mid]).normalized()
+		var deck := DECK_HALF / maxf(absf(du.cross(dm)), 0.4)
+		for i in [int(B["under"]), mid]:
+			var sv := seg_s0[i]
+			var k := _arc_at(sv)
+			if k >= 0:
+				pv.append(k)
+				continue
+			# a deck window on the straight, clipped to that straight
+			var st0 := 0.0
+			var st1 := L
+			for st in straights:
+				var a0: float = st["s0"]
+				var a1: float = a0 + st["len"]
+				if (sv >= a0 and sv <= a1) or (a1 > L and sv + L <= a1):
+					st0 = a0; st1 = a1
+					if sv < a0: sv += L
+			var w0 := maxf(st0, sv - deck)
+			var w1 := minf(st1, sv + deck)
+			_iv.append({ "s0": w0, "s1": w1, "v": nvars })
+			pv.append(nvars)
+			nvars += 1
+		cross.append(pv)
+	_iv.sort_custom(func(x, y): return x["s0"] < y["s0"])
+	# links between consecutive flat pieces: [var a, var b, gap]
+	var links: Array = []
+	for k in _iv.size():
+		var A: Dictionary = _iv[k]
+		var Bn: Dictionary = _iv[(k + 1) % _iv.size()]
+		var gap: float = Bn["s0"] - A["s1"]
+		if k == _iv.size() - 1:
+			gap += L
+		if A["v"] != Bn["v"]:
+			links.append([A["v"], Bn["v"], gap])
+	# search: hard = crossings differ and touching pieces are equal; soft = ramp room, height
+	_lv.resize(nvars)
+	var best_cost := INF
+	var best := PackedInt32Array()
+	var cur := PackedInt32Array()
+	cur.resize(nvars)
+	for max_l in [1, 2, 3]:
+		cur.fill(-1)
+		var res := _dfs(0, nvars, max_l, cur, cross, links, 0.0, best_cost)
+		if res["cost"] < best_cost:
+			best_cost = res["cost"]
+			best = res["lv"]
+		if best_cost < 100.0:
+			break
+	if best.is_empty():
+		best.resize(nvars)
+		best.fill(0)
+	_lv = best
+	arc_level.resize(nt)
+	for k in nt:
+		arc_level[k] = _lv[k]
+	ramp_report = ""
+	for l in links:
+		var dl := absi(_lv[l[0]] - _lv[l[1]])
+		if dl > 0 and l[2] < dl * MIN_RAMP:
+			ramp_report += "ramp %.0f long for %d level(s); " % [l[2], dl]
+	for c in cross:
+		if _lv[c[0]] == _lv[c[1]]:
+			ramp_report += "crossing on one level; "
 	height_of.resize(n)
 	for i in n:
-		var h := 0.0
-		for B in bridges:
-			var d := _arc_dist(i, B)
-			if d < RAMP:
-				var u := 1.0 - d / RAMP
-				h = maxf(h, BRIDGE_H * u * u * (3.0 - 2.0 * u))
-		height_of[i] = h
-	# pin under-passes to the ground
-	for B in bridges:
-		var u_i: int = B["under"]
-		var su := seg_s0[u_i]
-		for i in n:
-			var d := absf(seg_s0[i] - su)
-			d = minf(d, L - d)
-			if d < HW * 2.2:
-				height_of[i] = 0.0
-			elif d < HW * 2.2 + RAMP * 0.6:
-				var u := (d - HW * 2.2) / (RAMP * 0.6)
-				height_of[i] = minf(height_of[i], BRIDGE_H * u * u * (3.0 - 2.0 * u))
+		height_of[i] = _height_s(seg_s0[i])
+
+func _dfs(idx: int, nv: int, max_l: int, cur: PackedInt32Array, cross: Array, links: Array, cost: float, bound: float) -> Dictionary:
+	if cost >= bound:
+		return { "cost": INF, "lv": PackedInt32Array() }
+	if idx == nv:
+		return { "cost": cost, "lv": cur.duplicate() }
+	var best := { "cost": INF, "lv": PackedInt32Array() }
+	for lv in max_l + 1:
+		cur[idx] = lv
+		var ok := true
+		var add := float(lv)
+		for c in cross:
+			if (c[0] == idx and cur[c[1]] >= 0 and cur[c[1]] == lv) or (c[1] == idx and cur[c[0]] >= 0 and cur[c[0]] == lv):
+				ok = false
+				break
+		if ok:
+			for l in links:
+				var other := -1
+				if l[0] == idx: other = l[1]
+				elif l[1] == idx: other = l[0]
+				if other < 0 or cur[other] < 0:
+					continue
+				var dl := absi(cur[other] - lv)
+				if l[2] <= 0.0 and dl != 0:
+					ok = false
+					break
+				if dl > 0 and l[2] < dl * MIN_RAMP:
+					add += 100.0
+		if ok:
+			var r := _dfs(idx + 1, nv, max_l, cur, cross, links, cost + add, minf(bound, best["cost"]))
+			if r["cost"] < best["cost"]:
+				best = r
+		cur[idx] = -1
+	return best
+
+func _height_s(sv: float) -> float:
+	sv = fposmod(sv, L)
+	var m := _iv.size()
+	for k in m:
+		var A: Dictionary = _iv[k]
+		if sv >= A["s0"] and sv <= A["s1"]:
+			return _lv[A["v"]] * LEVEL_H
+	# between two flat pieces: smooth ramp across the gap
+	for k in m:
+		var A: Dictionary = _iv[k]
+		var Bn: Dictionary = _iv[(k + 1) % m]
+		var a1: float = A["s1"]
+		var b0: float = Bn["s0"]
+		var x := sv
+		if k == m - 1:
+			b0 += L
+			if x < a1: x += L
+		if x > a1 and x < b0:
+			var u := (x - a1) / (b0 - a1)
+			u = u * u * (3.0 - 2.0 * u)
+			return lerpf(_lv[A["v"]] * LEVEL_H, _lv[Bn["v"]] * LEVEL_H, u)
+	return 0.0
 
 func height_at(sv: float) -> float:
-	sv = fposmod(sv, L)
-	var q := point_at(sv)
-	var i: int = q["i"]
-	var t := (sv - seg_s0[i]) / seg_len[i]
-	return lerpf(height_of[i], height_of[(i + 1) % n], t)
+	return _height_s(sv)

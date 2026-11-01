@@ -7,7 +7,7 @@ extends RefCounted
 
 const TRACKS := [
 	{ "name": "Lasso", "note": "A big loop with a knot at the end", "laps": 5, "jumps": [{ "k": 0, "f": 0.5 }],
-		"turns": [[700,1050,1],[1700,700,1],[2600,1050,-1],[1700,1400,1]] },
+		"turns": [[700,1050,1],[1600,750,1],[3400,1050,-1],[1600,1350,1]] },
 	{ "name": "Diamond Eight", "note": "Two diamonds joined by a bridge", "laps": 3,
 		"turns": [[700,1300,1],[1500,700,1],[2300,1300,-1],[3100,1900,-1],[3900,1300,-1],[3100,700,-1],[2300,1300,1],[1500,1900,1]] },
 	{ "name": "Sidestep", "note": "S-bends both ways", "laps": 3,
