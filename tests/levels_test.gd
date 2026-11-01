@@ -2,6 +2,7 @@ extends SceneTree
 # Every bend must be flat and every crossing must have the two roads on different
 # levels with room to ramp. Prints each track's bend levels; fails on any problem.
 const TrackData = preload("res://scripts/track.gd")
+const Medals = preload("res://scripts/medals.gd")
 const Defs = preload("res://scripts/track_defs.gd")
 func _init() -> void:
 	var bad := 0
@@ -22,5 +23,11 @@ func _init() -> void:
 			var ok: bool = flat and T.ramp_report == ""
 			if not ok: bad += 1
 			printerr("%-14s %-8s bends %s  %s%s %dms" % [d["name"], v, str(Array(T.arc_level)), "OK" if ok else "FAIL ", ("" if flat else "bend not flat; ") + T.ramp_report, ms])
+	# every track and variant needs medal targets (rerun tools/gen_medals.gd after a layout change)
+	for d in Defs.TRACKS:
+		for v in Defs.VARIANTS:
+			if Medals.targets(d["name"], v[0])[0] <= 0.0:
+				bad += 1
+				printerr("no medal times for %s %s: run tools/gen_medals.gd" % [d["name"], v[0]])
 	printerr("BAD: ", bad)
 	quit(1 if bad else 0)
