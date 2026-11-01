@@ -9,10 +9,10 @@ const Defs = preload("res://scripts/track_defs.gd")
 # ---------- tuning (same numbers as the prototype) ----------
 const HW := TrackData.HW
 const CR := TrackData.CR
-const MAX := 800.0          # cruise speed
-const ACC := 600.0          # throttle
-const GRIP := 3.2           # sideways grip once fully recovered (low = icy)
-const ICE_TIME := 0.9       # seconds of extra-slippery slide after letting go
+const MAX := 860.0          # cruise speed
+const ACC := 650.0          # throttle
+const GRIP := 2.7           # sideways grip once fully recovered (low = icy)
+const ICE_TIME := 1.1       # seconds of extra-slippery slide after letting go
 const SWING_BOOST := 170.0  # speed gained per second while tethered
 const SWING_CAP := 1.28     # max speed multiplier while swinging
 const RANGE := 600.0        # hook reach (prototype 520; a little more forgiving)
