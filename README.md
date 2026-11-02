@@ -57,13 +57,16 @@ SHOT_DIR=/tmp/shots xvfb-run -a godot --path . --rendering-method gl_compatibili
 
 ## Try it on a phone or in a browser
 
-Every push to `main` (and to the port branch while it is open) runs the **Builds** workflow, which exports
-the Web build and a debug-signed Android APK and publishes both to the `gh-pages` branch.
-Turn on GitHub Pages once (Settings > Pages > Deploy from a branch > `gh-pages`, folder `/`), then:
+The **Builds** workflow exports the Web build and a debug-signed Android APK and publishes both
+to the `gh-pages` branch (GitHub Pages: Settings > Pages > Deploy from a branch > `gh-pages`, folder `/`).
 
-- Play in a browser: https://guillaumefont.github.io/tether/
-- Install on Android: https://guillaumefont.github.io/tether/pivot-rush.apk (allow installs from your browser when asked)
+- `main` (updated on every merge):
+  - Play in a browser: https://guillaumefont.github.io/tether/
+  - Install on Android: https://guillaumefont.github.io/tether/pivot-rush.apk (allow installs from your browser when asked)
+- Each open pull request gets its own preview, linked in a comment on the PR and updated on every push:
+  https://guillaumefont.github.io/tether/pr/N/ and `.../pr/N/pivot-rush.apk`. It is deleted when the PR closes.
 
+All APKs share one app id, so installing a preview replaces the installed `main` build (and the other way round).
 The APK is also attached to each workflow run as the `pivot-rush-apk` artifact.
 
 ## Exporting
