@@ -8,6 +8,7 @@ var earned := 0              # 0..4
 var labels: Array = ["", "", "", ""]
 var font: Font
 var font_size := 13
+var compact := false       # small dots only, no labels (cards)
 
 func set_state(e: int, l: Array) -> void:
 	earned = e
@@ -18,8 +19,13 @@ func _draw() -> void:
 	var n := 4
 	var slot := size.x / n
 	var r := minf(slot * 0.22, (size.y - font_size - 6) * 0.5)
+	if compact:
+		r = size.y * 0.42
+		slot = r * 2.6
 	for i in n:
 		var c := Vector2(slot * (i + 0.5), r + 1)
+		if compact:
+			c = Vector2(r + 1 + slot * i, size.y * 0.5)
 		var col: Color = Medals.COLORS[i]
 		var lit := earned > i
 		if lit:
@@ -32,7 +38,7 @@ func _draw() -> void:
 			draw_circle(c, r * 0.2, col.lightened(0.4))
 		else:
 			draw_arc(c, r * 0.9, 0, TAU, 32, Color(col, 0.45), maxf(1.5, r * 0.12), true)
-		if font:
+		if font and not compact:
 			var t: String = labels[i]
 			var w := font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 			draw_string(font, Vector2(c.x - w * 0.5, r * 2 + 4 + font_size), t, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size,
