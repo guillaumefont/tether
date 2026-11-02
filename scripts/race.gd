@@ -9,13 +9,13 @@ const Defs = preload("res://scripts/track_defs.gd")
 # ---------- tuning (same numbers as the prototype) ----------
 const HW := TrackData.HW
 const CR := TrackData.CR
-const MAX := 800.0          # cruise speed
-const ACC := 600.0          # throttle
-const GRIP := 3.2           # sideways grip once fully recovered (low = icy)
-const ICE_TIME := 0.9       # seconds of extra-slippery slide after letting go
+const MAX := 860.0          # cruise speed
+const ACC := 650.0          # throttle
+const GRIP := 2.7           # sideways grip once fully recovered (low = icy)
+const ICE_TIME := 1.1       # seconds of extra-slippery slide after letting go
 const SWING_BOOST := 170.0  # speed gained per second while tethered
 const SWING_CAP := 1.28     # max speed multiplier while swinging
-const RANGE := 520.0        # hook reach
+const RANGE := 600.0        # hook reach (prototype 520; a little more forgiving)
 const RELEASE_KICK := 1.05  # slingshot on release
 const JUMP_MIN := 360.0     # slower than this at the ramp and you drop into the gap
 const OBS_PEN := 1.0        # seconds per post hit (Obstacles)
@@ -79,7 +79,9 @@ var mode := "trial"
 var humans := 1
 var laps_total := 3
 var clock := 0.0
-var inputs := [{ "held": false, "press_t": -9.0 }, { "held": false, "press_t": -9.0 }]
+# armed: this press may still hook. Holding keeps trying until a tower is in reach;
+# a tether lost to a wall or a jump needs a fresh press.
+var inputs := [{ "held": false, "press_t": -9.0, "armed": false }, { "held": false, "press_t": -9.0, "armed": false }]
 var events: Array = []
 
 func _init(tr: TrackData, mode_name: String, n_humans: int) -> void:
@@ -125,36 +127,33 @@ func press(i: int) -> void:
 	if not p["held"]:
 		p["held"] = true
 		p["press_t"] = clock
+		p["armed"] = true
 
 func release(i: int) -> void:
 	inputs[i]["held"] = false
 
 # ---------- hooking ----------
 func find_anchor(c: Car) -> int:
+	# the tower of the bend the car is on, or of the next bend when it is on a straight
+	# (never a nearer tower of another part of the track)
 	if c.air > 0.0 or c.fall > 0.0:
 		return -1
 	var best := -1
-	var bd := INF
-	var sp := c.vel.length()
-	if sp <= 0.0:
-		sp = 1.0
-	var v := c.vel / sp if sp > 5.0 else Vector2.from_angle(c.h)
+	var ba := track.n + 1
 	for idx in track.anchors.size():
-		var a: TrackData.Anchor = track.anchors[idx]
-		var dv := a.pos - c.pos
-		var d := dv.length()
-		var score := d - (a.r - TrackData.TURN_R)  # wide curves reach further
-		if d < maxf(RANGE, a.r + 170.0) and score < bd and dv.dot(v) > -0.3 * d:
-			bd = score
+		var ah := _ahead(c.seg, track.anchors[idx].exit)
+		if ah < ba:
+			ba = ah
 			best = idx
-	if best >= 0:  # on a shared tower, take the curve whose radius matches where the car is
-		var b: TrackData.Anchor = track.anchors[best]
-		var d := b.pos.distance_to(c.pos)
-		for idx in track.anchors.size():
-			var a: TrackData.Anchor = track.anchors[idx]
-			if a.home == b.home and absf(d - a.r) < absf(d - track.anchors[best].r):
-				best = idx
-	return best
+	if best < 0:
+		return -1
+	var a: TrackData.Anchor = track.anchors[best]
+	var dv := a.pos - c.pos
+	var d := dv.length()
+	var v := c.vel.normalized() if c.vel.length() > 5.0 else Vector2.from_angle(c.h)
+	if d < maxf(RANGE, a.r + 200.0) and dv.dot(v) > -0.5 * d:
+		return best
+	return -1
 
 func attach(c: Car, idx: int) -> void:
 	var a: TrackData.Anchor = track.anchors[idx]
@@ -170,6 +169,8 @@ func detach(c: Car, kick: bool) -> void:
 		return
 	c.hook = -1
 	c.cooldown = 0.2
+	if not kick and c.human >= 0:
+		inputs[c.human]["armed"] = false
 	if kick:
 		c.vel *= RELEASE_KICK
 		c.ice = ICE_TIME
@@ -219,7 +220,7 @@ func step_car(c: Car, dt: float) -> void:
 		var rel := c.pos - a.pos
 		var sgn := signf(rel.x * c.vel.y - rel.y * c.vel.x)
 		if sgn == 0.0: sgn = 1.0
-		track.anchors[a.home].omega = sgn * sp / r  # the anchor turns with the car
+		a.omega = sgn * sp / r  # this curve's rotor turns with the car
 		c.swung += sp / r * dt
 		# clean arc: heading stays tangent to the circle, no sliding while hooked
 		c.h = c.vel.angle()
@@ -479,7 +480,7 @@ func update(dt: float) -> void:
 	for c in cars:
 		if c.human >= 0 and not c.finished:
 			var inp: Dictionary = inputs[c.human]
-			if inp["held"] and c.hook < 0 and c.cooldown <= 0.0 and clock - inp["press_t"] < 0.15:
+			if inp["held"] and inp["armed"] and c.hook < 0 and c.cooldown <= 0.0:
 				var p := find_anchor(c)
 				if p >= 0:
 					attach(c, p)

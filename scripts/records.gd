@@ -42,3 +42,15 @@ static func set_ghost(k: String, trace: Array) -> void:
 		flat.append(v.x); flat.append(v.y); flat.append(v.z)
 	_load().set_value(k, "ghost", flat)
 	_cfg.save(PATH)
+
+# medals: best tier earned (0 none, 1 bronze .. 4 pivot) per track + variant, per mode
+static func get_medal(k: String, mode: String) -> int:
+	return int(_load().get_value(k, "medal_" + mode, 0))
+
+# returns true when this is an upgrade
+static func award_medal(k: String, mode: String, tier: int) -> bool:
+	if tier <= get_medal(k, mode):
+		return false
+	_load().set_value(k, "medal_" + mode, tier)
+	_cfg.save(PATH)
+	return true

@@ -6,6 +6,7 @@ const TrackData = preload("res://scripts/track.gd")
 const Race = preload("res://scripts/race.gd")
 const Defs = preload("res://scripts/track_defs.gd")
 const Records = preload("res://scripts/records.gd")
+const Medals = preload("res://scripts/medals.gd")
 const WorldView = preload("res://scripts/world_view.gd")
 const UI = preload("res://scripts/ui.gd")
 const Sfx = preload("res://scripts/sfx.gd")
@@ -22,6 +23,7 @@ var track: TrackData
 var race: Race = null
 var phase := "menu"
 var countdown := 0.0
+var start_tier := 0  # trial medal held when the run started
 var last_beep := 4
 var end_timer := 0.0
 var flash_t := 0.0
@@ -65,10 +67,18 @@ func _preview() -> void:
 func _refresh_menu() -> void:
 	if phase != "menu":
 		return
-	var recs: Array = []
-	for d in Defs.TRACKS:
-		recs.append(Records.get_best(Records.key(d["name"], variant)))
-	ui.refresh_menu(track_idx, variant, mode, humans, recs)
+	var name: String = Defs.TRACKS[track_idx]["name"]
+	var rec := Records.get_best(rec_key())
+	var medal := 0
+	var labels: Array = []
+	if mode == "trial":
+		medal = Medals.trial_tier(name, variant, rec)
+		for t in Medals.targets(name, variant):
+			labels.append(UI.fmt2(t) if t > 0.0 else "--")
+	else:
+		medal = Records.get_medal(rec_key(), "race")
+		labels = ["3rd", "2nd", "1st", "win +%d s" % int(Medals.RACE_TOP_GAP)]
+	ui.refresh_menu(track_idx, variant, mode, humans, rec, medal, labels)
 
 func new_race() -> void:
 	track = TrackData.new(Defs.TRACKS[track_idx], variant)
@@ -77,6 +87,7 @@ func new_race() -> void:
 	ghost = Records.get_ghost(rec_key()) if mode == "trial" else []
 	view.setup_cars(race, mode == "trial")
 	new_record = false
+	start_tier = Medals.trial_tier(Defs.TRACKS[track_idx]["name"], variant, Records.get_best(rec_key()))
 	countdown = 3.2
 	last_beep = 4
 	end_timer = 0.0
@@ -84,6 +95,8 @@ func new_race() -> void:
 	phase = "count"
 	touch_owner.clear()
 	ui.build_hud(race, track.tokens.size() > 0)
+	ui.minimap.race = race
+	ui.minimap.set_track(track)
 	view.update_camera(race, "count", 0.0, true)
 
 # ---------------------------------------------------------------- input
@@ -278,6 +291,13 @@ func _show_results() -> void:
 				note = "Record on %s (Collect): %s. Score = total time + 0.25 s per gem missed." % [name, UI.fmt2(rec)]
 			else:
 				note = "Record on %s: %s. Your best lap becomes the ghost you chase next time." % [name, UI.fmt2(rec)]
+		var tier := Medals.trial_tier(name, variant, rec)
+		if tier > start_tier:
+			note = "%s medal!  " % Medals.NAMES[tier - 1] + note
+		elif tier < Medals.NAMES.size():
+			var tg: float = Medals.targets(name, variant)[tier]
+			if tg > 0.0:
+				note += " Next medal (%s): %s." % [Medals.NAMES[tier], UI.fmt2(tg)]
 		ui.show_results("New record" if new_record else "Time trial", rows, note)
 		return
 	var st := race.standings()
@@ -291,7 +311,17 @@ func _show_results() -> void:
 	for k in st.size():
 		var c = st[k]
 		rows2.append({ "cells": [str(k + 1), c.name, ("best " + UI.fmt(c.best_lap) + "   " if c.best_lap > 0.0 else "") + (UI.fmt(c.finish_time) if c.finished else "DNF")], "hl": c.human >= 0, "color": c.color })
-	ui.show_results(title, rows2, "Race times don't count for records. Lap records come from Time trial.")
+	var rnote := "Race times don't count for records. Lap records come from Time trial."
+	if race.humans == 1:
+		var me = race.cars.filter(func(c): return c.human >= 0)[0]
+		var place: int = st.find(me) + 1
+		var lead := 0.0
+		if place == 1 and me.finished:
+			lead = (st[1].finish_time - me.finish_time) if st.size() > 1 and st[1].finished else 99.0
+		var tier := Medals.race_tier(place, lead) if me.finished else 0
+		if Records.award_medal(rec_key(), "race", tier):
+			rnote = "%s medal!  " % Medals.NAMES[tier - 1] + rnote
+	ui.show_results(title, rows2, rnote)
 
 # ---------------------------------------------------------------- demo / screenshots
 # Drives the real game with a scripted player so a headless run can capture frames.
