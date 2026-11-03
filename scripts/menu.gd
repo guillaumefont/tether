@@ -132,11 +132,12 @@ func _card_style(b: Button, locked := false) -> void:
 func show_home() -> void:
 	screen = "home"
 	var vb := _frame()
+	var tall: bool = ui.is_portrait()
 	var top := HBoxContainer.new()
 	var logo := Art.Logo.new()
 	logo.font = ui.f_display
-	logo.font_size = 40
-	logo.custom_minimum_size = Vector2(0, 72)
+	logo.font_size = 27 if tall else 40
+	logo.custom_minimum_size = Vector2(0, 56 if tall else 72)
 	logo.custom_minimum_size.x = logo.min_width()
 	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top.add_child(logo)
@@ -152,7 +153,7 @@ func show_home() -> void:
 		sound_toggled.emit(sound_on))
 	top.add_child(snd)
 	vb.add_child(top)
-	var sub := HBoxContainer.new()
+	var sub: BoxContainer = VBoxContainer.new() if tall else HBoxContainer.new()
 	var tag: Label = ui._label("Hold to hook the tower, let go to slide out.", 15, Art.C_ICE, ui.f_bold)
 	tag.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.5))
 	tag.add_theme_constant_override("shadow_offset_y", 1)
@@ -165,7 +166,7 @@ func show_home() -> void:
 	cab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	sub.add_child(cab)
 	vb.add_child(sub)
-	var row := HBoxContainer.new()
+	var row: BoxContainer = VBoxContainer.new() if tall else HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vb.add_child(row)
@@ -190,7 +191,7 @@ func show_home() -> void:
 	di.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	di.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vh.add_child(di)
-	var vl: Label = ui._label("2 players on one phone: race any track", 14, C_FG, ui.f_bold)
+	var vl: Label = ui._label("2 players: race any track" if tall else "2 players on one phone: race any track", 14, C_FG, ui.f_bold)
 	vl.autowrap_mode = TextServer.AUTOWRAP_OFF
 	vh.add_child(vl)
 	vs.add_child(vh)
@@ -255,21 +256,22 @@ func show_list() -> void:
 		sub = "Chapter %d of %d  ·  %s" % [page + 1, _pages(), Campaign.CHAPTERS[page]["name"]]
 	else:
 		sub = "Page %d of %d  ·  pick a track" % [page + 1, _pages()]
+	var tall: bool = ui.is_portrait()
 	var hb := _header(vb, title, sub, func(): show_home())
 	var prev := _btn("◀", 46, 18)
-	prev.custom_minimum_size.x = 64
+	prev.custom_minimum_size.x = 46 if tall else 64
 	prev.disabled = page == 0
 	prev.pressed.connect(func(): page -= 1; show_list())
 	hb.add_child(prev)
 	var nxt := _btn("▶", 46, 18)
-	nxt.custom_minimum_size.x = 64
+	nxt.custom_minimum_size.x = 46 if tall else 64
 	nxt.disabled = page >= _pages() - 1
 	nxt.pressed.connect(func(): page += 1; show_list())
 	hb.add_child(nxt)
 	var g := GridContainer.new()
-	g.columns = 3
+	g.columns = 1 if tall else 3   # portrait: one tall column of six cards
 	g.add_theme_constant_override("h_separation", 12)
-	g.add_theme_constant_override("v_separation", 12)
+	g.add_theme_constant_override("v_separation", 10 if tall else 12)
 	g.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vb.add_child(g)
 	if kind == "campaign":
@@ -370,8 +372,9 @@ func show_event() -> void:
 		"attack": sub = "Time attack  ·  %d laps" % int(d.get("laps", 3))
 		"versus": sub = "2-player race  ·  %d laps" % int(d.get("laps", 3))
 	_header(vb, d["name"], sub, func(): show_list())
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 18)
+	var tall: bool = ui.is_portrait()
+	var row: BoxContainer = VBoxContainer.new() if tall else HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12 if tall else 18)
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vb.add_child(row)
 	var mp := TrackMap.new()
@@ -391,18 +394,21 @@ func show_event() -> void:
 	ps.set_content_margin_all(10)
 	mpanel.add_theme_stylebox_override("panel", ps)
 	mpanel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mpanel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	mpanel.size_flags_stretch_ratio = 0.85
 	mpanel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	mpanel.add_child(mp)
 	row.add_child(mpanel)
 	var right := VBoxContainer.new()
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if tall:
+		right.size_flags_vertical = Control.SIZE_SHRINK_END
 	right.add_theme_constant_override("separation", 10)
 	row.add_child(right)
 	right.add_child(ui._label(d["note"], 15, C_MUTED, ui.f_bold))
 	if ev["kind"] != "campaign":
 		var g := GridContainer.new()
-		g.columns = 4
+		g.columns = 2 if tall else 4
 		g.add_theme_constant_override("h_separation", 6)
 		var grp := ButtonGroup.new()
 		for v in Defs.VARIANTS:

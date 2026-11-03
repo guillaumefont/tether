@@ -1219,7 +1219,8 @@ func update_camera(race: Race, phase: String, dt: float, snap := false) -> void:
 		var mid := (mn + mx) * 0.5
 		target = Vector3(mid.x, hy, mid.y)
 		var short := minf(vp.x, vp.y)
-		var base := 1450.0 * vp.y / short  # visible height when the short side shows 1450 units
+		# the short side shows 1450 units (1550 in portrait, where the width is all you get)
+		var base := (1550.0 if vp.y > vp.x else 1450.0) * vp.y / short
 		var span := mx - mn + Vector2(500, 500)
 		vis = maxf(base, maxf(span.y, span.x / aspect))
 		vis = minf(vis, vp.y / 0.14)
