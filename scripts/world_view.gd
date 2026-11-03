@@ -23,12 +23,18 @@ const COL_INFIELD := Color("#c9d6e0")   # snow
 const COL_DOTS := Color("#b4c4d1")      # drift shading in the snow
 const COL_ASPHALT := Color("#353e49")   # cold, icy asphalt
 const COL_CHALK := Color("#ece6d8")
-const COL_KERB := Color("#d4452f")
-const COL_RAIL := Color("#e6edf2")
+const COL_KERB := Color("#d4452f")     # obstacle posts
+const COL_VERGE := Color("#9fb4c6")    # packed snow at the lane edge
+const COL_BANK_FACE := Color("#b7c8d6") # inner face of the snowbank, in its own shade
+const COL_BANK_SLOPE := Color("#dfe8ef")
+const BANK_H := 30.0
+const BANK_OUT := 34.0
 const COL_DECK := Color("#7a5a3a")
 const COL_DECK_LIGHT := Color("#a07a50")
 const COL_POST := Color("#f2b134")
 const COL_TOWER := Color("#2a2f36")
+const COL_SLATE := Color("#3f4c5c")   # tower stone
+const COL_ICE := Color("#bfe6f5")
 const COL_GEM := Color("#7fe3d0")
 const COL_PIT := Color("#06100f")
 
@@ -292,23 +298,30 @@ func _build_road() -> void:
 		# centre dashes (40 on, 50 off)
 		if fposmod(smid, 90.0) < 40.0:
 			road.quad(P.call(ca, na, 2.5, ha + 0.4), P.call(cb, nb, 2.5, hb + 0.4), P.call(cb, nb, -2.5, hb + 0.4), P.call(ca, na, -2.5, ha + 0.4), Color(COL_CHALK, 1.0).darkened(0.55), up)
-		var kc := COL_KERB if int(floor(smid / 30.0)) % 2 == 0 else COL_CHALK
 		var elevated: bool = A["h"] > 2.0 or B["h"] > 2.0
 		for side: float in [1.0, -1.0]:
 			var o0 := HW * side
 			var o1 := (HW + KERB_W) * side
 			var o2 := (HW + KERB_W + RAIL_W) * side
 			var out_hint := Vector3(na.x * side, 0, na.y * side)
-			# kerb
-			road.quad(P.call(ca, na, o0, ha + 0.6), P.call(cb, nb, o0, hb + 0.6), P.call(cb, nb, o1, hb + 0.6), P.call(ca, na, o1, ha + 0.6), kc, up)
-			# rail: inner face, top, outer face
-			var rh := RAIL_H + (10.0 if elevated else 0.0)
-			var rcol := COL_DECK_LIGHT if elevated else COL_RAIL
-			road.quad(P.call(ca, na, o1, ha), P.call(cb, nb, o1, hb), P.call(cb, nb, o1, hb + rh), P.call(ca, na, o1, ha + rh), rcol.darkened(0.12), -out_hint)
-			road.quad(P.call(ca, na, o1, ha + rh), P.call(cb, nb, o1, hb + rh), P.call(cb, nb, o2, hb + rh), P.call(ca, na, o2, ha + rh), rcol, up)
-			var base_a := (ha - 22.0) if elevated else 0.0
-			var base_b := (hb - 22.0) if elevated else 0.0
-			road.quad(P.call(ca, na, o2, base_a), P.call(cb, nb, o2, base_b), P.call(cb, nb, o2, hb + rh), P.call(ca, na, o2, ha + rh), rcol.darkened(0.25), out_hint)
+			# verge: a strip of packed, blue-shaded snow right at the lane edge
+			road.quad(P.call(ca, na, o0, ha + 0.6), P.call(cb, nb, o0, hb + 0.6), P.call(cb, nb, o1, hb + 0.6), P.call(ca, na, o1, ha + 0.6), COL_VERGE, up)
+			if elevated:
+				# bridge: wooden rail with snow lying on top
+				var rh := RAIL_H + 10.0
+				road.quad(P.call(ca, na, o1, ha), P.call(cb, nb, o1, hb), P.call(cb, nb, o1, hb + rh), P.call(ca, na, o1, ha + rh), COL_DECK_LIGHT.darkened(0.12), -out_hint)
+				road.quad(P.call(ca, na, o1, ha + rh), P.call(cb, nb, o1, hb + rh), P.call(cb, nb, o2, hb + rh), P.call(ca, na, o2, ha + rh), COL_SNOW, up)
+				road.quad(P.call(ca, na, o2, ha - 22.0), P.call(cb, nb, o2, hb - 22.0), P.call(cb, nb, o2, hb + rh), P.call(ca, na, o2, ha + rh), COL_DECK_LIGHT.darkened(0.25), out_hint)
+			else:
+				# snowbank: a steep shaded inner face, a rounded white crest and a long
+				# gentle slope out into the snowfield
+				var bh := BANK_H * (0.92 + 0.08 * sin(smid * 0.021 + side))
+				var ob := (HW + KERB_W + 5.0) * side
+				var oc := (HW + KERB_W + RAIL_W) * side
+				var oo := (HW + KERB_W + RAIL_W + BANK_OUT) * side
+				road.quad(P.call(ca, na, o1, ha), P.call(cb, nb, o1, hb), P.call(cb, nb, ob, hb + bh), P.call(ca, na, ob, ha + bh), COL_BANK_FACE, -out_hint + up * 0.4)
+				road.quad(P.call(ca, na, ob, ha + bh), P.call(cb, nb, ob, hb + bh), P.call(cb, nb, oc, hb + bh), P.call(ca, na, oc, ha + bh), COL_SNOW, up)
+				road.quad(P.call(ca, na, oc, ha + bh), P.call(cb, nb, oc, hb + bh), P.call(cb, nb, oo, 0.0), P.call(ca, na, oo, 0.0), COL_BANK_SLOPE, out_hint + up * 2.0)
 		if elevated:
 			# deck underside
 			var oo := HW + KERB_W + RAIL_W
@@ -730,10 +743,21 @@ func _build_towers() -> void:
 			var y := maxf(road_h + TOWER_H, y_prev + 70.0)
 			rotor_h[idx] = y
 			var wide := 1.0 if m == 0 else 0.68
-			# column up to this rotor, narrowing above the first one
+			# six-sided slate column up to this rotor, narrowing above the first one,
+			# with a drift of snow round its foot
 			var col_r := 32.0 * wide
-			t.add_child(cyl(col_r, y - y_prev, COL_TOWER, Vector3(0, y_prev + (y - y_prev) / 2.0, 0), col_r + (6.0 if m == 0 else 2.0)))
-			t.add_child(cyl(col_r, 8, COL_TOWER.lightened(0.15), Vector3(0, y + 4, 0)))
+			if m == 0:
+				t.add_child(cyl(52, 12, COL_SNOW, Vector3(0, 6, 0), 66, 12))
+			t.add_child(cyl(col_r, y - y_prev, COL_SLATE, Vector3(0, y_prev + (y - y_prev) / 2.0, 0), col_r + (6.0 if m == 0 else 2.0), 6))
+			# snow cap with a ring of icicles under its lip
+			t.add_child(cyl(col_r + 7.0, 9, COL_SNOW, Vector3(0, y + 3.5, 0), col_r + 9.0, 6))
+			for k in 6:
+				var an := TAU * (k + 0.5) / 6.0
+				var ln := 12.0 + 7.0 * float((k * 5 + m) % 3)
+				var rr := (col_r + 6.0) * 0.92
+				var ic := cyl(3.2, ln, COL_ICE, Vector3(cos(an) * rr, y - 1.0 - ln / 2.0, sin(an) * rr), 0.0, 5)
+				ic.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				t.add_child(ic)
 			var spinner := Node3D.new()
 			spinner.position = Vector3(0, y + 8, 0) * U
 			var disc := cyl(27 * wide, 6, COL_POST, Vector3(0, 3, 0))
@@ -744,7 +768,8 @@ func _build_towers() -> void:
 				arm.rotation.y = TAU * k / 3.0
 				arm.add_child(box(Vector3(24 * wide, 4, 6), Color("#3a2a08"), Vector3(12 * wide, 7, 0)))
 				spinner.add_child(arm)
-			spinner.add_child(cyl(7, 10, COL_CHALK, Vector3(0, 8, 0)))
+			# a little dome of snow on the hub
+			spinner.add_child(cyl(5, 6, COL_SNOW, Vector3(0, 12, 0), 9, 10))
 			t.add_child(spinner)
 			var rings: Array = []
 			for r in 2:
@@ -914,25 +939,39 @@ func _make_car(col: Color, ghost := false) -> Node3D:
 		parts_list.append(pbox(Vector3(22, 6, 80), low, Vector3(-58, 44, 0)))     # rear wing
 		parts_list.append(pbox(Vector3(6, 10, 6), low, Vector3(-58, 37, 26)))
 		parts_list.append(pbox(Vector3(6, 10, 6), low, Vector3(-58, 37, -26)))
-		parts_list.append(pbox(Vector3(54, 1.5, 12), paint(Color(1, 1, 1)), Vector3(-30, 38, 0)))  # stripe
+		# winter kit: snow piled on the roof and the wing, a spotlight bar on the nose
+		var snow := paint(COL_SNOW, 0.9)
+		snow.clearcoat_enabled = false
+		parts_list.append(pbox(Vector3(36, 5, 52), snow, Vector3(-13, 59, 0)))
+		parts_list.append(pbox(Vector3(24, 4, 36), snow, Vector3(-15, 63, 3)))
+		parts_list.append(pbox(Vector3(14, 3, 70), snow, Vector3(-60, 48.5, 4)))
+		parts_list.append(pbox(Vector3(22, 2.5, 36), snow, Vector3(40, 38.5, -6)))   # on the bonnet
 		var lamp := mat(Color("#fff4c8"), true)
 		parts_list.append(pbox(Vector3(3, 5, 14), lamp, Vector3(75, 25, 22)))
 		parts_list.append(pbox(Vector3(3, 5, 14), lamp, Vector3(75, 25, -22)))
+		parts_list.append(pbox(Vector3(6, 5, 46), paint(Color("#1d2229"), 0.5), Vector3(8, 59, 0)))  # light bar
+		for lz in [-15.0, 0.0, 15.0]:
+			parts_list.append(pbox(Vector3(3, 6, 9), lamp, Vector3(11.5, 59, lz)))
 		var tail := mat(Color("#ff4a3a"), false, 1.2)
 		parts_list.append(pbox(Vector3(3, 5, 12), tail, Vector3(-62, 28, 24)))
 		parts_list.append(pbox(Vector3(3, 5, 12), tail, Vector3(-62, 28, -24)))
+		# chunky winter tyres with a light stud band
 		var tyre := paint(Color("#16181c"), 0.8)
+		var stud := paint(Color("#8d98a3"), 0.6)
 		for wx in [-40.0, 42.0]:
 			for wz in [-37.0, 37.0]:
-				var w := MeshInstance3D.new()
-				var cm := CylinderMesh.new()
-				cm.top_radius = 14 * U; cm.bottom_radius = 14 * U; cm.height = 12 * U
-				cm.radial_segments = 14; cm.rings = 1
-				cm.material = tyre
-				w.mesh = cm
-				w.position = Vector3(wx, 14, wz) * U
-				w.rotation.x = PI / 2
-				chassis.add_child(w)   # wheels stay on the road; the body moves above them
+				for layer in 2:
+					var w := MeshInstance3D.new()
+					var cm := CylinderMesh.new()
+					var rr := 16.0 if layer == 0 else 16.6
+					cm.top_radius = rr * U; cm.bottom_radius = rr * U
+					cm.height = (15.0 if layer == 0 else 5.0) * U
+					cm.radial_segments = 14; cm.rings = 1
+					cm.material = tyre if layer == 0 else stud
+					w.mesh = cm
+					w.position = Vector3(wx, 15, wz) * U
+					w.rotation.x = PI / 2
+					chassis.add_child(w)   # wheels stay on the road; the body moves above them
 	for p in parts_list:
 		if ghost:
 			p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -1138,7 +1177,7 @@ func handle_event(e: Dictionary) -> void:
 			var y := track.height_at(e["s"]) + 20.0
 			for k in int(e["count"]):
 				var v := Vector2(randf() - 0.5, randf() - 0.5) * 300.0 - n * 140.0
-				_spark(w3(p, y), Vector3(v.x, 120 + randf() * 200, v.y) * U, 0.35 + randf() * 0.3, Color("#ffd36b"))
+				_spark(w3(p, y), Vector3(v.x, 120 + randf() * 200, v.y) * U, 0.35 + randf() * 0.3, COL_SNOW if k % 3 else COL_VERGE)
 		"post":
 			var p: Vector2 = e["pos"]
 			var cv: Vector2 = e["vel"]
