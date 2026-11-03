@@ -1,7 +1,7 @@
 # Background music: one looping track at a time, crossfaded when the scene
 # changes (menu -> race -> menu). The tracks are original, composed and
 # rendered by tools/music/compose.py, and loop seamlessly (loop=true in their
-# .import files). Muted together with the sound effects.
+# .import files). Plays on the "Music" bus, whose volume is a player setting.
 extends Node
 
 const TRACKS := {
@@ -29,6 +29,7 @@ func _ready() -> void:
 	for i in 2:
 		var p := AudioStreamPlayer.new()
 		p.volume_db = SILENT
+		p.bus = "Music"   # created by sfx.gd
 		add_child(p)
 		_players.append(p)
 

@@ -1,17 +1,14 @@
 # Synthesised sounds, matching the prototype's WebAudio blips: short oscillator
 # notes with an exponential pitch slide and fade, plus a low sawtooth engine hum.
-# Also owns the background music, so the one Sound switch mutes both.
+# Also owns the background music. Effects and music play on their own buses
+# ("SFX", "Music"), each with its own volume.
 extends Node
 
 const Music = preload("res://scripts/music.gd")
 
 const RATE := 22050
 var music: Music
-var enabled := true:
-	set(v):
-		enabled = v
-		if music:
-			music.enabled = v
+var enabled := true   # false when the sound volume is at zero: skip the work
 var _cache := {}
 var _pool: Array[AudioStreamPlayer] = []
 var _next := 0
@@ -23,11 +20,13 @@ var _gain_target := 0.0
 const HUM_BASE := 110.0  # the hum loop is one low-passed sawtooth at this pitch
 
 func _ready() -> void:
+	_bus("SFX")
+	_bus("Music")
 	music = Music.new()
-	music.enabled = enabled
 	add_child(music)
 	for i in 10:
 		var p := AudioStreamPlayer.new()
+		p.bus = "SFX"
 		add_child(p)
 		_pool.append(p)
 	# engine: a looping low-passed sawtooth, re-pitched with the car's speed
@@ -51,9 +50,33 @@ func _ready() -> void:
 	w.loop_begin = 0
 	w.loop_end = n
 	_engine = AudioStreamPlayer.new()
+	_engine.bus = "SFX"
 	_engine.stream = w
 	_engine.volume_db = -80.0
 	add_child(_engine)
+# create a bus routed to Master if it doesn't exist yet; returns its index
+static func _bus(name: String) -> int:
+	var i := AudioServer.get_bus_index(name)
+	if i < 0:
+		AudioServer.add_bus()
+		i = AudioServer.bus_count - 1
+		AudioServer.set_bus_name(i, name)
+		AudioServer.set_bus_send(i, "Master")
+	return i
+
+# slider 0..100 -> bus gain; squared so the middle of the slider sounds like the middle
+static func _set_bus_volume(name: String, pct: float) -> void:
+	var i := _bus(name)
+	var g := pow(clampf(pct / 100.0, 0.0, 1.0), 2.0)
+	AudioServer.set_bus_mute(i, g <= 0.0)
+	AudioServer.set_bus_volume_db(i, linear_to_db(maxf(g, 0.0001)))
+
+func set_volumes(music_pct: float, sfx_pct: float) -> void:
+	_set_bus_volume("Music", music_pct)
+	_set_bus_volume("SFX", sfx_pct)
+	music.enabled = music_pct > 0.0
+	enabled = sfx_pct > 0.0
+
 static func _wave(kind: String, ph: float) -> float:
 	var x := fposmod(ph, 1.0)
 	match kind:
