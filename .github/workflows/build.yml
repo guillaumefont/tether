@@ -1,21 +1,24 @@
 name: Builds
 
-# Exports the game for Web and Android on every push.
-# - Web build and APK are published to the gh-pages branch, so with GitHub Pages
-#   turned on (Settings > Pages > Deploy from a branch > gh-pages) you get:
-#     https://<owner>.github.io/<repo>/                 play in a browser
-#     https://<owner>.github.io/<repo>/pivot-rush.apk   install on Android
-# - The APK is also attached to each run as an artifact.
+# Exports the game for Web and Android and publishes it on GitHub Pages (gh-pages branch):
+#   main          -> https://<owner>.github.io/<repo>/              (+ pivot-rush.apk)
+#   pull request N -> https://<owner>.github.io/<repo>/pr/N/         (+ pivot-rush.apk)
+# Each open PR keeps its own preview, linked in a comment on the PR; it is removed when
+# the PR is closed. The APK is also attached to each run as an artifact.
 on:
   push:
-    branches: [main, claude/godot-3d-port]
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
   workflow_dispatch:
 
 permissions:
   contents: write
+  pull-requests: write
 
+# one build per branch/PR at a time (a newer push cancels the older build)
 concurrency:
-  group: builds
+  group: builds-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -23,6 +26,7 @@ env:
 
 jobs:
   export:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -98,15 +102,37 @@ jobs:
           path: ${{ runner.temp }}/out/android/pivot-rush.apk
 
       - name: Publish to gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEST: ${{ github.event.pull_request.number && format('pr/{0}', github.event.pull_request.number) || '.' }}
         run: |
-          mkdir -p "$OUT/pages"
-          cp -r "$OUT/web/." "$OUT/pages/"
-          cp "$OUT/android/pivot-rush.apk" "$OUT/pages/"
-          touch "$OUT/pages/.nojekyll"
-          cd "$OUT/pages"
-          git init -q -b gh-pages
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -q -m "Build of ${GITHUB_SHA::7} from ${GITHUB_REF_NAME}"
-          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+          mkdir -p "$OUT/stage"
+          cp -r "$OUT/web/." "$OUT/stage/"
+          cp "$OUT/android/pivot-rush.apk" "$OUT/stage/"
+          bash .github/publish-pages.sh "$OUT/stage" "$DEST" "Build of ${GITHUB_SHA::7} for $DEST"
+
+      - name: Link the preview on the PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const n = context.issue.number;
+            const base = `https://${context.repo.owner}.github.io/${context.repo.repo}/pr/${n}/`;
+            const body = `<!-- preview -->\n**Preview of this PR** (updated on every push, sha ${context.sha.slice(0, 7)})\n\n- Play in the browser: ${base}\n- Android APK: ${base}pivot-rush.apk\n\nIt may take a minute after the build for GitHub Pages to refresh.`;
+            const { data: comments } = await github.rest.issues.listComments({ ...context.repo, issue_number: n });
+            const old = comments.find(c => c.body.startsWith('<!-- preview -->'));
+            if (old) await github.rest.issues.updateComment({ ...context.repo, comment_id: old.id, body });
+            else await github.rest.issues.createComment({ ...context.repo, issue_number: n, body });
+
+  # a closed PR's preview is deleted
+  cleanup:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - name: Remove the PR preview
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash .github/publish-pages.sh "" "pr/${{ github.event.pull_request.number }}" "Remove preview of PR ${{ github.event.pull_request.number }}"
