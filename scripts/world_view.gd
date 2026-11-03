@@ -578,6 +578,12 @@ func _build_scenery() -> void:
 	_multi(_shack_mesh(), shacks)
 	_multi(_rock_mesh(), rocks)
 
+# "Snow & shadows" option: off saves battery on slower phones
+var effects_on := true
+func set_effects(on: bool) -> void:
+	effects_on = on
+	light.shadow_enabled = on
+
 # light snowfall around the camera focus: one CPU particle system, ~150 tiny quads
 var snowfall: CPUParticles3D
 func _build_snowfall() -> void:
@@ -1232,8 +1238,8 @@ func update_camera(race: Race, phase: String, dt: float, snap := false) -> void:
 	var off := Vector3(0, sin(PITCH), cos(PITCH)) * dist
 	var jitter := Vector3((randf() - 0.5), 0, (randf() - 0.5)) * shake * 2.0 * U
 	if snowfall:
-		snowfall.emitting = phase != "menu"
-		snowfall.visible = phase != "menu"
+		snowfall.emitting = phase != "menu" and effects_on
+		snowfall.visible = snowfall.emitting
 		snowfall.position = focus + Vector3(0, 5.0, 0)
 		snowfall.emission_box_extents = Vector3(cam_vis * U * 1.1, 0.2, cam_vis * U * 0.7)
 	camera.position = focus + off + jitter

@@ -22,6 +22,8 @@ const TIPS := [
 signal again_pressed
 signal menu_pressed
 signal next_pressed
+signal pause_pressed
+signal pause_action(what: String)   # resume | restart | exit | sound | ghost | effects
 
 const MINIMAP := 110.0
 const C_PANEL := Color(0.035, 0.075, 0.082, 0.92)
@@ -124,6 +126,7 @@ func _ready() -> void:
 	root.add_child(menu)
 	menu.setup(self)
 	_build_results()
+	_build_pause()
 	_build_loading()
 
 func _make_theme() -> Theme:
@@ -228,6 +231,9 @@ func layout() -> void:
 	minimap.offset_top = minimap.offset_bottom - MINIMAP
 	var vp := root.get_viewport_rect().size
 	results_panel.custom_minimum_size.x = minf(440.0, vp.x - 40.0)
+	if pause_panel:
+		pause_panel.custom_minimum_size.x = minf(440.0, vp.x - 40.0)
+		_pause_opts.columns = 1 if is_portrait() else 3
 	if _load_box:
 		_place_loading()
 
@@ -292,6 +298,113 @@ func _build_results() -> void:
 	vb.add_child(back)
 	results.visible = false
 
+# ---------------------------------------------------------------- pause
+var pause_btn: Button
+var pause_ov: Control
+var pause_panel: PanelContainer
+var _pause_sub: Label
+var _pause_opts: GridContainer
+var _opt_btns := {}
+
+func _build_pause() -> void:
+	var r := _overlay()
+	pause_ov = r[0]
+	pause_ov.color = Color(0.02, 0.06, 0.1, 0.55)
+	pause_panel = r[2]
+	var ps := StyleBoxFlat.new()
+	ps.bg_color = Color(0.05, 0.11, 0.17, 0.94)
+	ps.set_corner_radius_all(14)
+	ps.border_color = Color(0.86, 0.93, 0.98, 0.45)
+	ps.set_border_width_all(2)
+	ps.border_width_top = 5
+	ps.set_content_margin_all(20)
+	ps.shadow_color = Color(0, 0, 0, 0.5)
+	ps.shadow_size = 24
+	pause_panel.add_theme_stylebox_override("panel", ps)
+	var vb: VBoxContainer = r[1]
+	var top := HBoxContainer.new()
+	var logo := Art.Logo.new()
+	logo.custom_minimum_size = Vector2(52, 52)
+	logo.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top.add_theme_constant_override("separation", 12)
+	top.add_child(logo)
+	var tv := VBoxContainer.new()
+	tv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tv.add_theme_constant_override("separation", -2)
+	var pt := _label("PAUSED", 30, C_POST, f_display)
+	pt.autowrap_mode = TextServer.AUTOWRAP_OFF
+	tv.add_child(pt)
+	_pause_sub = _label("", 13, Art.C_ICE_DIM, f_bold)
+	tv.add_child(_pause_sub)
+	top.add_child(tv)
+	vb.add_child(top)
+	var resume := Button.new()
+	resume.text = "RESUME"
+	resume.custom_minimum_size = Vector2(0, 52)
+	_style_go(resume)
+	resume.pressed.connect(func(): pause_action.emit("resume"))
+	vb.add_child(resume)
+	var restart := Button.new()
+	restart.text = "Restart race"
+	restart.custom_minimum_size = Vector2(0, 46)
+	restart.pressed.connect(func(): pause_action.emit("restart"))
+	vb.add_child(restart)
+	_pause_opts = _grid(3)
+	for o in [["sound", "Sound"], ["ghost", "Ghost car"], ["effects", "Effects"]]:
+		var b := Button.new()
+		b.custom_minimum_size = Vector2(0, 44)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.add_theme_font_size_override("font_size", 13)
+		b.clip_text = true
+		var key: String = o[0]
+		b.pressed.connect(func(): pause_action.emit(key))
+		b.set_meta("label", o[1])
+		_pause_opts.add_child(b)
+		_opt_btns[key] = b
+	vb.add_child(_pause_opts)
+	var ex := Button.new()
+	ex.text = "Exit to menu"
+	ex.custom_minimum_size = Vector2(0, 46)
+	ex.pressed.connect(func(): pause_action.emit("exit"))
+	vb.add_child(ex)
+	vb.add_child(_label("Esc or the back button also resumes.", 12, C_MUTED))
+	pause_ov.visible = false
+
+	pause_btn = Button.new()
+	pause_btn.text = "II"
+	pause_btn.custom_minimum_size = Vector2(44, 40)
+	pause_btn.add_theme_font_override("font", f_display)
+	pause_btn.add_theme_font_size_override("font_size", 16)
+	pause_btn.add_theme_color_override("font_color", C_POST)
+	var pb := StyleBoxFlat.new()
+	pb.bg_color = C_PANEL
+	pb.set_corner_radius_all(6)
+	pb.border_color = Color(0.86, 0.93, 0.98, 0.35)
+	pb.border_width_top = 3
+	for st in ["normal", "hover", "pressed", "hover_pressed"]:
+		pause_btn.add_theme_stylebox_override(st, pb)
+	pause_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	pause_btn.focus_mode = Control.FOCUS_NONE
+	pause_btn.pressed.connect(func(): pause_pressed.emit())
+
+# options: { sound: bool, ghost: bool or null when there is no ghost, effects: bool }
+func show_pause(sub: String, opts: Dictionary) -> void:
+	_pause_sub.text = sub
+	set_pause_opts(opts)
+	pause_ov.visible = true
+
+func set_pause_opts(opts: Dictionary) -> void:
+	for key in _opt_btns:
+		var b: Button = _opt_btns[key]
+		b.visible = opts.get(key) != null
+		if b.visible:
+			b.text = "%s: %s" % [b.get_meta("label"), "On" if opts[key] else "Off"]
+	_pause_opts.columns = 1 if is_portrait() else 3
+
+func hide_pause() -> void:
+	pause_ov.visible = false
+
 # ---------------------------------------------------------------- loading screen
 var loading: Control
 var _load_title: Label
@@ -351,6 +464,7 @@ func hide_loading() -> void:
 
 # ---------------------------------------------------------------- menu state
 func show_menu() -> void:
+	pause_ov.visible = false
 	menu.visible = true
 	menu.refresh()
 	results.visible = false
@@ -393,6 +507,8 @@ func _spacer() -> void:
 	hud.add_child(c)
 
 func build_hud(race, gems: bool) -> void:
+	if pause_btn.get_parent():
+		pause_btn.get_parent().remove_child(pause_btn)
 	for ch in hud.get_children():
 		ch.queue_free()
 	hud_vals.clear()
@@ -416,6 +532,7 @@ func build_hud(race, gems: bool) -> void:
 			_spacer()
 			_chip("P2", "lap1", hs[1].color)
 			_chip("Pos", "pos1", hs[1].color)
+	hud.add_child(pause_btn)
 	hud.visible = true
 	minimap.visible = true
 	menu.visible = false
