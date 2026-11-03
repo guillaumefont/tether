@@ -67,6 +67,8 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--demo="):
 			_run_demo(a.substr(7))
+		elif a.begins_with("--promo="):
+			_run_promo(a.substr(8))
 
 func rec_key() -> String:
 	return Records.key(Defs.TRACKS[track_idx]["name"], variant)
@@ -515,12 +517,7 @@ func _run_demo(arg: String) -> void:
 	while t < secs:
 		await get_tree().process_frame
 		t += get_process_delta_time()
-		if phase == "race":
-			for c in race.cars:
-				if c.human >= 0:
-					race.ai_think(c)  # autopilot for the demo
-					race.inputs[c.human]["held"] = c.hook >= 0
-					race.inputs[c.human]["press_t"] = race.clock
+		_autopilot()
 		if OS.get_environment("SHOT_PAUSE") != "" and shot == 2 and not paused and phase == "race":
 			_set_paused(true)
 			await get_tree().create_timer(0.2).timeout
@@ -531,4 +528,39 @@ func _run_demo(arg: String) -> void:
 			shot += 1
 			await RenderingServer.frame_post_draw
 			get_viewport().get_texture().get_image().save_png(out.path_join("race_%d.png" % shot))
+	get_tree().quit()
+
+# the AI drives the human cars, so a recording shows a clean lap with the player's camera
+func _autopilot() -> void:
+	if phase != "race":
+		return
+	for c in race.cars:
+		if c.human >= 0:
+			race.ai_think(c)
+			race.inputs[c.human]["held"] = c.hook >= 0
+			race.inputs[c.human]["press_t"] = race.clock
+
+# Promo footage: skip the menus, race straight away on autopilot, quit after <seconds>.
+# Record with movie mode, e.g. tools/promo/record.sh (see tools/promo/README.md):
+#   godot --path . --write-movie out.avi --fixed-fps 30 --resolution 1080x1920 -- --promo=<track>,<variant>,<seconds>[,<mode>]
+func _run_promo(arg: String) -> void:
+	var parts := arg.split(",")
+	track_idx = int(parts[0])
+	variant = parts[1] if parts.size() > 1 else "standard"
+	var secs := float(parts[2]) if parts.size() > 2 else 20.0
+	mode = parts[3] if parts.size() > 3 else "race"
+	humans = 1
+	# no in-game music: clips get cut together, so the edit lays one continuous track over them
+	sfx.set_volumes(0.0, Settings.get_opt("sfx_vol"))
+	await get_tree().process_frame
+	ui.menu.visible = false
+	ui.loading.visible = false
+	ui.pause_btn.visible = false
+	new_race()
+	ui.pause_btn.visible = false
+	var t := 0.0
+	while t < secs:
+		await get_tree().process_frame
+		t += get_process_delta_time()
+		_autopilot()
 	get_tree().quit()
