@@ -79,6 +79,7 @@ func _with_loading(title: String, work: Callable) -> void:
 func _to_menu() -> void:
 	phase = "menu"
 	race = null
+	sfx.music.play("menu")
 	ui.show_menu()
 	_start_attract()
 
@@ -101,6 +102,7 @@ func _start_event(ev: Dictionary) -> void:
 
 func new_race() -> void:
 	attract = null
+	sfx.music.play(sfx.music.race_track(track_idx))
 	track = TrackData.new(Defs.TRACKS[track_idx], variant)
 	view.build(track)
 	view.visible = true

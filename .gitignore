@@ -5,3 +5,4 @@
 export_credentials.cfg
 # Android
 /android/
+__pycache__/
