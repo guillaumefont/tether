@@ -84,11 +84,17 @@ The game uses the Mobile renderer on phones and the Compatibility renderer on th
 
 ## Screenshots
 
-![Menu](docs/menu.png)
+Captured from the current `main` web build.
 
-![Two players racing on Coil](docs/race-2p.png)
-![Time trial on Knot, Obstacles variant](docs/trial-obstacles.png)
-![Collect variant on Pretzel](docs/collect.png)
+![Main menu, with a live AI race behind it](docs/menu.png)
+
+<p>
+  <img src="docs/race-obstacles.png" alt="Race on Sidestep, Obstacles variant: four cars tethered to the same tower" width="68%">
+  <img src="docs/portrait-collect.png" alt="Portrait mode: time trial on Starfish, Collect variant" width="30%">
+</p>
+
+![Pause menu](docs/pause.png)
+![Loading screen](docs/loading.png)
 
 ## License
 
