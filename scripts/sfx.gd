@@ -1,9 +1,17 @@
 # Synthesised sounds, matching the prototype's WebAudio blips: short oscillator
 # notes with an exponential pitch slide and fade, plus a low sawtooth engine hum.
+# Also owns the background music, so the one Sound switch mutes both.
 extends Node
 
+const Music = preload("res://scripts/music.gd")
+
 const RATE := 22050
-var enabled := true
+var music: Music
+var enabled := true:
+	set(v):
+		enabled = v
+		if music:
+			music.enabled = v
 var _cache := {}
 var _pool: Array[AudioStreamPlayer] = []
 var _next := 0
@@ -15,6 +23,9 @@ var _gain_target := 0.0
 const HUM_BASE := 110.0  # the hum loop is one low-passed sawtooth at this pitch
 
 func _ready() -> void:
+	music = Music.new()
+	music.enabled = enabled
+	add_child(music)
 	for i in 10:
 		var p := AudioStreamPlayer.new()
 		add_child(p)

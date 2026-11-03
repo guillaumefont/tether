@@ -110,6 +110,7 @@ func _load_race() -> void:
 func _to_menu() -> void:
 	phase = "menu"
 	race = null
+	sfx.music.play("menu")
 	ui.show_menu()
 	_start_attract()
 
@@ -197,6 +198,7 @@ func new_race(built: TrackData = null) -> void:
 	paused = false
 	ui.hide_pause()
 	attract = null
+	sfx.music.play(sfx.music.race_track(track_idx))
 	if built:
 		track = built   # already built by the loading screen
 	else:
@@ -267,6 +269,7 @@ func _notification(what: int) -> void:
 
 # ---------------------------------------------------------------- loop
 func _process(delta: float) -> void:
+	sfx.music.set_ducked(paused)
 	if paused or building:
 		return
 	var dt := minf(delta, 1.0 / 30.0)
