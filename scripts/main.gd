@@ -10,6 +10,7 @@ const Medals = preload("res://scripts/medals.gd")
 const WorldView = preload("res://scripts/world_view.gd")
 const UI = preload("res://scripts/ui.gd")
 const Sfx = preload("res://scripts/sfx.gd")
+const Settings = preload("res://scripts/settings.gd")
 
 var view: WorldView
 var ui: UI
@@ -30,6 +31,8 @@ var flash_t := 0.0
 var ghost: Array = []
 var new_record := false
 var touch_owner := {}        # touch index -> player
+var paused := false
+var building := false        # a loading screen is building the next track
 # behind the menu: AI drivers race a snowy track, changing track every ATTRACT_SECS
 var attract: Race = null
 var attract_t := 0.0
@@ -43,7 +46,14 @@ func _ready() -> void:
 	add_child(sfx)
 	ui = UI.new()
 	add_child(ui)
-	ui.menu.sound_toggled.connect(func(on): sfx.enabled = on)
+	sfx.enabled = Settings.get_opt("sound")
+	ui.menu.sound_on = sfx.enabled
+	view.set_effects(Settings.get_opt("effects"))
+	ui.menu.sound_toggled.connect(func(on):
+		sfx.enabled = on
+		Settings.set_opt("sound", on))
+	ui.pause_pressed.connect(_toggle_pause)
+	ui.pause_action.connect(_pause_action)
 	ui.menu.start_event.connect(_start_event)
 	ui.again_pressed.connect(new_race)
 	ui.next_pressed.connect(func():
@@ -70,10 +80,31 @@ func _fade_in_later() -> void:
 
 # show the loading screen for a frame, then do the slow track build behind it
 func _with_loading(title: String, work: Callable) -> void:
+	building = true
 	ui.show_loading(title)
 	await get_tree().process_frame
 	await get_tree().process_frame
+	ui.set_loading_progress(0.6)
+	building = false
 	work.call()
+	ui.hide_loading()
+
+# build the race track a step at a time so the loading bar moves with the real work
+func _load_race() -> void:
+	building = true
+	ui.show_loading(Defs.TRACKS[track_idx]["name"])
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var tr := TrackData.new(Defs.TRACKS[track_idx], variant)
+	ui.set_loading_progress(0.15)
+	await get_tree().process_frame
+	var steps: Array = view.build_steps(tr)
+	for i in steps.size():
+		steps[i].call()
+		ui.set_loading_progress(0.15 + 0.8 * (i + 1) / steps.size())
+		await get_tree().process_frame
+	building = false
+	new_race(tr)
 	ui.hide_loading()
 
 func _to_menu() -> void:
@@ -92,17 +123,85 @@ func _start_attract() -> void:
 	attract_t = 0.0
 	view.update_camera(attract, "attract", 0.0, true)
 
+# ---------------------------------------------------------------- pause
+func _can_pause() -> bool:
+	return race != null and phase in ["count", "race", "done"] and not ui.results.visible
+
+func _toggle_pause() -> void:
+	if paused:
+		_set_paused(false)
+	elif _can_pause():
+		_set_paused(true)
+
+func _set_paused(on: bool) -> void:
+	paused = on
+	if on:
+		race.release(0)
+		race.release(1)
+		touch_owner.clear()
+		sfx.set_engine(0.0, false)
+		var d: Dictionary = Defs.TRACKS[track_idx]
+		var what := "Time trial" if mode == "trial" else ("2-player race" if humans > 1 else "Race")
+		var c0 = race.cars[0]
+		ui.show_pause("%s  ·  %s  ·  lap %d / %d" % [d["name"], what, clampi(c0.lap, 1, race.laps_total), race.laps_total], _pause_opts())
+	else:
+		ui.hide_pause()
+
+func _pause_opts() -> Dictionary:
+	return { "sound": sfx.enabled, "ghost": Settings.get_opt("ghost") if mode == "trial" else null, "effects": Settings.get_opt("effects") }
+
+func _pause_action(what: String) -> void:
+	match what:
+		"resume":
+			_set_paused(false)
+		"restart":
+			_set_paused(false)
+			new_race()
+		"exit":
+			_set_paused(false)
+			_with_loading("", _to_menu)
+		"sound":
+			sfx.enabled = not sfx.enabled
+			ui.menu.sound_on = sfx.enabled
+			Settings.set_opt("sound", sfx.enabled)
+		"ghost":
+			Settings.set_opt("ghost", not Settings.get_opt("ghost"))
+		"effects":
+			var on: bool = not Settings.get_opt("effects")
+			Settings.set_opt("effects", on)
+			view.set_effects(on)
+	if paused:
+		ui.set_pause_opts(_pause_opts())
+
+# Android back button / Esc: pause or resume a race, step back through the menus
+func _go_back() -> void:
+	if building:
+		return
+	if race != null and phase != "menu":
+		if paused or _can_pause():
+			_toggle_pause()
+		elif ui.results.visible:
+			_with_loading("", _to_menu)
+		return
+	if not ui.menu.go_back():
+		get_tree().quit()
+
 func _start_event(ev: Dictionary) -> void:
 	track_idx = ev["track"]
 	variant = ev["variant"]
 	mode = ev["mode"]
 	humans = ev["humans"]
-	_with_loading(Defs.TRACKS[track_idx]["name"], new_race)
+	_load_race()
 
-func new_race() -> void:
+func new_race(built: TrackData = null) -> void:
+	paused = false
+	ui.hide_pause()
 	attract = null
-	track = TrackData.new(Defs.TRACKS[track_idx], variant)
-	view.build(track)
+	if built:
+		track = built   # already built by the loading screen
+	else:
+		track = TrackData.new(Defs.TRACKS[track_idx], variant)
+		view.build(track)
 	view.visible = true
 	race = Race.new(track, mode, humans)
 	ghost = Records.get_ghost(rec_key()) if mode == "trial" else []
@@ -122,12 +221,18 @@ func new_race() -> void:
 
 # ---------------------------------------------------------------- input
 func _input(e: InputEvent) -> void:
-	if race == null:
+	if e is InputEventKey and e.pressed and not e.echo and e.physical_keycode == KEY_ESCAPE:
+		_go_back()
+		get_viewport().set_input_as_handled()
+		return
+	if race == null or paused or building:
 		return
 	if e is InputEventScreenTouch:
 		if e.pressed:
 			if phase != "race":
 				return
+			if ui.pause_btn.is_visible_in_tree() and ui.pause_btn.get_global_rect().grow(8).has_point(e.position):
+				return   # the pause button, not a hook
 			var w := get_viewport().get_visible_rect().size.x
 			var p := 1 if (race.humans > 1 and e.position.x > w / 2.0) else 0
 			touch_owner[e.index] = p
@@ -151,13 +256,19 @@ func _input(e: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		_go_back()
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and race:
 		race.release(0)
 		race.release(1)
 		touch_owner.clear()
+		if _can_pause() and not paused and phase == "race":
+			_set_paused(true)   # phone call, notification shade, app switch
 
 # ---------------------------------------------------------------- loop
 func _process(delta: float) -> void:
+	if paused or building:
+		return
 	var dt := minf(delta, 1.0 / 30.0)
 	if track:
 		Race.spin_anchors(track, dt)
@@ -229,7 +340,7 @@ func _aims() -> Dictionary:
 	return aims
 
 func _ghost_sample():
-	if ghost.is_empty() or race == null or phase == "menu":
+	if ghost.is_empty() or race == null or phase == "menu" or not Settings.get_opt("ghost"):
 		return null
 	var c0 = race.cars[0]
 	var k := int((race.clock - c0.lap_start if c0.lap >= 1 else 0.0) * 30.0)
@@ -373,7 +484,7 @@ func _run_demo(arg: String) -> void:
 	var shots := [["menu_home", func(): ui.loading.visible = false; ui.menu.show_home()],
 		["menu_campaign", func(): ui.menu.kind = "campaign"; ui.menu.page = 0; ui.menu.show_list()],
 		["menu_attack", func(): ui.menu.kind = "attack"; ui.menu.page = 1; ui.menu.show_list()],
-		["loading", func(): ui.show_loading(Defs.TRACKS[track_idx]["name"])],
+		["loading", func(): ui.show_loading(Defs.TRACKS[track_idx]["name"]); ui.set_loading_progress(0.6)],
 		["menu_event", func():
 			ui.loading.visible = false
 			ui.menu.ev = { "track": track_idx, "variant": variant, "mode": mode, "humans": humans, "kind": "attack" if mode == "trial" else "campaign", "idx": 1 }
@@ -395,6 +506,12 @@ func _run_demo(arg: String) -> void:
 					race.ai_think(c)  # autopilot for the demo
 					race.inputs[c.human]["held"] = c.hook >= 0
 					race.inputs[c.human]["press_t"] = race.clock
+		if OS.get_environment("SHOT_PAUSE") != "" and shot == 2 and not paused and phase == "race":
+			_set_paused(true)
+			await get_tree().create_timer(0.2).timeout
+			await RenderingServer.frame_post_draw
+			get_viewport().get_texture().get_image().save_png(out.path_join("pause.png"))
+			_set_paused(false)
 		if t > (shot + 1) * secs / 4.0:
 			shot += 1
 			await RenderingServer.frame_post_draw

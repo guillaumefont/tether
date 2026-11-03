@@ -471,3 +471,14 @@ func next_event() -> Dictionary:
 		return {}
 	var e := Campaign.event(i)
 	return { "track": e["track"], "variant": e["variant"], "mode": e["mode"], "humans": 1, "kind": "campaign", "idx": i }
+
+# back button: event -> list -> home; false on the home screen (the game may then quit)
+func go_back() -> bool:
+	match screen:
+		"event":
+			show_list()
+			return true
+		"list":
+			show_home()
+			return true
+	return false
