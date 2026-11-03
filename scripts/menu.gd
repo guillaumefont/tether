@@ -471,8 +471,7 @@ func show_event() -> void:
 	var tall: bool = ui.is_portrait()
 	var row: BoxContainer = VBoxContainer.new() if tall else HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12 if tall else 18)
-	var pos := _event_pos()
-	_carousel(vb, row, pos[0], pos[1])
+	_carousel(vb, row)
 	var mp := TrackMap.new()
 	mp.mini = true
 	mp.set_track(TrackData.new(d, ev["variant"]))
@@ -559,20 +558,13 @@ var _drag_ms := 0
 var _flip_tween: Tween
 const DRAG_START := 14.0  # px before a press turns into a swipe (a tap wiggles less)
 
-# put `content` in a pager that fills the rest of the screen, with page dots below
-func _carousel(vb: VBoxContainer, content: Control, idx: int, count: int) -> void:
+# put `content` in a pager that fills the rest of the screen
+func _carousel(vb: VBoxContainer, content: Control) -> void:
 	_pager = Pager.new()
 	_pager.clip_contents = true
 	_pager.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_pager.hold(content)
 	vb.add_child(_pager)
-	if count > 1:
-		var dots := Art.Dots.new()
-		dots.count = count
-		dots.current = idx
-		dots.custom_minimum_size = Vector2(0, 10)
-		dots.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		vb.add_child(dots)
 	if _slide_from != 0:
 		_pager.shift = _slide_from
 		_flip_tween = create_tween()

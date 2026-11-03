@@ -204,25 +204,6 @@ class Icon extends Control:
 					draw_rect(Rect2(cc - Vector2(s * 0.11, s * 0.2), Vector2(s * 0.22, s * 0.4)), cl)
 					draw_rect(Rect2(cc - Vector2(s * 0.08, s * 0.04), Vector2(s * 0.16, s * 0.12)), Color("#1a2330"))
 
-# Page dots under a carousel: where you are, and that there is more to swipe to.
-class Dots extends Control:
-	var count := 1
-	var current := 0
-
-	func _draw() -> void:
-		var r := minf(size.y * 0.35, 3.5)
-		var gap := r * 3.4
-		if count * gap > size.x * 0.9:
-			gap = size.x * 0.9 / count
-			r = minf(r, gap * 0.32)
-		var x0 := size.x * 0.5 - gap * (count - 1) * 0.5
-		for k in count:
-			var p := Vector2(x0 + gap * k, size.y * 0.5)
-			if k == current:
-				draw_circle(p, r * 1.5, C_AMBER)
-			else:
-				draw_circle(p, r, Color(C_ICE, 0.35))
-
 # The player's medal cabinet: one rotor disc per tier with how many they hold.
 class Cabinet extends Control:
 	var counts := [0, 0, 0, 0]
