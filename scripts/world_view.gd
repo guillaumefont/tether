@@ -35,6 +35,10 @@ const COL_POST := Color("#f2b134")
 const COL_TOWER := Color("#2a2f36")
 const COL_SLATE := Color("#3f4c5c")   # tower stone
 const COL_ICE := Color("#bfe6f5")
+const COL_ROPE := Color("#c9a66b")
+const COL_CREVASSE := Color("#1f5f86")  # deep blue ice in the jump gap
+const COL_ICE_LIP := Color("#7fd8f0")
+const COL_JUMP_STRIPE := Color("#4f8fc0")
 const COL_GEM := Color("#7fe3d0")
 const COL_PIT := Color("#06100f")
 
@@ -631,7 +635,7 @@ func _build_jumps() -> void:
 		var s0: float = j["s"]
 		var st := Strip.new()
 		var up := Vector3.UP
-		# the pit under the gap, and red lips either side
+		# an icy crevasse under the gap, with glowing ice lips either side
 		var steps := 6
 		for k in steps:
 			var sa := s0 + GAP * k / steps
@@ -639,15 +643,15 @@ func _build_jumps() -> void:
 			var qa := track.point_at(sa); var qb := track.point_at(sb)
 			var na := TrackData.perp(qa["dir"]); var nb := TrackData.perp(qb["dir"])
 			var w := HW + KERB_W + RAIL_W
-			st.quad(w3(qa["pos"] + na * w, 0.6), w3(qb["pos"] + nb * w, 0.6), w3(qb["pos"] - nb * w, 0.6), w3(qa["pos"] - na * w, 0.6), COL_PIT, up)
+			st.quad(w3(qa["pos"] + na * w, 0.6), w3(qb["pos"] + nb * w, 0.6), w3(qb["pos"] - nb * w, 0.6), w3(qa["pos"] - na * w, 0.6), COL_CREVASSE.lerp(COL_PIT, 0.5 - 0.5 * cos(TAU * (k + 0.5) / steps)), up)
 		for edge in [s0, s0 + GAP]:
 			var q := track.point_at(edge)
 			var n := TrackData.perp(q["dir"]) as Vector2
 			var d: Vector2 = q["dir"]
 			var h := track.height_at(edge) + ROAD_Y
 			var w := HW + KERB_W
-			st.quad(w3(q["pos"] + n * w - d * 8, h + 1), w3(q["pos"] + n * w + d * 8, h + 1), w3(q["pos"] - n * w + d * 8, h + 1), w3(q["pos"] - n * w - d * 8, h + 1), COL_KERB, up)
-		# ramp wedge with chevrons
+			st.quad(w3(q["pos"] + n * w - d * 8, h + 1), w3(q["pos"] + n * w + d * 8, h + 1), w3(q["pos"] - n * w + d * 8, h + 1), w3(q["pos"] - n * w - d * 8, h + 1), COL_ICE_LIP, up)
+		# packed-snow kicker with ice-blue chevrons
 		var rs := 8
 		for k in rs:
 			var sa := s0 - RAMP_LEN + RAMP_LEN * k / rs
@@ -656,12 +660,12 @@ func _build_jumps() -> void:
 			var na := TrackData.perp(qa["dir"]); var nb := TrackData.perp(qb["dir"])
 			var ha := track.height_at(sa) + ROAD_Y + RAMP_H * float(k) / rs
 			var hb := track.height_at(sb) + ROAD_Y + RAMP_H * float(k + 1) / rs
-			var col := COL_POST if k % 2 == 0 else Color("#3a2a08")
+			var col := COL_SNOW if k % 2 == 0 else COL_JUMP_STRIPE
 			st.quad(w3(qa["pos"] + na * HW, ha), w3(qb["pos"] + nb * HW, hb), w3(qb["pos"] - nb * HW, hb), w3(qa["pos"] - na * HW, ha), col, up)
 		var q_end := track.point_at(s0)
 		var ne := TrackData.perp(q_end["dir"]) as Vector2
 		var he := track.height_at(s0) + ROAD_Y
-		st.quad(w3(q_end["pos"] + ne * HW, he), w3(q_end["pos"] + ne * HW, he + RAMP_H), w3(q_end["pos"] - ne * HW, he + RAMP_H), w3(q_end["pos"] - ne * HW, he), Color("#2a2f36"), -Vector3(q_end["dir"].x, 0, q_end["dir"].y))
+		st.quad(w3(q_end["pos"] + ne * HW, he), w3(q_end["pos"] + ne * HW, he + RAMP_H), w3(q_end["pos"] - ne * HW, he + RAMP_H), w3(q_end["pos"] - ne * HW, he), COL_BANK_FACE, -Vector3(q_end["dir"].x, 0, q_end["dir"].y))
 		var mi := MeshInstance3D.new()
 		mi.mesh = st.st.commit()
 		mi.material_override = _vert_mat
@@ -760,16 +764,24 @@ func _build_towers() -> void:
 				t.add_child(ic)
 			var spinner := Node3D.new()
 			spinner.position = Vector3(0, y + 8, 0) * U
-			var disc := cyl(27 * wide, 6, COL_POST, Vector3(0, 3, 0))
-			disc.mesh.material = mat(COL_POST, false, 0.35)
-			spinner.add_child(disc)
-			for k in 3:
+			# a wooden capstan that winds the tether: rope coiled round a drum, four
+			# handles to show which way it turns (one lit amber), snow on the top
+			var dr := 21.0 * wide
+			spinner.add_child(cyl(dr, 18, COL_WOOD, Vector3(0, 9, 0), dr + 2.0, 12))
+			for b in 3:
+				spinner.add_child(cyl(dr + 1.5, 3, COL_ROPE, Vector3(0, 4.0 + b * 4.5, 0), dr + 1.5, 12))
+			spinner.add_child(cyl(dr + 3.0, 3, COL_WOOD.darkened(0.45), Vector3(0, 19.5, 0), dr + 3.0, 12))
+			for k in 4:
 				var arm := Node3D.new()
-				arm.rotation.y = TAU * k / 3.0
-				arm.add_child(box(Vector3(24 * wide, 4, 6), Color("#3a2a08"), Vector3(12 * wide, 7, 0)))
+				arm.rotation.y = TAU * k / 4.0
+				var reach := 36.0 * wide
+				arm.add_child(box(Vector3(reach - dr + 4.0, 5, 5), COL_WOOD.darkened(0.15), Vector3((reach + dr) * 0.5, 16, 0)))
+				var tip := box(Vector3(11, 10, 11) if k == 0 else Vector3(8, 8, 8), COL_POST if k == 0 else COL_SNOW, Vector3(reach, 16, 0))
+				if k == 0:
+					tip.mesh.material = mat(COL_POST, false, 0.6)
+				arm.add_child(tip)
 				spinner.add_child(arm)
-			# a little dome of snow on the hub
-			spinner.add_child(cyl(5, 6, COL_SNOW, Vector3(0, 12, 0), 9, 10))
+			spinner.add_child(cyl(dr * 0.4, 4, COL_SNOW, Vector3(0, 22.5, 0), dr * 0.62, 10))
 			t.add_child(spinner)
 			var rings: Array = []
 			for r in 2:
