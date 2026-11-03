@@ -51,8 +51,10 @@ func _ready() -> void:
 		if not nx.is_empty():
 			ui.menu.ev = nx
 			_start_event(nx))
-	ui.menu_pressed.connect(_to_menu)
+	ui.menu_pressed.connect(func(): _with_loading("", _to_menu))
+	ui.show_loading("")   # picks up from the boot splash, fades out once the menu scene is up
 	_to_menu()
+	_fade_in_later()
 	# automation hooks for headless screenshots: --  --demo=<track>,<variant>,<seconds>
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--demo="):
@@ -60,6 +62,19 @@ func _ready() -> void:
 
 func rec_key() -> String:
 	return Records.key(Defs.TRACKS[track_idx]["name"], variant)
+
+func _fade_in_later() -> void:
+	for k in 3:
+		await get_tree().process_frame
+	ui.hide_loading()
+
+# show the loading screen for a frame, then do the slow track build behind it
+func _with_loading(title: String, work: Callable) -> void:
+	ui.show_loading(title)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	work.call()
+	ui.hide_loading()
 
 func _to_menu() -> void:
 	phase = "menu"
@@ -82,7 +97,7 @@ func _start_event(ev: Dictionary) -> void:
 	variant = ev["variant"]
 	mode = ev["mode"]
 	humans = ev["humans"]
-	new_race()
+	_with_loading(Defs.TRACKS[track_idx]["name"], new_race)
 
 func new_race() -> void:
 	attract = null
@@ -355,10 +370,12 @@ func _run_demo(arg: String) -> void:
 	if out == "":
 		out = "user://"
 	await get_tree().process_frame
-	var shots := [["menu_home", func(): ui.menu.show_home()],
+	var shots := [["menu_home", func(): ui.loading.visible = false; ui.menu.show_home()],
 		["menu_campaign", func(): ui.menu.kind = "campaign"; ui.menu.page = 0; ui.menu.show_list()],
 		["menu_attack", func(): ui.menu.kind = "attack"; ui.menu.page = 1; ui.menu.show_list()],
+		["loading", func(): ui.show_loading(Defs.TRACKS[track_idx]["name"])],
 		["menu_event", func():
+			ui.loading.visible = false
 			ui.menu.ev = { "track": track_idx, "variant": variant, "mode": mode, "humans": humans, "kind": "attack" if mode == "trial" else "campaign", "idx": 1 }
 			ui.menu.show_event()]]
 	for sh in shots:

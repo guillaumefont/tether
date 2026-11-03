@@ -7,6 +7,17 @@ const TrackMap = preload("res://scripts/track_map.gd")
 const MenuScreens = preload("res://scripts/menu.gd")
 const Medals = preload("res://scripts/medals.gd")
 const Defs = preload("res://scripts/track_defs.gd")
+const Art = preload("res://scripts/menu_art.gd")
+
+const TIPS := [
+	"Hook the tower as you enter the bend, let go when your nose points down the exit.",
+	"Rubbing the rail cuts your throttle. Let go a touch earlier to stay off it.",
+	"Every bend has its own tower. The rope keeps its length, so grab timing sets your line.",
+	"After you let go the car slides a little on the ice. Aim for it.",
+	"Beat a medal time to unlock the next campaign event.",
+	"In Collect, the gems trace the ideal line. Each one missed costs a quarter second.",
+	"Posts shatter when you hit them, and cost you a second.",
+]
 
 signal again_pressed
 signal menu_pressed
@@ -113,6 +124,7 @@ func _ready() -> void:
 	root.add_child(menu)
 	menu.setup(self)
 	_build_results()
+	_build_loading()
 
 func _make_theme() -> Theme:
 	var t := Theme.new()
@@ -216,6 +228,8 @@ func layout() -> void:
 	minimap.offset_top = minimap.offset_bottom - MINIMAP
 	var vp := root.get_viewport_rect().size
 	results_panel.custom_minimum_size.x = minf(440.0, vp.x - 40.0)
+	if _load_box:
+		_place_loading()
 
 # keep clear of notches / rounded corners
 func safe_insets() -> Dictionary:
@@ -277,6 +291,63 @@ func _build_results() -> void:
 	back.pressed.connect(func(): menu_pressed.emit())
 	vb.add_child(back)
 	results.visible = false
+
+# ---------------------------------------------------------------- loading screen
+var loading: Control
+var _load_title: Label
+var _load_tip: Label
+var _load_tween: Tween
+var _load_box: VBoxContainer
+
+# the title and tip sit just under the wordmark, whatever the screen shape
+func _place_loading() -> void:
+	var vp := root.get_viewport_rect().size
+	_load_box.offset_top = vp.y * 0.30 + minf(vp.x, vp.y) * 0.34
+
+func _build_loading() -> void:
+	loading = Control.new()
+	loading.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	loading.mouse_filter = Control.MOUSE_FILTER_STOP
+	var sp := Art.Splash.new()
+	sp.font = f_display
+	sp.lift = 1.0
+	sp.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	sp.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	loading.add_child(sp)
+	var vb := VBoxContainer.new()
+	vb.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_load_box = vb
+	vb.offset_left = 24; vb.offset_right = -24
+	vb.add_theme_constant_override("separation", 6)
+	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	loading.add_child(vb)
+	_load_title = _label("", 20, C_POST, f_bold)
+	_load_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(_load_title)
+	_load_tip = _label("", 14, Art.C_ICE, f_med)
+	_load_tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_load_tip.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	_load_tip.add_theme_constant_override("shadow_offset_y", 1)
+	vb.add_child(_load_tip)
+	loading.visible = false
+	root.add_child(loading)
+
+# cover the screen while a track is built; title is e.g. the track name
+func show_loading(title: String) -> void:
+	if _load_tween:
+		_load_tween.kill()
+	_load_title.text = title.to_upper()
+	_load_tip.text = TIPS[randi() % TIPS.size()]
+	loading.modulate.a = 1.0
+	loading.visible = true
+	_place_loading()
+
+func hide_loading() -> void:
+	if not loading.visible:
+		return
+	_load_tween = create_tween()
+	_load_tween.tween_property(loading, "modulate:a", 0.0, 0.35)
+	_load_tween.tween_callback(func(): loading.visible = false)
 
 # ---------------------------------------------------------------- menu state
 func show_menu() -> void:
