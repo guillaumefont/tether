@@ -63,7 +63,7 @@ func _ready() -> void:
 	ui.show_loading("")   # picks up from the boot splash, fades out once the menu scene is up
 	_to_menu()
 	_fade_in_later()
-	# automation hooks for headless screenshots: --  --demo=<track>,<variant>,<seconds>
+	# automation hooks for headless screenshots: --  --demo=<track>,<variant>,<seconds>[,<mode>,<players>,<theme>]
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--demo="):
 			_run_demo(a.substr(7))
@@ -115,6 +115,7 @@ func _to_menu() -> void:
 func _start_attract() -> void:
 	attract_i = randi() % Defs.TRACKS.size() if attract_i < 0 else (attract_i + 1) % Defs.TRACKS.size()
 	track = TrackData.new(Defs.TRACKS[attract_i], "standard")
+	view.theme_override = ""
 	view.build(track)
 	view.visible = true
 	attract = Race.new(track, "race", 0)
@@ -199,6 +200,7 @@ func _start_event(ev: Dictionary) -> void:
 	variant = ev["variant"]
 	mode = ev["mode"]
 	humans = ev["humans"]
+	view.theme_override = String(ev.get("theme", ""))
 	_load_race()
 
 func new_race(built: TrackData = null) -> void:
@@ -486,6 +488,7 @@ func _run_demo(arg: String) -> void:
 	variant = parts[1] if parts.size() > 1 else "standard"
 	mode = parts[3] if parts.size() > 3 else "trial"
 	humans = int(parts[4]) if parts.size() > 4 else 1
+	view.theme_override = parts[5] if parts.size() > 5 else ""
 	var secs := float(parts[2]) if parts.size() > 2 else 8.0
 	var out := OS.get_environment("SHOT_DIR")
 	if out == "":

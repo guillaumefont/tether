@@ -1,5 +1,6 @@
 # The campaign: hand-picked track + variant + mode events in chapters of six.
 # An event unlocks once the one before it has at least a Bronze medal.
+# Each chapter is one world: its events are dressed in the chapter's theme.
 extends RefCounted
 
 const Defs = preload("res://scripts/track_defs.gd")
@@ -7,16 +8,16 @@ const Records = preload("res://scripts/records.gd")
 const Medals = preload("res://scripts/medals.gd")
 
 const CHAPTERS := [
-	{ "name": "First pivots", "events": [
+	{ "name": "First pivots", "theme": "forest", "events": [
 		["Lasso", "standard", "trial"], ["Twin Bend", "standard", "race"], ["Big Top", "standard", "trial"],
 		["Coil", "standard", "race"], ["Arch", "obstacles", "trial"], ["Lasso", "reverse", "race"]] },
-	{ "name": "Over and under", "events": [
+	{ "name": "Over and under", "theme": "sand", "events": [
 		["Diamond Eight", "standard", "trial"], ["Pretzel", "standard", "race"], ["Three Fingers", "collect", "trial"],
 		["Halo", "standard", "trial"], ["Sidestep", "reverse", "race"], ["Trefoil", "obstacles", "trial"]] },
-	{ "name": "Tight knots", "events": [
+	{ "name": "Tight knots", "theme": "rock", "events": [
 		["Triskel", "standard", "race"], ["Fishhook", "standard", "trial"], ["Knot", "collect", "trial"],
 		["Squall", "standard", "race"], ["Big Top", "collect", "trial"], ["Twin Bend", "obstacles", "race"]] },
-	{ "name": "Master line", "events": [
+	{ "name": "Master line", "theme": "snow", "events": [
 		["Knucklebone", "standard", "trial"], ["Starfish", "standard", "race"], ["Halo", "reverse", "race"],
 		["Fishhook", "obstacles", "trial"], ["Squall", "collect", "trial"], ["Starfish", "reverse", "trial"]] },
 ]
@@ -34,7 +35,7 @@ static func event(i: int) -> Dictionary:
 		var evs: Array = CHAPTERS[c]["events"]
 		if k < evs.size():
 			var e: Array = evs[k]
-			return { "track": track_index(e[0]), "name": e[0], "variant": e[1], "mode": e[2], "chapter": c, "idx": i }
+			return { "track": track_index(e[0]), "name": e[0], "variant": e[1], "mode": e[2], "chapter": c, "idx": i, "theme": CHAPTERS[c]["theme"] }
 		k -= evs.size()
 	return {}
 
