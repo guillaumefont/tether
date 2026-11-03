@@ -1,7 +1,8 @@
 # Menu screens: Home -> Campaign (chapters of event cards) or Time attack (track cards)
 # -> one Event screen (miniature, medals, Start). One thing at a time, big touch targets.
-# Lists and events are carousels: swipe sideways (or press the arrow keys) to flip to the
-# next page / track / event; a tap still presses the card under the finger.
+# Track and event lists are one long list: drag it up and down (it keeps gliding after a
+# flick), or use the mouse wheel / arrow keys. The Event screen is a carousel: swipe sideways
+# to the next track / event. A tap still presses the card under the finger; a drag never does.
 extends Control
 
 const TrackData = preload("res://scripts/track.gd")
@@ -25,17 +26,85 @@ const C_FG := Color("#f3efe6")
 const C_MUTED := Color("#9fb3b0")
 const C_POST := Color("#f2b134")
 const MODE_NAMES := { "trial": "Time trial", "race": "Race" }
-const PER_PAGE := 6
 
 var ui                      # the UI CanvasLayer (fonts, helpers)
 var screen := "home"
 var kind := "campaign"      # campaign | attack | versus
-var page := 0
+var focus := -1            # list item (track or campaign event) to bring into view on the next list
+var _list_scroll := {}     # kind -> how far its list was scrolled
 var ev := {}                # the event shown on the Event screen
 var _maps := {}             # track index -> TrackData for miniatures
 var body: Control
-var _pager: Pager          # the swipeable part of the current screen (null on Home)
+var _pager: Pager          # the swipeable part of the Event screen
+var _scroller: Scroller    # the scrolling list on the list screen
 var _slide_from := 0       # -1 / +1: the screen being built slides in from that side
+
+# A clipped window onto a tall list; `scroll` is how far down it is, `vel` keeps it gliding
+# after a flick and springs it back when dragged past either end.
+class Scroller extends Control:
+	var content: Control
+	var held := false
+	var vel := 0.0
+	var _bar: Control
+	var scroll := 0.0:
+		set(v):
+			scroll = v
+			_place()
+
+	func hold(c: Control) -> void:
+		content = c
+		add_child(c)
+		c.minimum_size_changed.connect(_place)
+		_bar = Control.new()
+		_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_bar.draw.connect(_draw_bar)
+		add_child(_bar)
+		_place()
+
+	func span() -> float:
+		return content.get_combined_minimum_size().y if content else 0.0
+
+	func max_scroll() -> float:
+		return maxf(0.0, span() - size.y)
+
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_RESIZED:
+			_place()
+
+	func _place() -> void:
+		if content == null:
+			return
+		content.position = Vector2(0, -roundf(scroll))
+		content.size = Vector2(size.x - 10.0, span())
+		_bar.position = Vector2.ZERO
+		_bar.size = size
+		_bar.queue_redraw()
+
+	# a thin frosted thumb on the right edge: how long the list is, and where you are
+	func _draw_bar() -> void:
+		var h := span()
+		if h <= size.y + 1.0:
+			return
+		var bh := maxf(28.0, size.y * size.y / h)
+		var y := (size.y - bh) * clampf(scroll / max_scroll(), 0.0, 1.0)
+		_bar.draw_rect(Rect2(size.x - 4.0, y, 3.0, bh), Color(0.86, 0.93, 0.98, 0.4))
+
+	func _process(dt: float) -> void:
+		if held or content == null:
+			return
+		var top := 0.0
+		var bottom := max_scroll()
+		if scroll < top or scroll > bottom:   # past an end: spring back
+			vel = 0.0
+			var to := clampf(scroll, top, bottom)
+			scroll = to if absf(scroll - to) < 0.5 else lerpf(scroll, to, 1.0 - exp(-14.0 * dt))
+		elif absf(vel) > 6.0:
+			scroll += vel * dt
+			vel *= exp(-3.2 * dt)
+			if scroll < top - 40.0 or scroll > bottom + 40.0:
+				vel = 0.0
+		else:
+			vel = 0.0
 
 # Holds one page; `shift` (in page widths) moves it sideways while the finger drags.
 class Pager extends Control:
@@ -92,7 +161,10 @@ func _map(i: int) -> TrackData:
 func _frame() -> VBoxContainer:
 	if body:
 		body.queue_free()
+	if _scroller:
+		_list_scroll[kind] = clampf(_scroller.scroll, 0.0, _scroller.max_scroll())
 	_pager = null
+	_scroller = null
 	_drag = false
 	if _flip_tween:
 		_flip_tween.kill()
@@ -196,11 +268,11 @@ func show_home() -> void:
 	for i in Campaign.count():
 		if Campaign.event_medal(i) > 0: cleared += 1
 	row.add_child(_big_choice("flag", "CAMPAIGN", "%d / %d events cleared" % [cleared, Campaign.count()], "Hand-picked events. Earn a medal to unlock the next.",
-		func(): kind = "campaign"; page = _first_open_chapter(); show_list()))
+		func(): kind = "campaign"; _list_scroll.erase(kind); focus = _first_open_event(); show_list()))
 	row.add_child(_big_choice("watch", "TIME ATTACK", "%d tracks · 4 variants" % Defs.TRACKS.size(), "Any track, any variant. Chase your ghost and the medal times.",
-		func(): kind = "attack"; page = 0; show_list()))
+		func(): kind = "attack"; _list_scroll.erase(kind); show_list()))
 	row.add_child(_big_choice("duel", "2 PLAYERS", "One phone, two thumbs", "Race a friend on any track.",
-		func(): kind = "versus"; page = 0; show_list()))
+		func(): kind = "versus"; _list_scroll.erase(kind); show_list()))
 
 # best medal held on every track and variant (time trial), counted by tier
 func _medal_counts() -> Array:
@@ -235,53 +307,84 @@ func _big_choice(icon: String, title: String, sub: String, desc: String, cb: Cal
 	b.pressed.connect(cb)
 	return b
 
-func _first_open_chapter() -> int:
-	var i := 0
-	for c in Campaign.CHAPTERS.size():
-		for e in Campaign.CHAPTERS[c]["events"].size():
-			if Campaign.unlocked(i) and Campaign.event_medal(i) == 0:
-				return c
-			i += 1
+func _first_open_event() -> int:
+	for i in Campaign.count():
+		if Campaign.unlocked(i) and Campaign.event_medal(i) == 0:
+			return i
 	return 0
 
-# ---------------------------------------------------------------- lists (6 cards a page)
-func _pages() -> int:
-	if kind == "campaign":
-		return Campaign.CHAPTERS.size()
-	return ceili(Defs.TRACKS.size() / float(PER_PAGE))
-
+# ---------------------------------------------------------------- lists (one long scrolling list)
 func show_list() -> void:
 	screen = "list"
-	page = clampi(page, 0, _pages() - 1)
 	var vb := _frame()
 	var title := "Campaign" if kind == "campaign" else ("Time attack" if kind == "attack" else "2-player race")
 	var sub := ""
 	if kind == "campaign":
-		sub = "Chapter %d of %d  ·  %s" % [page + 1, _pages(), Campaign.CHAPTERS[page]["name"]]
+		sub = "%d events  ·  %d chapters" % [Campaign.count(), Campaign.CHAPTERS.size()]
 	else:
-		sub = "Page %d of %d  ·  swipe for more" % [page + 1, _pages()]
+		sub = "%d tracks  ·  pick one" % Defs.TRACKS.size()
 	var tall: bool = ui.is_portrait()
 	_header(vb, title, sub, func(): show_home())
-	var g := GridContainer.new()
-	g.columns = 1 if tall else 3   # portrait: one tall column of six cards
-	g.add_theme_constant_override("h_separation", 12)
-	g.add_theme_constant_override("v_separation", 10 if tall else 12)
-	_carousel(vb, g, page, _pages())
+	var list := VBoxContainer.new()
+	list.add_theme_constant_override("separation", 10)
+	var cards := []   # by track (attack, versus) or event index (campaign)
+	var grid := func() -> GridContainer:
+		var g := GridContainer.new()
+		g.columns = 1 if tall else 3   # portrait: one column of cards
+		g.add_theme_constant_override("h_separation", 12)
+		g.add_theme_constant_override("v_separation", 10 if tall else 12)
+		list.add_child(g)
+		return g
 	if kind == "campaign":
-		var first := 0
-		for c in page:
-			first += Campaign.CHAPTERS[c]["events"].size()
-		for k in Campaign.CHAPTERS[page]["events"].size():
-			g.add_child(_event_card(first + k))
+		var i := 0
+		for c in Campaign.CHAPTERS.size():
+			var ch: Dictionary = Campaign.CHAPTERS[c]
+			var got := 0
+			for k in ch["events"].size():
+				got += Campaign.event_medal(i + k)
+			var hl: Label = ui._label("%d · %s" % [c + 1, ch["name"].to_upper()], 15, C_POST, ui.f_bold)
+			hl.autowrap_mode = TextServer.AUTOWRAP_OFF
+			if c > 0:
+				hl.custom_minimum_size.y = 30
+				hl.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+			list.add_child(hl)
+			var g: GridContainer = grid.call()
+			for k in ch["events"].size():
+				var b := _event_card(i)
+				g.add_child(b)
+				cards.append(b)
+				i += 1
 	else:
-		for i in range(page * PER_PAGE, mini(Defs.TRACKS.size(), (page + 1) * PER_PAGE)):
-			g.add_child(_track_card(i))
-	# keep the grid shape on a short last page
-	while g.get_child_count() < PER_PAGE:
-		var sp := Control.new()
-		sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		sp.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		g.add_child(sp)
+		var g: GridContainer = grid.call()
+		for i in Defs.TRACKS.size():
+			var b := _track_card(i)
+			g.add_child(b)
+			cards.append(b)
+	var card_h := 92.0 if tall else 132.0
+	for b in cards:
+		b.custom_minimum_size.y = card_h
+	var bottom := Control.new()   # breathing room under the last card
+	bottom.custom_minimum_size.y = 8
+	list.add_child(bottom)
+	_scroller = Scroller.new()
+	_scroller.clip_contents = true
+	_scroller.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_scroller.hold(list)
+	vb.add_child(_scroller)
+	_scroller.scroll = _list_scroll.get(kind, 0.0)
+	if focus >= 0 and focus < cards.size():
+		_reveal.call_deferred(_scroller, cards[focus])
+	focus = -1
+
+# scroll just enough to show `card` (once the list has been laid out)
+func _reveal(sc: Scroller, card: Control) -> void:
+	await get_tree().process_frame
+	if not is_instance_valid(sc) or not is_instance_valid(card) or sc != _scroller:
+		return
+	var top := card.global_position.y - sc.content.global_position.y
+	var bot := top + card.size.y
+	if top < sc.scroll + 8.0 or bot > sc.scroll + sc.size.y - 8.0:
+		sc.scroll = clampf(top - sc.size.y * 0.2, 0.0, sc.max_scroll())
 
 func _card(track_i: int, line1: String, line2: String, medal: int, locked: bool) -> Button:
 	var b := Button.new()
@@ -364,7 +467,7 @@ func show_event() -> void:
 		"campaign": sub = "Event %d of %d  ·  %s" % [ev["idx"] + 1, Campaign.count(), _tag(ev["variant"], ev["mode"])]
 		"attack": sub = "Time attack  ·  %d laps" % int(d.get("laps", 3))
 		"versus": sub = "2-player race  ·  %d laps" % int(d.get("laps", 3))
-	_header(vb, d["name"], sub, func(): show_list())
+	_header(vb, d["name"], sub, func(): go_back())
 	var tall: bool = ui.is_portrait()
 	var row: BoxContainer = VBoxContainer.new() if tall else HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12 if tall else 18)
@@ -479,8 +582,6 @@ func _carousel(vb: VBoxContainer, content: Control, idx: int, count: int) -> voi
 # can the current screen flip one step that way (+1 next, -1 previous)?
 func _can_flip(dir: int) -> bool:
 	match screen:
-		"list":
-			return page + dir >= 0 and page + dir < _pages()
 		"event":
 			var pos := _event_pos()
 			var i: int = pos[0] + dir
@@ -492,18 +593,14 @@ func _can_flip(dir: int) -> bool:
 func _flip(dir: int) -> void:
 	_slide_from = dir
 	match screen:
-		"list":
-			page += dir
-			show_list()
 		"event":
 			if ev["kind"] == "campaign":
 				var e := Campaign.event(ev["idx"] + dir)
 				ev = { "track": e["track"], "variant": e["variant"], "mode": e["mode"], "humans": 1, "kind": "campaign", "idx": e["idx"] }
-				page = e["chapter"]   # Back returns to this event's chapter
+
 			else:
 				ev["track"] += dir
 				ev["idx"] = ev["track"]
-				page = ev["track"] / PER_PAGE
 			show_event()
 
 # slide the page out, then build the next one sliding in (or bounce back)
@@ -519,10 +616,98 @@ func _settle(dir: int) -> void:
 func _blocked() -> bool:
 	return (ui.settings_ov != null and ui.settings_ov.visible) or (ui.loading != null and ui.loading.visible)
 
+var _samples: Array = []   # recent [ms, y] while dragging the list, for the flick speed
+var _scroll_from := 0.0
+const OFF := Vector2(-9999, -9999)
+
 func _input(e: InputEvent) -> void:
-	if _pager == null or not is_visible_in_tree() or _blocked():
+	if (_pager == null and _scroller == null) or not is_visible_in_tree() or _blocked():
 		_drag = false
 		return
+	if _scroller:
+		_list_input(e)
+	else:
+		_event_input(e)
+
+# the list: vertical drag with a glide, mouse wheel, up / down keys
+func _list_input(e: InputEvent) -> void:
+	var sc := _scroller
+	if e is InputEventKey and e.pressed:
+		match e.physical_keycode:
+			KEY_UP: sc.vel = minf(sc.vel, 0.0) - 900.0
+			KEY_DOWN: sc.vel = maxf(sc.vel, 0.0) + 900.0
+			_: return
+		get_viewport().set_input_as_handled()
+		return
+	if e is InputEventMouseButton and e.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+		if e.pressed and sc.get_global_rect().has_point(e.position):
+			var k := 1.0 if e.button_index == MOUSE_BUTTON_WHEEL_DOWN else -1.0
+			sc.vel = (maxf(sc.vel * k, 0.0) + 700.0 * maxf(e.factor, 0.3)) * k
+			get_viewport().set_input_as_handled()
+		return
+	if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT:
+		if e.position == OFF:
+			return   # our own release that lets go of the card under the finger
+		if e.pressed:
+			_drag = sc.get_global_rect().has_point(e.position)
+			_dragging = false
+			_drag_from = e.position
+			_scroll_from = sc.scroll
+			if _drag and absf(sc.vel) > 60.0:
+				sc.vel = 0.0   # touching a gliding list stops it, and is not a tap
+				get_viewport().set_input_as_handled()
+				_drag = false
+		elif _drag:
+			_drag = false
+			if _dragging:
+				_dragging = false
+				sc.held = false
+				get_viewport().set_input_as_handled()   # not a tap
+				var now := Time.get_ticks_msec()
+				var v := 0.0
+				for smp in _samples:   # newest first: use the oldest one from the last 100 ms
+					if now - smp[0] <= 100:
+						v = -(e.position.y - smp[1]) / maxf(0.016, (now - smp[0]) / 1000.0)
+				sc.vel = clampf(v, -5000.0, 5000.0)
+	elif e is InputEventMouseMotion and _drag and e.position != OFF:
+		var d: Vector2 = e.position - _drag_from
+		if not _dragging and absf(d.y) > DRAG_START and absf(d.y) > absf(d.x):
+			_dragging = true
+			sc.held = true
+			sc.vel = 0.0
+			_samples.clear()
+			_drag_from.y += signf(d.y) * DRAG_START   # follow from here, no jump
+			_release_press.call_deferred()
+		if _dragging:
+			get_viewport().set_input_as_handled()
+			var y: float = _scroll_from - (e.position.y - _drag_from.y)
+			var top := 0.0
+			var bottom := sc.max_scroll()
+			if y < top:
+				y = top - (top - y) * 0.35   # rubber band past the ends
+			elif y > bottom:
+				y = bottom + (y - bottom) * 0.35
+			sc.scroll = y
+			_samples.push_front([Time.get_ticks_msec(), e.position.y])
+			if _samples.size() > 8:
+				_samples.pop_back()
+
+# the card that saw the press lets go off-screen, so it never fires once the list moves
+func _release_press() -> void:
+	var away := InputEventMouseMotion.new()   # the card sees the finger leave it...
+	away.position = OFF
+	away.global_position = OFF
+	away.button_mask = MOUSE_BUTTON_MASK_LEFT
+	get_viewport().push_input(away, true)
+	var up := InputEventMouseButton.new()     # ...and let go out there: no press
+	up.button_index = MOUSE_BUTTON_LEFT
+	up.pressed = false
+	up.position = OFF
+	up.global_position = OFF
+	get_viewport().push_input(up, true)
+
+# the event screen: sideways swipe to the next / previous track or event
+func _event_input(e: InputEvent) -> void:
 	if e is InputEventKey and e.pressed and not e.echo:
 		var dir := 0
 		match e.physical_keycode:
@@ -584,6 +769,7 @@ func next_event() -> Dictionary:
 func go_back() -> bool:
 	match screen:
 		"event":
+			focus = ev["idx"]   # the list comes back with this card in view
 			show_list()
 			return true
 		"list":

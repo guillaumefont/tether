@@ -23,7 +23,7 @@ godot --headless --path . --import
 godot --headless --path . --script tests/sim_test.gd     # AI finishes every track and variant
 godot --headless --path . --script tests/levels_test.gd  # bends stay level, medal times, campaign
 godot --headless --path . --script tests/hook_test.gd    # hooking picks the current bend's tower
-godot --headless --path . --script tests/swipe_test.gd   # menu carousels: swipe flips, tap opens
+godot --headless --path . --script tests/swipe_test.gd   # menu lists scroll, event swipe flips, tap opens
 ```
 
 After changing a track layout, rerun `tools/gen_medals.gd` to refresh `scripts/medal_times.gd`.
