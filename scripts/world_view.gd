@@ -942,48 +942,26 @@ func _make_car(col: Color, ghost := false) -> Node3D:
 		var low := paint(col.darkened(0.38), 0.5)
 		var glass := paint(Color("#1a2330"), 0.08)
 		glass.metallic = 0.4
-		# two-tone body: darker sill, painted upper body, slimmer nose
-		parts_list.append(pbox(Vector3(126, 12, 72), low, Vector3(0, 16, 0)))
-		parts_list.append(pbox(Vector3(118, 16, 70), top, Vector3(-2, 29, 0)))
-		parts_list.append(pbox(Vector3(22, 10, 60), top, Vector3(64, 24, 0)))
-		parts_list.append(pbox(Vector3(48, 18, 54), glass, Vector3(-6, 45, 0)))   # cabin
-		parts_list.append(pbox(Vector3(40, 3, 50), top, Vector3(-8, 55, 0)))      # roof
-		parts_list.append(pbox(Vector3(22, 6, 80), low, Vector3(-58, 44, 0)))     # rear wing
-		parts_list.append(pbox(Vector3(6, 10, 6), low, Vector3(-58, 37, 26)))
-		parts_list.append(pbox(Vector3(6, 10, 6), low, Vector3(-58, 37, -26)))
-		# winter kit: snow piled on the roof and the wing, a spotlight bar on the nose
-		var snow := paint(COL_SNOW, 0.9)
-		snow.clearcoat_enabled = false
-		parts_list.append(pbox(Vector3(36, 5, 52), snow, Vector3(-13, 59, 0)))
-		parts_list.append(pbox(Vector3(24, 4, 36), snow, Vector3(-15, 63, 3)))
-		parts_list.append(pbox(Vector3(14, 3, 70), snow, Vector3(-60, 48.5, 4)))
-		parts_list.append(pbox(Vector3(22, 2.5, 36), snow, Vector3(40, 38.5, -6)))   # on the bonnet
+		# a low painted racer body with a bubble cab; the theme kit adds the rest
+		var dark := paint(Color("#1d2229"), 0.6)
+		parts_list.append(pbox(Vector3(104, 10, 54), low, Vector3(-6, 17, 0)))     # belly
+		parts_list.append(pbox(Vector3(92, 14, 60), top, Vector3(-12, 29, 0)))     # body
+		parts_list.append(pbox(Vector3(34, 9, 54), top, Vector3(50, 24.5, 0)))     # nose
+		var screen := pbox(Vector3(4, 18, 46), glass, Vector3(22, 42, 0))
+		screen.rotation.z = 0.55
+		parts_list.append(screen)
+		parts_list.append(pbox(Vector3(40, 16, 50), glass, Vector3(-6, 43, 0)))   # cab
+		parts_list.append(pbox(Vector3(36, 3, 50), top, Vector3(-8, 52, 0)))      # roof
+		parts_list.append(pbox(Vector3(14, 5, 66), low, Vector3(-56, 41, 0)))     # rear spoiler
+		parts_list.append(pbox(Vector3(5, 6, 5), low, Vector3(-56, 36, 22)))
+		parts_list.append(pbox(Vector3(5, 6, 5), low, Vector3(-56, 36, -22)))
 		var lamp := mat(Color("#fff4c8"), true)
-		parts_list.append(pbox(Vector3(3, 5, 14), lamp, Vector3(75, 25, 22)))
-		parts_list.append(pbox(Vector3(3, 5, 14), lamp, Vector3(75, 25, -22)))
-		parts_list.append(pbox(Vector3(6, 5, 46), paint(Color("#1d2229"), 0.5), Vector3(8, 59, 0)))  # light bar
-		for lz in [-15.0, 0.0, 15.0]:
-			parts_list.append(pbox(Vector3(3, 6, 9), lamp, Vector3(11.5, 59, lz)))
+		for lz in [-17.0, 17.0]:
+			parts_list.append(pbox(Vector3(3, 5, 12), lamp, Vector3(67.5, 25, lz)))
 		var tail := mat(Color("#ff4a3a"), false, 1.2)
-		parts_list.append(pbox(Vector3(3, 5, 12), tail, Vector3(-62, 28, 24)))
-		parts_list.append(pbox(Vector3(3, 5, 12), tail, Vector3(-62, 28, -24)))
-		# chunky winter tyres with a light stud band
-		var tyre := paint(Color("#16181c"), 0.8)
-		var stud := paint(Color("#8d98a3"), 0.6)
-		for wx in [-40.0, 42.0]:
-			for wz in [-37.0, 37.0]:
-				for layer in 2:
-					var w := MeshInstance3D.new()
-					var cm := CylinderMesh.new()
-					var rr := 16.0 if layer == 0 else 16.6
-					cm.top_radius = rr * U; cm.bottom_radius = rr * U
-					cm.height = (15.0 if layer == 0 else 5.0) * U
-					cm.radial_segments = 14; cm.rings = 1
-					cm.material = tyre if layer == 0 else stud
-					w.mesh = cm
-					w.position = Vector3(wx, 15, wz) * U
-					w.rotation.x = PI / 2
-					chassis.add_child(w)   # wheels stay on the road; the body moves above them
+		parts_list.append(pbox(Vector3(3, 5, 12), tail, Vector3(-59, 28, 22)))
+		parts_list.append(pbox(Vector3(3, 5, 12), tail, Vector3(-59, 28, -22)))
+		_car_kit_snow(chassis, parts_list, top, dark)
 	for p in parts_list:
 		if ghost:
 			p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -991,6 +969,32 @@ func _make_car(col: Color, ghost := false) -> Node3D:
 	root.set_meta("body", body)
 	root.set_meta("chassis", chassis)
 	return root
+
+# Theme kit: what makes the car belong to its world (running gear and dressing).
+# Snow: front skis, rear crawler tracks and snow on the roof and spoiler.
+# Other themes (forest, rock, sand) get their own kit on the same body.
+func _car_kit_snow(chassis: Node3D, parts_list: Array, top: Material, dark: Material) -> void:
+	var snow := paint(COL_SNOW, 0.9)
+	snow.clearcoat_enabled = false
+	parts_list.append(pbox(Vector3(28, 4, 40), snow, Vector3(-12, 55.5, 2)))
+	parts_list.append(pbox(Vector3(10, 2.5, 52), snow, Vector3(-57, 45, 5)))
+	# running gear stays on the chassis (on the road); the body moves above it
+	var ski := paint(Color("#e9eef2"), 0.4)
+	var tread := paint(Color("#16181c"), 0.85)
+	var lug := paint(Color("#59636e"), 0.7)
+	for side: float in [1.0, -1.0]:
+		var z := 33.0 * side
+		# front ski on a short strut, its tip turned up and painted
+		chassis.add_child(pbox(Vector3(64, 3, 13), ski, Vector3(46, 2.5, z)))
+		var tip := pbox(Vector3(16, 3, 13), top, Vector3(83, 6.5, z))
+		tip.rotation.z = 0.55
+		chassis.add_child(tip)
+		chassis.add_child(pbox(Vector3(6, 14, 6), dark, Vector3(44, 11, z * 0.85)))
+		# rear crawler track with raised lugs
+		chassis.add_child(pbox(Vector3(56, 22, 17), tread, Vector3(-34, 13, z * 1.1)))
+		for k in 6:
+			chassis.add_child(pbox(Vector3(3, 23, 18), lug, Vector3(-58 + k * 9.6, 13, z * 1.1)))
+		chassis.add_child(pbox(Vector3(20, 10, 1), lug, Vector3(-34, 13, z * 1.1 + 9.0 * side)))
 
 func setup_cars(race: Race, has_ghost: bool) -> void:
 	for cn in car_nodes:
