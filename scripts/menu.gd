@@ -1,5 +1,7 @@
 # Menu screens: Home -> Campaign (chapters of event cards) or Time attack (track cards)
 # -> one Event screen (miniature, medals, Start). One thing at a time, big touch targets.
+# Lists and events are carousels: swipe sideways (or press the arrow keys) to flip to the
+# next page / track / event; a tap still presses the card under the finger.
 extends Control
 
 const TrackData = preload("res://scripts/track.gd")
@@ -32,6 +34,35 @@ var page := 0
 var ev := {}                # the event shown on the Event screen
 var _maps := {}             # track index -> TrackData for miniatures
 var body: Control
+var _pager: Pager          # the swipeable part of the current screen (null on Home)
+var _slide_from := 0       # -1 / +1: the screen being built slides in from that side
+
+# Holds one page; `shift` (in page widths) moves it sideways while the finger drags.
+class Pager extends Control:
+	var content: Control
+	var shift := 0.0:
+		set(v):
+			shift = v
+			_place()
+
+	func hold(c: Control) -> void:
+		content = c
+		add_child(c)
+		c.minimum_size_changed.connect(update_minimum_size)
+		_place()
+
+	func _get_minimum_size() -> Vector2:
+		return content.get_combined_minimum_size() if content else Vector2.ZERO
+
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_RESIZED:
+			_place()
+
+	func _place() -> void:
+		if content:
+			content.position = Vector2(shift * size.x, 0)
+			content.size = size
+			modulate.a = 1.0 - clampf(absf(shift), 0.0, 1.0) * 0.6
 
 func setup(owner_ui) -> void:
 	ui = owner_ui
@@ -61,6 +92,10 @@ func _map(i: int) -> TrackData:
 func _frame() -> VBoxContainer:
 	if body:
 		body.queue_free()
+	_pager = null
+	_drag = false
+	if _flip_tween:
+		_flip_tween.kill()
 	var ins: Dictionary = ui.safe_insets()
 	var m := MarginContainer.new()
 	m.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -79,10 +114,8 @@ func _header(vb: VBoxContainer, title: String, sub: String, back: Callable) -> H
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 12)
 	if back.is_valid():
-		var b := _btn("<", 52, 22)
-		b.custom_minimum_size = Vector2(52, 46)
-		b.add_theme_font_override("font", ui.f_display)
-		b.add_theme_color_override("font_color", C_POST)
+		var b: Button = ui.icon_button("back", "", "card", false, 50)
+		b.tooltip_text = "Back"
 		b.pressed.connect(back)
 		hb.add_child(b)
 	var tv := VBoxContainer.new()
@@ -100,13 +133,6 @@ func _header(vb: VBoxContainer, title: String, sub: String, back: Callable) -> H
 	hb.add_child(tv)
 	vb.add_child(hb)
 	return hb
-
-func _btn(text: String, h := 48, fs := 16) -> Button:
-	var b := Button.new()
-	b.text = text
-	b.custom_minimum_size = Vector2(0, h)
-	b.add_theme_font_size_override("font_size", fs)
-	return b
 
 func _card_style(b: Button, locked := false) -> void:
 	for st in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
@@ -143,8 +169,8 @@ func show_home() -> void:
 	var gap := Control.new()
 	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(gap)
-	var gear := _btn("SETTINGS", 40, 12)
-	gear.custom_minimum_size.x = 100
+	var gear: Button = ui.icon_button("gear", "", "card", false, 50)
+	gear.tooltip_text = "Settings"
 	gear.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	gear.pressed.connect(func(): settings_pressed.emit())
 	top.add_child(gear)
@@ -173,26 +199,8 @@ func show_home() -> void:
 		func(): kind = "campaign"; page = _first_open_chapter(); show_list()))
 	row.add_child(_big_choice("watch", "TIME ATTACK", "%d tracks · 4 variants" % Defs.TRACKS.size(), "Any track, any variant. Chase your ghost and the medal times.",
 		func(): kind = "attack"; page = 0; show_list()))
-	var vs := Button.new()
-	vs.custom_minimum_size = Vector2(0, 46)
-	_card_style(vs)
-	var vh := HBoxContainer.new()
-	vh.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	vh.alignment = BoxContainer.ALIGNMENT_CENTER
-	vh.add_theme_constant_override("separation", 10)
-	vh.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var di := Art.Icon.new()
-	di.kind = "duel"
-	di.custom_minimum_size = Vector2(30, 30)
-	di.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	di.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vh.add_child(di)
-	var vl: Label = ui._label("2 players: race any track" if tall else "2 players on one phone: race any track", 14, C_FG, ui.f_bold)
-	vl.autowrap_mode = TextServer.AUTOWRAP_OFF
-	vh.add_child(vl)
-	vs.add_child(vh)
-	vs.pressed.connect(func(): kind = "versus"; page = 0; show_list())
-	vb.add_child(vs)
+	row.add_child(_big_choice("duel", "2 PLAYERS", "One phone, two thumbs", "Race a friend on any track.",
+		func(): kind = "versus"; page = 0; show_list()))
 
 # best medal held on every track and variant (time trial), counted by tier
 func _medal_counts() -> Array:
@@ -251,25 +259,14 @@ func show_list() -> void:
 	if kind == "campaign":
 		sub = "Chapter %d of %d  ·  %s" % [page + 1, _pages(), Campaign.CHAPTERS[page]["name"]]
 	else:
-		sub = "Page %d of %d  ·  pick a track" % [page + 1, _pages()]
+		sub = "Page %d of %d  ·  swipe for more" % [page + 1, _pages()]
 	var tall: bool = ui.is_portrait()
-	var hb := _header(vb, title, sub, func(): show_home())
-	var prev := _btn("◀", 46, 18)
-	prev.custom_minimum_size.x = 46 if tall else 64
-	prev.disabled = page == 0
-	prev.pressed.connect(func(): page -= 1; show_list())
-	hb.add_child(prev)
-	var nxt := _btn("▶", 46, 18)
-	nxt.custom_minimum_size.x = 46 if tall else 64
-	nxt.disabled = page >= _pages() - 1
-	nxt.pressed.connect(func(): page += 1; show_list())
-	hb.add_child(nxt)
+	_header(vb, title, sub, func(): show_home())
 	var g := GridContainer.new()
 	g.columns = 1 if tall else 3   # portrait: one tall column of six cards
 	g.add_theme_constant_override("h_separation", 12)
 	g.add_theme_constant_override("v_separation", 10 if tall else 12)
-	g.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vb.add_child(g)
+	_carousel(vb, g, page, _pages())
 	if kind == "campaign":
 		var first := 0
 		for c in page:
@@ -371,8 +368,8 @@ func show_event() -> void:
 	var tall: bool = ui.is_portrait()
 	var row: BoxContainer = VBoxContainer.new() if tall else HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12 if tall else 18)
-	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vb.add_child(row)
+	var pos := _event_pos()
+	_carousel(vb, row, pos[0], pos[1])
 	var mp := TrackMap.new()
 	mp.mini = true
 	mp.set_track(TrackData.new(d, ev["variant"]))
@@ -405,15 +402,13 @@ func show_event() -> void:
 	if ev["kind"] != "campaign":
 		var g := GridContainer.new()
 		g.columns = 2 if tall else 4
-		g.add_theme_constant_override("h_separation", 6)
-		var grp := ButtonGroup.new()
+		g.add_theme_constant_override("h_separation", 8)
+		g.add_theme_constant_override("v_separation", 8)
 		for v in Defs.VARIANTS:
-			var b := _btn(v[1], 44, 13)
-			b.toggle_mode = true
-			b.button_group = grp
-			b.clip_text = true
+			# portrait: icon beside the name (2 x 2); landscape: icon over it (one row of 4)
+			var b: Button = ui.icon_button(v[0], v[1].to_upper(), "card", not tall, 50 if tall else 62)
 			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			b.set_pressed_no_signal(v[0] == ev["variant"])
+			ui.set_tile_on(b, v[0] == ev["variant"])
 			b.pressed.connect(func(): ev["variant"] = v[0]; show_event())
 			g.add_child(b)
 		right.add_child(g)
@@ -443,13 +438,130 @@ func show_event() -> void:
 	var fill := Control.new()
 	fill.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	right.add_child(fill)
-	var go := Button.new()
-	go.text = "START"
-	go.custom_minimum_size = Vector2(0, 56)
-	ui._style_go(go)
-	go.add_theme_font_size_override("font_size", 26)
+	var go: Button = ui.icon_button("play", "START", "go", false, 58)
 	go.pressed.connect(func(): start_event.emit(ev.duplicate()))
 	right.add_child(go)
+
+# where the event screen sits in its carousel: [index, count]
+func _event_pos() -> Array:
+	if ev["kind"] == "campaign":
+		return [ev["idx"], Campaign.count()]
+	return [ev["track"], Defs.TRACKS.size()]
+
+# ---------------------------------------------------------------- swipe
+var _drag := false        # a press landed on the pager
+var _dragging := false    # ...and has moved far enough sideways to be a swipe
+var _drag_from := Vector2.ZERO
+var _drag_ms := 0
+var _flip_tween: Tween
+const DRAG_START := 14.0  # px before a press turns into a swipe (a tap wiggles less)
+
+# put `content` in a pager that fills the rest of the screen, with page dots below
+func _carousel(vb: VBoxContainer, content: Control, idx: int, count: int) -> void:
+	_pager = Pager.new()
+	_pager.clip_contents = true
+	_pager.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_pager.hold(content)
+	vb.add_child(_pager)
+	if count > 1:
+		var dots := Art.Dots.new()
+		dots.count = count
+		dots.current = idx
+		dots.custom_minimum_size = Vector2(0, 10)
+		dots.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		vb.add_child(dots)
+	if _slide_from != 0:
+		_pager.shift = _slide_from
+		_flip_tween = create_tween()
+		_flip_tween.tween_property(_pager, "shift", 0.0, 0.18).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		_slide_from = 0
+
+# can the current screen flip one step that way (+1 next, -1 previous)?
+func _can_flip(dir: int) -> bool:
+	match screen:
+		"list":
+			return page + dir >= 0 and page + dir < _pages()
+		"event":
+			var pos := _event_pos()
+			var i: int = pos[0] + dir
+			if i < 0 or i >= pos[1]:
+				return false
+			return ev["kind"] != "campaign" or Campaign.unlocked(i)
+	return false
+
+func _flip(dir: int) -> void:
+	_slide_from = dir
+	match screen:
+		"list":
+			page += dir
+			show_list()
+		"event":
+			if ev["kind"] == "campaign":
+				var e := Campaign.event(ev["idx"] + dir)
+				ev = { "track": e["track"], "variant": e["variant"], "mode": e["mode"], "humans": 1, "kind": "campaign", "idx": e["idx"] }
+				page = e["chapter"]   # Back returns to this event's chapter
+			else:
+				ev["track"] += dir
+				ev["idx"] = ev["track"]
+				page = ev["track"] / PER_PAGE
+			show_event()
+
+# slide the page out, then build the next one sliding in (or bounce back)
+func _settle(dir: int) -> void:
+	if _flip_tween:
+		_flip_tween.kill()
+	var go := dir != 0 and _can_flip(dir)
+	_flip_tween = create_tween()
+	_flip_tween.tween_property(_pager, "shift", -float(dir) if go else 0.0, 0.14).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN if go else Tween.EASE_OUT)
+	# rebuilding also drops the card that saw the press, so it never fires after a swipe
+	_flip_tween.tween_callback(func(): _flip(dir) if go else refresh())
+
+func _blocked() -> bool:
+	return (ui.settings_ov != null and ui.settings_ov.visible) or (ui.loading != null and ui.loading.visible)
+
+func _input(e: InputEvent) -> void:
+	if _pager == null or not is_visible_in_tree() or _blocked():
+		_drag = false
+		return
+	if e is InputEventKey and e.pressed and not e.echo:
+		var dir := 0
+		match e.physical_keycode:
+			KEY_LEFT: dir = -1
+			KEY_RIGHT: dir = 1
+		if dir != 0:
+			get_viewport().set_input_as_handled()
+			if _can_flip(dir) and not (_flip_tween and _flip_tween.is_running()):
+				_settle(dir)
+		return
+	if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT:
+		if e.pressed:
+			if _flip_tween and _flip_tween.is_running():
+				get_viewport().set_input_as_handled()   # mid-flip: ignore
+				return
+			_drag = _pager.get_global_rect().has_point(e.position)
+			_dragging = false
+			_drag_from = e.position
+			_drag_ms = Time.get_ticks_msec()
+		elif _drag:
+			_drag = false
+			if _dragging:
+				_dragging = false
+				get_viewport().set_input_as_handled()   # not a tap
+				var f := _pager.shift
+				var quick := Time.get_ticks_msec() - _drag_ms < 280 and absf(f) > 0.06
+				_settle(-int(signf(f)) if absf(f) > 0.22 or quick else 0)
+	elif e is InputEventMouseMotion and _drag:
+		var d: Vector2 = e.position - _drag_from
+		if not _dragging and absf(d.x) > DRAG_START and absf(d.x) > absf(d.y) * 1.2:
+			_dragging = true
+			_drag_from.x += signf(d.x) * DRAG_START   # start following from here, no jump
+			d = e.position - _drag_from
+		if _dragging:
+			get_viewport().set_input_as_handled()
+			var f := d.x / maxf(1.0, _pager.size.x)
+			if not _can_flip(-int(signf(f))):
+				f *= 0.25   # nothing that way: rubber band
+			_pager.shift = clampf(f, -1.0, 1.0)
 
 # rebuild the current screen (after a race, or when the screen size changes)
 func refresh() -> void:

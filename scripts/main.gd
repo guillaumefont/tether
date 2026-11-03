@@ -500,7 +500,10 @@ func _run_demo(arg: String) -> void:
 		["menu_event", func():
 			ui.loading.visible = false
 			ui.menu.ev = { "track": track_idx, "variant": variant, "mode": mode, "humans": humans, "kind": "attack" if mode == "trial" else "campaign", "idx": 1 }
-			ui.menu.show_event()]]
+			ui.menu.show_event()],
+		["results", func():
+			ui.menu.visible = false
+			ui.show_results("1st", [{ "cells": ["1", "You", "0:42.10"], "hl": true }, { "cells": ["2", "Rival", "0:43.05"] }], "Gold medal!", true)]]
 	for sh in shots:
 		sh[1].call()
 		await get_tree().create_timer(0.3).timeout
