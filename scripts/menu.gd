@@ -119,7 +119,7 @@ func show_home() -> void:
 	screen = "home"
 	var vb := _frame()
 	var top := HBoxContainer.new()
-	var title: Label = ui._label("PIVOT RUSH", 44, C_POST, ui.f_display)
+	var title: Label = ui._label("TETHER RACING", 44, C_POST, ui.f_display)
 	title.autowrap_mode = TextServer.AUTOWRAP_OFF
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(title)

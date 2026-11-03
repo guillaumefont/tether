@@ -7,13 +7,13 @@
   ```
   ## Preview
   - Play in the browser: https://guillaumefont.github.io/tether/pr/<N>/
-  - Android APK: https://guillaumefont.github.io/tether/pr/<N>/pivot-rush.apk
+  - Android APK: https://guillaumefont.github.io/tether/pr/<N>/tether-racing.apk
   ```
 
   `<N>` is the PR number. Add the section right after opening the PR (edit the body once the
   number is known) and keep it when you rewrite the body. The **Builds** workflow publishes these
   on every push to the PR (allow a few minutes) and deletes them when the PR closes. `main` is at
-  https://guillaumefont.github.io/tether/ and `.../pivot-rush.apk`.
+  https://guillaumefont.github.io/tether/ and `.../tether-racing.apk`.
 - All APKs share one app id: installing a PR build replaces the installed `main` build.
 
 ## Checks to run before pushing
