@@ -7,6 +7,17 @@ const TrackMap = preload("res://scripts/track_map.gd")
 const MenuScreens = preload("res://scripts/menu.gd")
 const Medals = preload("res://scripts/medals.gd")
 const Defs = preload("res://scripts/track_defs.gd")
+const Art = preload("res://scripts/menu_art.gd")
+
+const TIPS := [
+	"Hook the tower as you enter the bend, let go when your nose points down the exit.",
+	"Rubbing the rail cuts your throttle. Let go a touch earlier to stay off it.",
+	"Every bend has its own tower. The rope keeps its length, so grab timing sets your line.",
+	"After you let go the car slides a little on the ice. Aim for it.",
+	"Beat a medal time to unlock the next campaign event.",
+	"In Collect, the gems trace the ideal line. Each one missed costs a quarter second.",
+	"Posts shatter when you hit them, and cost you a second.",
+]
 
 signal again_pressed
 signal menu_pressed
@@ -34,6 +45,7 @@ var res_table: GridContainer
 var res_note: Label
 var hud_vals := {}
 var next_btn: Button
+var results_panel: PanelContainer
 
 # The UI is laid out for a fixed number of logical pixels across the screen height, so it
 # keeps the same physical size: about 450 on a phone (comfortable text and tap targets),
@@ -53,9 +65,23 @@ static func ui_height() -> int:
 		h = clampf(450.0 * inches / 2.7, 450.0, 640.0)  # phones are ~2.7 in tall in landscape
 	return int(h)
 
+var _uh := 450
+var _win_size := Vector2i.ZERO
+
+# The short side of the screen always gets ui_height() logical pixels, in landscape and portrait.
+func _apply_scale() -> void:
+	var ws := get_tree().root.size
+	_win_size = ws
+	var long_side := int(_uh * 16.0 / 9.0)
+	get_tree().root.content_scale_size = Vector2i(_uh, long_side) if ws.y > ws.x else Vector2i(long_side, _uh)
+
+func is_portrait() -> bool:
+	var vp := root.get_viewport_rect().size if root else Vector2(16, 9)
+	return vp.y > vp.x
+
 func _ready() -> void:
-	var uh := ui_height()
-	get_tree().root.content_scale_size = Vector2i(int(uh * 16.0 / 9.0), uh)
+	_uh = ui_height()
+	_apply_scale()
 	root = Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -98,6 +124,7 @@ func _ready() -> void:
 	root.add_child(menu)
 	menu.setup(self)
 	_build_results()
+	_build_loading()
 
 func _make_theme() -> Theme:
 	var t := Theme.new()
@@ -180,6 +207,8 @@ func _grid(cols: int) -> GridContainer:
 var _laid_out_for := Vector2.ZERO
 
 func _process(_dt: float) -> void:
+	if get_tree().root.size != _win_size:
+		_apply_scale()
 	var vp := root.get_viewport_rect().size
 	if vp != _laid_out_for:
 		_laid_out_for = vp
@@ -197,6 +226,10 @@ func layout() -> void:
 	minimap.offset_bottom = -12 - ins["b"]
 	minimap.offset_left = minimap.offset_right - MINIMAP
 	minimap.offset_top = minimap.offset_bottom - MINIMAP
+	var vp := root.get_viewport_rect().size
+	results_panel.custom_minimum_size.x = minf(440.0, vp.x - 40.0)
+	if _load_box:
+		_place_loading()
 
 # keep clear of notches / rounded corners
 func safe_insets() -> Dictionary:
@@ -231,7 +264,8 @@ func _build_results() -> void:
 	var r := _overlay()
 	results = r[0]
 	var vb: VBoxContainer = r[1]
-	(r[2] as PanelContainer).custom_minimum_size.x = 440
+	results_panel = r[2]
+	results_panel.custom_minimum_size.x = 440
 	res_title = _label("Finish", 30, C_POST, f_display)
 	vb.add_child(res_title)
 	res_table = _grid(3)
@@ -258,6 +292,63 @@ func _build_results() -> void:
 	vb.add_child(back)
 	results.visible = false
 
+# ---------------------------------------------------------------- loading screen
+var loading: Control
+var _load_title: Label
+var _load_tip: Label
+var _load_tween: Tween
+var _load_box: VBoxContainer
+
+# the title and tip sit just under the wordmark, whatever the screen shape
+func _place_loading() -> void:
+	var vp := root.get_viewport_rect().size
+	_load_box.offset_top = vp.y * 0.30 + minf(vp.x, vp.y) * 0.34
+
+func _build_loading() -> void:
+	loading = Control.new()
+	loading.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	loading.mouse_filter = Control.MOUSE_FILTER_STOP
+	var sp := Art.Splash.new()
+	sp.font = f_display
+	sp.lift = 1.0
+	sp.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	sp.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	loading.add_child(sp)
+	var vb := VBoxContainer.new()
+	vb.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_load_box = vb
+	vb.offset_left = 24; vb.offset_right = -24
+	vb.add_theme_constant_override("separation", 6)
+	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	loading.add_child(vb)
+	_load_title = _label("", 20, C_POST, f_bold)
+	_load_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(_load_title)
+	_load_tip = _label("", 14, Art.C_ICE, f_med)
+	_load_tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_load_tip.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	_load_tip.add_theme_constant_override("shadow_offset_y", 1)
+	vb.add_child(_load_tip)
+	loading.visible = false
+	root.add_child(loading)
+
+# cover the screen while a track is built; title is e.g. the track name
+func show_loading(title: String) -> void:
+	if _load_tween:
+		_load_tween.kill()
+	_load_title.text = title.to_upper()
+	_load_tip.text = TIPS[randi() % TIPS.size()]
+	loading.modulate.a = 1.0
+	loading.visible = true
+	_place_loading()
+
+func hide_loading() -> void:
+	if not loading.visible:
+		return
+	_load_tween = create_tween()
+	_load_tween.tween_property(loading, "modulate:a", 0.0, 0.35)
+	_load_tween.tween_callback(func(): loading.visible = false)
+
 # ---------------------------------------------------------------- menu state
 func show_menu() -> void:
 	menu.visible = true
@@ -269,6 +360,7 @@ func show_menu() -> void:
 
 # ---------------------------------------------------------------- HUD
 func _chip(label: String, key: String, col: Color) -> void:
+	var narrow := is_portrait()
 	var pc := PanelContainer.new()
 	var s := StyleBoxFlat.new()
 	s.bg_color = C_PANEL
@@ -276,16 +368,18 @@ func _chip(label: String, key: String, col: Color) -> void:
 	s.border_width_left = 4
 	s.border_color = col
 	s.content_margin_left = 10; s.content_margin_right = 10; s.content_margin_top = 4; s.content_margin_bottom = 4
+	if narrow:
+		s.content_margin_left = 7; s.content_margin_right = 7
 	pc.add_theme_stylebox_override("panel", s)
 	pc.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var hb := HBoxContainer.new()
-	hb.add_theme_constant_override("separation", 10)
+	hb.add_theme_constant_override("separation", 6 if is_portrait() else 10)
 	hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var l := _label(label.to_upper(), 11, C_MUTED, f_bold)
+	var l := _label(label.to_upper(), 10 if narrow else 11, C_MUTED, f_bold)
 	l.autowrap_mode = TextServer.AUTOWRAP_OFF
 	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	hb.add_child(l)
-	var v := _label("", 20, C_FG, f_bold)
+	var v := _label("", 17 if narrow else 20, C_FG, f_bold)
 	v.autowrap_mode = TextServer.AUTOWRAP_OFF
 	hb.add_child(v)
 	pc.add_child(hb)
@@ -314,7 +408,8 @@ func build_hud(race, gems: bool) -> void:
 		_chip("P1" if race.humans > 1 else "Lap", "lap0", hs[0].color)
 		_chip("Pos", "pos0", hs[0].color)
 		_spacer()
-		_chip("Time", "time", C_POST)
+		if race.humans == 1 or not is_portrait():  # no room for it between two players in portrait
+			_chip("Time", "time", C_POST)
 		if gems:
 			_chip("Gems", "gems", Color("#7fe3d0"))
 		if race.humans > 1:
@@ -331,6 +426,11 @@ func set_hud(key: String, text: String) -> void:
 		hud_vals[key].text = text
 
 func set_big(bb: String, size := 120) -> void:
+	# shrink long words (FINISH, 2nd...) to fit a narrow portrait screen
+	var room := root.get_viewport_rect().size.x * 0.9
+	var w := f_display.get_string_size(bb, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	if bb != "" and w > room:
+		size = int(size * room / w)
 	big.add_theme_font_size_override("normal_font_size", size)
 	big.text = "[center]" + bb + "[/center]" if bb != "" else ""
 

@@ -30,6 +30,11 @@ var flash_t := 0.0
 var ghost: Array = []
 var new_record := false
 var touch_owner := {}        # touch index -> player
+# behind the menu: AI drivers race a snowy track, changing track every ATTRACT_SECS
+var attract: Race = null
+var attract_t := 0.0
+var attract_i := -1
+const ATTRACT_SECS := 45.0
 
 func _ready() -> void:
 	view = WorldView.new()
@@ -46,8 +51,10 @@ func _ready() -> void:
 		if not nx.is_empty():
 			ui.menu.ev = nx
 			_start_event(nx))
-	ui.menu_pressed.connect(_to_menu)
+	ui.menu_pressed.connect(func(): _with_loading("", _to_menu))
+	ui.show_loading("")   # picks up from the boot splash, fades out once the menu scene is up
 	_to_menu()
+	_fade_in_later()
 	# automation hooks for headless screenshots: --  --demo=<track>,<variant>,<seconds>
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--demo="):
@@ -56,20 +63,44 @@ func _ready() -> void:
 func rec_key() -> String:
 	return Records.key(Defs.TRACKS[track_idx]["name"], variant)
 
+func _fade_in_later() -> void:
+	for k in 3:
+		await get_tree().process_frame
+	ui.hide_loading()
+
+# show the loading screen for a frame, then do the slow track build behind it
+func _with_loading(title: String, work: Callable) -> void:
+	ui.show_loading(title)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	work.call()
+	ui.hide_loading()
+
 func _to_menu() -> void:
 	phase = "menu"
 	race = null
-	view.visible = false   # the menu covers the screen; no 3D to draw behind it
 	ui.show_menu()
+	_start_attract()
+
+func _start_attract() -> void:
+	attract_i = randi() % Defs.TRACKS.size() if attract_i < 0 else (attract_i + 1) % Defs.TRACKS.size()
+	track = TrackData.new(Defs.TRACKS[attract_i], "standard")
+	view.build(track)
+	view.visible = true
+	attract = Race.new(track, "race", 0)
+	view.setup_cars(attract, false)
+	attract_t = 0.0
+	view.update_camera(attract, "attract", 0.0, true)
 
 func _start_event(ev: Dictionary) -> void:
 	track_idx = ev["track"]
 	variant = ev["variant"]
 	mode = ev["mode"]
 	humans = ev["humans"]
-	new_race()
+	_with_loading(Defs.TRACKS[track_idx]["name"], new_race)
 
 func new_race() -> void:
+	attract = null
 	track = TrackData.new(Defs.TRACKS[track_idx], variant)
 	view.build(track)
 	view.visible = true
@@ -131,6 +162,16 @@ func _process(delta: float) -> void:
 	if track:
 		Race.spin_anchors(track, dt)
 	match phase:
+		"menu":
+			if attract:
+				attract.update(dt)
+				for e in attract.events:
+					if e["t"] in ["skid", "wall", "post"]:
+						view.handle_event(e)
+				attract.events.clear()
+				attract_t += dt
+				if attract_t > ATTRACT_SECS:
+					_start_attract()
 		"count":
 			countdown -= dt
 			var n := ceili(countdown - 0.2)
@@ -167,8 +208,12 @@ func _process(delta: float) -> void:
 	var me = race.cars[0] if race and race.cars.size() else null
 	sfx.set_engine(me.vel.length() if me else 0.0, phase == "race")
 	if view.track and view.visible:
-		view.sync(race, phase, _ghost_sample(), _aims(), dt)
-		view.update_camera(race if phase != "menu" else null, phase, dt)
+		if phase == "menu" and attract:
+			view.sync(attract, phase, null, {}, dt)
+			view.update_camera(attract, "attract", dt)
+		else:
+			view.sync(race, phase, _ghost_sample(), _aims(), dt)
+			view.update_camera(race if phase != "menu" else null, phase, dt)
 
 func _aims() -> Dictionary:
 	var aims := {}
@@ -325,10 +370,12 @@ func _run_demo(arg: String) -> void:
 	if out == "":
 		out = "user://"
 	await get_tree().process_frame
-	var shots := [["menu_home", func(): ui.menu.show_home()],
+	var shots := [["menu_home", func(): ui.loading.visible = false; ui.menu.show_home()],
 		["menu_campaign", func(): ui.menu.kind = "campaign"; ui.menu.page = 0; ui.menu.show_list()],
 		["menu_attack", func(): ui.menu.kind = "attack"; ui.menu.page = 1; ui.menu.show_list()],
+		["loading", func(): ui.show_loading(Defs.TRACKS[track_idx]["name"])],
 		["menu_event", func():
+			ui.loading.visible = false
 			ui.menu.ev = { "track": track_idx, "variant": variant, "mode": mode, "humans": humans, "kind": "attack" if mode == "trial" else "campaign", "idx": 1 }
 			ui.menu.show_event()]]
 	for sh in shots:
