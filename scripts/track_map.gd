@@ -6,10 +6,16 @@ const TrackData = preload("res://scripts/track.gd")
 var track: TrackData
 var race = null           # when set, car dots are drawn (minimap)
 var bg := false
+var mini := false          # menu miniature: thicker road, no start line clutter
+var dim := false           # locked card
 
 func set_track(t: TrackData) -> void:
 	track = t
 	queue_redraw()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED:
+		queue_redraw()
 
 func _process(_dt: float) -> void:
 	if race != null and visible:
@@ -29,6 +35,11 @@ func _draw() -> void:
 		pts.append(p * sc + off)
 	pts.append(pts[0])
 	var w := maxf(2.0, TrackData.HW * 2 * sc)
+	if mini:
+		w = maxf(w, 4.0)
+	if dim:
+		draw_polyline(pts, Color(1, 1, 1, 0.16), w, true)
+		return
 	if race == null:
 		draw_polyline(pts, Color("#d4452f"), (TrackData.HW * 2 + 22) * sc, true)
 	draw_polyline(pts, Color("#5d6570"), w, true)

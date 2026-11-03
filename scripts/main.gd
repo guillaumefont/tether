@@ -38,16 +38,16 @@ func _ready() -> void:
 	add_child(sfx)
 	ui = UI.new()
 	add_child(ui)
-	ui.track_picked.connect(func(i): track_idx = i; _preview())
-	ui.variant_picked.connect(func(v): variant = v; _preview())
-	ui.mode_picked.connect(func(m): mode = m; _refresh_menu())
-	ui.players_picked.connect(func(n): humans = n; _refresh_menu())
-	ui.sound_toggled.connect(func(on): sfx.enabled = on)
-	ui.start_pressed.connect(new_race)
+	ui.menu.sound_toggled.connect(func(on): sfx.enabled = on)
+	ui.menu.start_event.connect(_start_event)
 	ui.again_pressed.connect(new_race)
-	ui.menu_pressed.connect(func(): phase = "menu"; race = null; _preview())
-	get_viewport().size_changed.connect(_refresh_menu)
-	_preview()
+	ui.next_pressed.connect(func():
+		var nx: Dictionary = ui.menu.next_event()
+		if not nx.is_empty():
+			ui.menu.ev = nx
+			_start_event(nx))
+	ui.menu_pressed.connect(_to_menu)
+	_to_menu()
 	# automation hooks for headless screenshots: --  --demo=<track>,<variant>,<seconds>
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--demo="):
@@ -56,33 +56,23 @@ func _ready() -> void:
 func rec_key() -> String:
 	return Records.key(Defs.TRACKS[track_idx]["name"], variant)
 
-func _preview() -> void:
-	track = TrackData.new(Defs.TRACKS[track_idx], variant)
-	view.build(track)
+func _to_menu() -> void:
+	phase = "menu"
+	race = null
+	view.visible = false   # the menu covers the screen; no 3D to draw behind it
 	ui.show_menu()
-	_refresh_menu()
-	view.menu_cover_px = ui.menu_cover_px()
-	view.update_camera(null, "menu", 0.0, true)
 
-func _refresh_menu() -> void:
-	if phase != "menu":
-		return
-	var name: String = Defs.TRACKS[track_idx]["name"]
-	var rec := Records.get_best(rec_key())
-	var medal := 0
-	var labels: Array = []
-	if mode == "trial":
-		medal = Medals.trial_tier(name, variant, rec)
-		for t in Medals.targets(name, variant):
-			labels.append(UI.fmt2(t) if t > 0.0 else "--")
-	else:
-		medal = Records.get_medal(rec_key(), "race")
-		labels = ["3rd", "2nd", "1st", "win +%d s" % int(Medals.RACE_TOP_GAP)]
-	ui.refresh_menu(track_idx, variant, mode, humans, rec, medal, labels)
+func _start_event(ev: Dictionary) -> void:
+	track_idx = ev["track"]
+	variant = ev["variant"]
+	mode = ev["mode"]
+	humans = ev["humans"]
+	new_race()
 
 func new_race() -> void:
 	track = TrackData.new(Defs.TRACKS[track_idx], variant)
 	view.build(track)
+	view.visible = true
 	race = Race.new(track, mode, humans)
 	ghost = Records.get_ghost(rec_key()) if mode == "trial" else []
 	view.setup_cars(race, mode == "trial")
@@ -176,8 +166,7 @@ func _process(delta: float) -> void:
 			_update_hud()
 	var me = race.cars[0] if race and race.cars.size() else null
 	sfx.set_engine(me.vel.length() if me else 0.0, phase == "race")
-	view.menu_cover_px = ui.menu_cover_px() if phase == "menu" else 0.0
-	if view.track:
+	if view.track and view.visible:
 		view.sync(race, phase, _ghost_sample(), _aims(), dt)
 		view.update_camera(race if phase != "menu" else null, phase, dt)
 
@@ -298,7 +287,7 @@ func _show_results() -> void:
 			var tg: float = Medals.targets(name, variant)[tier]
 			if tg > 0.0:
 				note += " Next medal (%s): %s." % [Medals.NAMES[tier], UI.fmt2(tg)]
-		ui.show_results("New record" if new_record else "Time trial", rows, note)
+		ui.show_results("New record" if new_record else "Time trial", rows, note, not ui.menu.next_event().is_empty())
 		return
 	var st := race.standings()
 	var winner = st[0]
@@ -321,7 +310,7 @@ func _show_results() -> void:
 		var tier := Medals.race_tier(place, lead) if me.finished else 0
 		if Records.award_medal(rec_key(), "race", tier):
 			rnote = "%s medal!  " % Medals.NAMES[tier - 1] + rnote
-	ui.show_results(title, rows2, rnote)
+	ui.show_results(title, rows2, rnote, not ui.menu.next_event().is_empty())
 
 # ---------------------------------------------------------------- demo / screenshots
 # Drives the real game with a scripted player so a headless run can capture frames.
@@ -336,10 +325,17 @@ func _run_demo(arg: String) -> void:
 	if out == "":
 		out = "user://"
 	await get_tree().process_frame
-	_preview()
-	await get_tree().create_timer(0.5).timeout
-	await RenderingServer.frame_post_draw
-	get_viewport().get_texture().get_image().save_png(out.path_join("menu.png"))
+	var shots := [["menu_home", func(): ui.menu.show_home()],
+		["menu_campaign", func(): ui.menu.kind = "campaign"; ui.menu.page = 0; ui.menu.show_list()],
+		["menu_attack", func(): ui.menu.kind = "attack"; ui.menu.page = 1; ui.menu.show_list()],
+		["menu_event", func():
+			ui.menu.ev = { "track": track_idx, "variant": variant, "mode": mode, "humans": humans, "kind": "attack" if mode == "trial" else "campaign", "idx": 1 }
+			ui.menu.show_event()]]
+	for sh in shots:
+		sh[1].call()
+		await get_tree().create_timer(0.3).timeout
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png(out.path_join(sh[0] + ".png"))
 	new_race()
 	var t := 0.0
 	var shot := 0
