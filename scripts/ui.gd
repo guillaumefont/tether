@@ -23,7 +23,9 @@ signal again_pressed
 signal menu_pressed
 signal next_pressed
 signal pause_pressed
-signal pause_action(what: String)   # resume | restart | exit | sound | ghost | effects
+signal pause_action(what: String)   # resume | restart | exit
+# music_vol / sfx_vol (0..100), ghost / effects (bool)
+signal option_changed(key: String, value)
 
 const MINIMAP := 110.0
 const C_PANEL := Color(0.035, 0.075, 0.082, 0.92)
@@ -127,6 +129,7 @@ func _ready() -> void:
 	menu.setup(self)
 	_build_results()
 	_build_pause()
+	_build_settings()
 	_build_loading()
 
 func _make_theme() -> Theme:
@@ -233,7 +236,8 @@ func layout() -> void:
 	results_panel.custom_minimum_size.x = minf(440.0, vp.x - 40.0)
 	if pause_panel:
 		pause_panel.custom_minimum_size.x = minf(440.0, vp.x - 40.0)
-		_pause_opts.columns = 1 if is_portrait() else 3
+	if settings_panel:
+		settings_panel.custom_minimum_size.x = minf(440.0, vp.x - 40.0)
 	if _load_box:
 		_place_loading()
 
@@ -303,42 +307,16 @@ var pause_btn: Button
 var pause_ov: Control
 var pause_panel: PanelContainer
 var _pause_sub: Label
-var _pause_opts: GridContainer
-var _opt_btns := {}
+var _pause_o: Dictionary
 
 func _build_pause() -> void:
 	var r := _overlay()
 	pause_ov = r[0]
 	pause_ov.color = Color(0.02, 0.06, 0.1, 0.55)
 	pause_panel = r[2]
-	var ps := StyleBoxFlat.new()
-	ps.bg_color = Color(0.05, 0.11, 0.17, 0.94)
-	ps.set_corner_radius_all(14)
-	ps.border_color = Color(0.86, 0.93, 0.98, 0.45)
-	ps.set_border_width_all(2)
-	ps.border_width_top = 5
-	ps.set_content_margin_all(20)
-	ps.shadow_color = Color(0, 0, 0, 0.5)
-	ps.shadow_size = 24
-	pause_panel.add_theme_stylebox_override("panel", ps)
+	_frost_panel(pause_panel)
 	var vb: VBoxContainer = r[1]
-	var top := HBoxContainer.new()
-	var logo := Art.Logo.new()
-	logo.custom_minimum_size = Vector2(52, 52)
-	logo.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top.add_theme_constant_override("separation", 12)
-	top.add_child(logo)
-	var tv := VBoxContainer.new()
-	tv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tv.add_theme_constant_override("separation", -2)
-	var pt := _label("PAUSED", 30, C_POST, f_display)
-	pt.autowrap_mode = TextServer.AUTOWRAP_OFF
-	tv.add_child(pt)
-	_pause_sub = _label("", 13, Art.C_ICE_DIM, f_bold)
-	tv.add_child(_pause_sub)
-	top.add_child(tv)
-	vb.add_child(top)
+	_pause_sub = _panel_header(vb, "PAUSED")
 	var resume := Button.new()
 	resume.text = "RESUME"
 	resume.custom_minimum_size = Vector2(0, 52)
@@ -350,19 +328,8 @@ func _build_pause() -> void:
 	restart.custom_minimum_size = Vector2(0, 46)
 	restart.pressed.connect(func(): pause_action.emit("restart"))
 	vb.add_child(restart)
-	_pause_opts = _grid(3)
-	for o in [["sound", "Sound"], ["ghost", "Ghost car"], ["effects", "Effects"]]:
-		var b := Button.new()
-		b.custom_minimum_size = Vector2(0, 44)
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.add_theme_font_size_override("font_size", 13)
-		b.clip_text = true
-		var key: String = o[0]
-		b.pressed.connect(func(): pause_action.emit(key))
-		b.set_meta("label", o[1])
-		_pause_opts.add_child(b)
-		_opt_btns[key] = b
-	vb.add_child(_pause_opts)
+	_pause_o = _make_options()
+	vb.add_child(_pause_o["box"])
 	var ex := Button.new()
 	ex.text = "Exit to menu"
 	ex.custom_minimum_size = Vector2(0, 46)
@@ -388,19 +355,182 @@ func _build_pause() -> void:
 	pause_btn.focus_mode = Control.FOCUS_NONE
 	pause_btn.pressed.connect(func(): pause_pressed.emit())
 
-# options: { sound: bool, ghost: bool or null when there is no ghost, effects: bool }
+# options: { music_vol, sfx_vol: 0..100, ghost: bool or null when there is no ghost, effects: bool }
 func show_pause(sub: String, opts: Dictionary) -> void:
 	_pause_sub.text = sub
-	set_pause_opts(opts)
+	set_options(_pause_o, opts)
 	pause_ov.visible = true
 
 func set_pause_opts(opts: Dictionary) -> void:
-	for key in _opt_btns:
-		var b: Button = _opt_btns[key]
+	set_options(_pause_o, opts)
+
+# ---------------------------------------------------------------- shared option controls
+# the frosted night-blue panel used by the pause and settings screens
+func _frost_panel(panel: PanelContainer) -> void:
+	var ps := StyleBoxFlat.new()
+	ps.bg_color = Color(0.05, 0.11, 0.17, 0.94)
+	ps.set_corner_radius_all(14)
+	ps.border_color = Color(0.86, 0.93, 0.98, 0.45)
+	ps.set_border_width_all(2)
+	ps.border_width_top = 5
+	ps.set_content_margin_all(20)
+	ps.shadow_color = Color(0, 0, 0, 0.5)
+	ps.shadow_size = 24
+	panel.add_theme_stylebox_override("panel", ps)
+
+# logo + big amber title + a small subtitle line (returned so it can be set later)
+func _panel_header(vb: VBoxContainer, title: String) -> Label:
+	var top := HBoxContainer.new()
+	var logo := Art.Logo.new()
+	logo.custom_minimum_size = Vector2(52, 52)
+	logo.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top.add_theme_constant_override("separation", 12)
+	top.add_child(logo)
+	var tv := VBoxContainer.new()
+	tv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	tv.add_theme_constant_override("separation", -2)
+	var pt := _label(title, 30, C_POST, f_display)
+	pt.autowrap_mode = TextServer.AUTOWRAP_OFF
+	tv.add_child(pt)
+	var sub := _label("", 13, Art.C_ICE_DIM, f_bold)
+	tv.add_child(sub)
+	top.add_child(tv)
+	vb.add_child(top)
+	return sub
+
+static var _knob: Texture2D
+static func _knob_tex() -> Texture2D:
+	if _knob == null:
+		var n := 26
+		var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+		var c := (n - 1) / 2.0
+		for y in n:
+			for x in n:
+				var d := Vector2(x - c, y - c).length()
+				var a := clampf(c - d + 0.5, 0.0, 1.0)
+				var col := Art.C_ICE if d < c - 3.0 else Art.C_AMBER
+				img.set_pixel(x, y, Color(col, a))
+		_knob = ImageTexture.create_from_image(img)
+	return _knob
+
+func _volume_row(key: String, title: String) -> Array:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	var l := _label(title, 15, C_FG, f_bold)
+	l.custom_minimum_size.x = 64
+	l.autowrap_mode = TextServer.AUTOWRAP_OFF
+	row.add_child(l)
+	var sl := HSlider.new()
+	sl.min_value = 0
+	sl.max_value = 100
+	sl.step = 5
+	sl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	sl.custom_minimum_size = Vector2(120, 36)
+	sl.focus_mode = Control.FOCUS_NONE
+	var track := StyleBoxFlat.new()
+	track.bg_color = Color(0.86, 0.93, 0.98, 0.16)
+	track.set_corner_radius_all(4)
+	track.content_margin_top = 4; track.content_margin_bottom = 4
+	var fill := track.duplicate()
+	fill.bg_color = Art.C_ICE_DIM
+	var fill_hi := track.duplicate()
+	fill_hi.bg_color = Art.C_ICE
+	sl.add_theme_stylebox_override("slider", track)
+	sl.add_theme_stylebox_override("grabber_area", fill)
+	sl.add_theme_stylebox_override("grabber_area_highlight", fill_hi)
+	sl.add_theme_icon_override("grabber", _knob_tex())
+	sl.add_theme_icon_override("grabber_highlight", _knob_tex())
+	row.add_child(sl)
+	var v := _label("", 14, Art.C_ICE_DIM, f_bold)
+	v.custom_minimum_size.x = 46
+	v.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	v.autowrap_mode = TextServer.AUTOWRAP_OFF
+	row.add_child(v)
+	sl.value_changed.connect(func(x):
+		v.text = "Off" if x <= 0.0 else "%d%%" % int(x)
+		option_changed.emit(key, int(x)))
+	return [row, sl, v]
+
+# music and sound sliders, then Ghost car / Effects toggles
+func _make_options() -> Dictionary:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	var o := { "box": box, "sliders": {}, "toggles": {} }
+	for s in [["music_vol", "Music"], ["sfx_vol", "Sound"]]:
+		var r := _volume_row(s[0], s[1])
+		box.add_child(r[0])
+		o["sliders"][s[0]] = [r[1], r[2]]
+	var grid := _grid(2)
+	for t in [["ghost", "Ghost car"], ["effects", "Effects"]]:
+		var b := Button.new()
+		b.custom_minimum_size = Vector2(0, 44)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.add_theme_font_size_override("font_size", 13)
+		b.clip_text = true
+		b.focus_mode = Control.FOCUS_NONE
+		var key: String = t[0]
+		b.set_meta("label", t[1])
+		b.pressed.connect(func():
+			var on: bool = not b.get_meta("on")
+			_set_toggle(b, on)
+			option_changed.emit(key, on))
+		grid.add_child(b)
+		o["toggles"][key] = b
+	box.add_child(grid)
+	o["grid"] = grid
+	return o
+
+func _set_toggle(b: Button, on: bool) -> void:
+	b.set_meta("on", on)
+	b.text = "%s: %s" % [b.get_meta("label"), "On" if on else "Off"]
+
+func set_options(o: Dictionary, opts: Dictionary) -> void:
+	for key in o["sliders"]:
+		var sl: HSlider = o["sliders"][key][0]
+		var v: Label = o["sliders"][key][1]
+		sl.set_value_no_signal(opts.get(key, 100))
+		v.text = "Off" if sl.value <= 0.0 else "%d%%" % int(sl.value)
+	var shown := 0
+	for key in o["toggles"]:
+		var b: Button = o["toggles"][key]
 		b.visible = opts.get(key) != null
 		if b.visible:
-			b.text = "%s: %s" % [b.get_meta("label"), "On" if opts[key] else "Off"]
-	_pause_opts.columns = 1 if is_portrait() else 3
+			_set_toggle(b, opts[key])
+			shown += 1
+	o["grid"].columns = maxi(1, shown)
+
+# ---------------------------------------------------------------- settings (home screen)
+var settings_ov: Control
+var settings_panel: PanelContainer
+var _settings_o: Dictionary
+
+func _build_settings() -> void:
+	var r := _overlay()
+	settings_ov = r[0]
+	settings_ov.color = Color(0.02, 0.06, 0.1, 0.55)
+	settings_panel = r[2]
+	_frost_panel(settings_panel)
+	var vb: VBoxContainer = r[1]
+	_panel_header(vb, "SETTINGS").text = "Saved on this device"
+	_settings_o = _make_options()
+	vb.add_child(_settings_o["box"])
+	var done := Button.new()
+	done.text = "DONE"
+	done.custom_minimum_size = Vector2(0, 52)
+	_style_go(done)
+	done.pressed.connect(hide_settings)
+	vb.add_child(done)
+	settings_ov.visible = false
+
+func show_settings(opts: Dictionary) -> void:
+	set_options(_settings_o, opts)
+	settings_ov.visible = true
+
+func hide_settings() -> void:
+	settings_ov.visible = false
 
 func hide_pause() -> void:
 	pause_ov.visible = false
@@ -489,6 +619,7 @@ func hide_loading() -> void:
 # ---------------------------------------------------------------- menu state
 func show_menu() -> void:
 	pause_ov.visible = false
+	settings_ov.visible = false
 	menu.visible = true
 	menu.refresh()
 	results.visible = false

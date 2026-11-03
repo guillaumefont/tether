@@ -12,7 +12,7 @@ const Campaign = preload("res://scripts/campaign.gd")
 const Art = preload("res://scripts/menu_art.gd")
 
 signal start_event(ev: Dictionary)   # { track, variant, mode, humans, kind, idx }
-signal sound_toggled(on: bool)
+signal settings_pressed
 
 # translucent night-blue wash: the live snowy race behind the menu shows through
 const C_BG_TOP := Color(0.03, 0.09, 0.15, 0.62)
@@ -32,7 +32,6 @@ var page := 0
 var ev := {}                # the event shown on the Event screen
 var _maps := {}             # track index -> TrackData for miniatures
 var body: Control
-var sound_on := true
 
 func setup(owner_ui) -> void:
 	ui = owner_ui
@@ -144,14 +143,11 @@ func show_home() -> void:
 	var gap := Control.new()
 	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(gap)
-	var snd := _btn("SOUND ON" if sound_on else "SOUND OFF", 40, 12)
-	snd.custom_minimum_size.x = 100
-	snd.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	snd.pressed.connect(func():
-		sound_on = not sound_on
-		snd.text = "SOUND ON" if sound_on else "SOUND OFF"
-		sound_toggled.emit(sound_on))
-	top.add_child(snd)
+	var gear := _btn("SETTINGS", 40, 12)
+	gear.custom_minimum_size.x = 100
+	gear.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	gear.pressed.connect(func(): settings_pressed.emit())
+	top.add_child(gear)
 	vb.add_child(top)
 	var sub: BoxContainer = VBoxContainer.new() if tall else HBoxContainer.new()
 	var tag: Label = ui._label("Hold to hook the tower, let go to slide out.", 15, Art.C_ICE, ui.f_bold)

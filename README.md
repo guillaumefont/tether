@@ -19,7 +19,7 @@ ported 1:1, and the tracks build to the same geometry (checked against the proto
 - **Modes:** Time trial (default, solo vs your ghost, sets records) and Race (vs AI rivals, 1 or 2 players on one device, split by screen halves).
 - **Variants:** Standard, Reverse, Obstacles (breakable posts, +1 s each), Collect (gem line, +0.25 s per gem missed over the run).
 - **Tracks:** 17 original layouts, from Lasso to Twin Bend, with bridges where the road crosses itself and jumps on some.
-- **Music:** an original soundtrack (menu theme plus two race tracks, alternating by track), composed and synthesised in code by `tools/music/compose.py`. The Sound switch mutes music and effects together.
+- **Music:** an original soundtrack (menu theme plus two race tracks, alternating by track), composed and synthesised in code by `tools/music/compose.py`. Music and sound effects have separate volume sliders (Settings on the home screen, and the pause menu), saved in `user://settings.cfg`.
 - **Records:** best lap (or Collect score) and the ghost lap are saved per track and variant in `user://records.cfg`. Races never set records.
 
 ## Code map

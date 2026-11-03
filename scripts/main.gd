@@ -46,12 +46,10 @@ func _ready() -> void:
 	add_child(sfx)
 	ui = UI.new()
 	add_child(ui)
-	sfx.enabled = Settings.get_opt("sound")
-	ui.menu.sound_on = sfx.enabled
+	sfx.set_volumes(Settings.get_opt("music_vol"), Settings.get_opt("sfx_vol"))
 	view.set_effects(Settings.get_opt("effects"))
-	ui.menu.sound_toggled.connect(func(on):
-		sfx.enabled = on
-		Settings.set_opt("sound", on))
+	ui.option_changed.connect(_option_changed)
+	ui.menu.settings_pressed.connect(func(): ui.show_settings(_options(true)))
 	ui.pause_pressed.connect(_toggle_pause)
 	ui.pause_action.connect(_pause_action)
 	ui.menu.start_event.connect(_start_event)
@@ -149,7 +147,25 @@ func _set_paused(on: bool) -> void:
 		ui.hide_pause()
 
 func _pause_opts() -> Dictionary:
-	return { "sound": sfx.enabled, "ghost": Settings.get_opt("ghost") if mode == "trial" else null, "effects": Settings.get_opt("effects") }
+	return _options(mode == "trial")
+
+# current option values for the pause / settings screens (no ghost toggle outside time trials)
+func _options(with_ghost: bool) -> Dictionary:
+	return {
+		"music_vol": Settings.get_opt("music_vol"),
+		"sfx_vol": Settings.get_opt("sfx_vol"),
+		"ghost": Settings.get_opt("ghost") if with_ghost else null,
+		"effects": Settings.get_opt("effects"),
+	}
+
+# a slider moved or a toggle flipped, from the pause menu or the settings screen
+func _option_changed(key: String, value) -> void:
+	Settings.set_opt(key, value)
+	match key:
+		"music_vol", "sfx_vol":
+			sfx.set_volumes(Settings.get_opt("music_vol"), Settings.get_opt("sfx_vol"))
+		"effects":
+			view.set_effects(value)
 
 func _pause_action(what: String) -> void:
 	match what:
@@ -161,18 +177,6 @@ func _pause_action(what: String) -> void:
 		"exit":
 			_set_paused(false)
 			_with_loading("", _to_menu)
-		"sound":
-			sfx.enabled = not sfx.enabled
-			ui.menu.sound_on = sfx.enabled
-			Settings.set_opt("sound", sfx.enabled)
-		"ghost":
-			Settings.set_opt("ghost", not Settings.get_opt("ghost"))
-		"effects":
-			var on: bool = not Settings.get_opt("effects")
-			Settings.set_opt("effects", on)
-			view.set_effects(on)
-	if paused:
-		ui.set_pause_opts(_pause_opts())
 
 # Android back button / Esc: pause or resume a race, step back through the menus
 func _go_back() -> void:
@@ -183,6 +187,9 @@ func _go_back() -> void:
 			_toggle_pause()
 		elif ui.results.visible:
 			_with_loading("", _to_menu)
+		return
+	if ui.settings_ov.visible:
+		ui.hide_settings()
 		return
 	if not ui.menu.go_back():
 		get_tree().quit()
@@ -485,6 +492,8 @@ func _run_demo(arg: String) -> void:
 		out = "user://"
 	await get_tree().process_frame
 	var shots := [["menu_home", func(): ui.loading.visible = false; ui.menu.show_home()],
+		["settings", func(): ui.show_settings(_options(true))],
+		["menu_home_again", func(): ui.hide_settings()],
 		["menu_campaign", func(): ui.menu.kind = "campaign"; ui.menu.page = 0; ui.menu.show_list()],
 		["menu_attack", func(): ui.menu.kind = "attack"; ui.menu.page = 1; ui.menu.show_list()],
 		["loading", func(): ui.show_loading(Defs.TRACKS[track_idx]["name"]); ui.set_loading_progress(0.6)],
