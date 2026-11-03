@@ -20,6 +20,12 @@ const RELEASE_KICK := 1.05  # slingshot on release
 const JUMP_MIN := 360.0     # slower than this at the ramp and you drop into the gap
 const OBS_PEN := 1.0        # seconds per post hit (Obstacles)
 const TOKEN_PEN := 0.25     # seconds per gem missed over the whole run (Collect)
+# Touching the road edge is punished: a hit keeps WALL_KEEP of the speed (scaled down
+# further for head-on hits) and every moment spent rubbing along the rail bleeds speed:
+# the throttle cuts out and the car drags.
+const WALL_KEEP := 0.82
+const WALL_HEADON := 0.18   # extra loss for a square hit (vn ~ speed)
+const SCRAPE_DRAG := 0.8    # 1/s speed decay while rubbing the edge (no throttle then)
 const GAP := TrackData.GAP
 const SUBSTEPS := 4
 
@@ -46,6 +52,7 @@ class Car:
 	var cooldown := 0.0
 	var wall_t := 0.0
 	var wall_dir := 0.0
+	var scrape := 0.0   # > 0 while touching the road edge
 	var slip := 0.0
 	var used_anchor := -1
 	var air := 0.0
@@ -195,6 +202,7 @@ func step_car(c: Car, dt: float) -> void:
 	if c.air > 0.0: c.air -= dt
 	if c.cooldown > 0.0: c.cooldown -= dt
 	if c.wall_t > 0.0: c.wall_t -= dt
+	if c.scrape > 0.0: c.scrape -= dt
 	if c.ice > 0.0: c.ice -= dt
 	var cap := MAX * c.skill
 	var sp := c.vel.length()
@@ -232,7 +240,9 @@ func step_car(c: Car, dt: float) -> void:
 		var l := -c.vel.x * hd.y + c.vel.y * hd.x
 		var grip := 6.0 if c.wall_t > 0.0 else GRIP * ((0.2 + 0.8 * (1.0 - c.ice / ICE_TIME)) if c.ice > 0.0 else 1.0)
 		l *= exp(-grip * dt)
-		if f < cap:
+		if c.scrape > 0.0:
+			pass  # rubbing the rail: no drive
+		elif f < cap:
 			f = minf(cap, f + ACC * dt)
 		else:
 			f -= (f - cap) * 0.9 * dt
@@ -253,13 +263,24 @@ func step_car(c: Car, dt: float) -> void:
 	# walls
 	var nr := track.nearest(c.pos, c.seg)
 	var lim := HW - CR
-	if nr["d"] > lim:
-		var nv: Vector2 = (c.pos - nr["p"]) / nr["d"]
-		c.pos = nr["p"] + nv * lim
+	if nr["d"] > lim - 1.0:
+		var nv: Vector2 = (c.pos - nr["p"]) / maxf(0.001, nr["d"])
+		if nr["d"] > lim:
+			c.pos = nr["p"] + nv * lim
 		var vn := c.vel.dot(nv)
+		# rubbing along the rail: steady speed loss and sparks
+		c.vel *= exp(-SCRAPE_DRAG * dt)
+		c.scrape = 0.1
+		var spd := c.vel.length()
+		if spd > 250.0 and randf() < 0.25:
+			events.append({ "t": "wall", "pos": c.pos + nv * CR, "n": nv, "count": 1, "s": c.s })
 		if vn > 0.0:
 			c.vel -= 1.35 * vn * nv
-			c.vel *= 0.9
+			# a real knock costs more the squarer it is; a graze only the old 10%
+			if vn > 40.0:
+				c.vel *= WALL_KEEP - WALL_HEADON * clampf(vn / maxf(1.0, spd), 0.0, 1.0)
+			else:
+				c.vel *= 0.9
 			c.wall_t = 0.3
 			# slide along the wall in the racing direction
 			var fd: Vector2 = track.seg_dir[(int(nr["i"]) + 1) % track.n]

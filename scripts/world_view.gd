@@ -17,14 +17,14 @@ const TOWER_H := 90.0
 const RAMP_LEN := 130.0
 const RAMP_H := 28.0
 const FOV := 40.0
-const PITCH := deg_to_rad(56.0)
+const PITCH := deg_to_rad(68.0)   # fairly top-down so lines through bends are easy to judge
 
-const COL_INFIELD := Color("#17393b")
-const COL_DOTS := Color("#20494b")
-const COL_ASPHALT := Color("#41464f")
+const COL_INFIELD := Color("#c9d6e0")   # snow
+const COL_DOTS := Color("#b4c4d1")      # drift shading in the snow
+const COL_ASPHALT := Color("#353e49")   # cold, icy asphalt
 const COL_CHALK := Color("#ece6d8")
 const COL_KERB := Color("#d4452f")
-const COL_RAIL := Color("#d9d2c2")
+const COL_RAIL := Color("#e6edf2")
 const COL_DECK := Color("#7a5a3a")
 const COL_DECK_LIGHT := Color("#a07a50")
 const COL_POST := Color("#f2b134")
@@ -74,7 +74,8 @@ func _ready() -> void:
 
 	light = DirectionalLight3D.new()
 	light.rotation = Vector3(deg_to_rad(-55), deg_to_rad(-35), 0)
-	light.light_energy = 1.15
+	light.light_energy = 1.0
+	light.light_color = Color("#fff3e4")
 	light.shadow_enabled = true
 	light.directional_shadow_max_distance = 60.0
 	light.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
@@ -82,15 +83,15 @@ func _ready() -> void:
 
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = COL_INFIELD.darkened(0.35)
+	env.background_color = COL_INFIELD.darkened(0.1)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("#b9c9d6")
-	env.ambient_light_energy = 0.55
+	env.ambient_light_color = Color("#a9c2dc")
+	env.ambient_light_energy = 0.6
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.fog_enabled = false
 	env.glow_enabled = true      # soft bloom on the emissive rotors and gems
 	env.glow_intensity = 0.35
-	env.glow_hdr_threshold = 0.9
+	env.glow_hdr_threshold = 1.3  # high enough that sunlit snow does not bloom
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
@@ -159,12 +160,14 @@ func build(tr: TrackData) -> void:
 	parts.clear()
 	_build_ground()
 	_build_road()
+	_build_scenery()
 	_build_jumps()
 	_build_start()
 	_build_towers()
 	_build_posts()
 	_build_gems()
 	_build_fx()
+	_build_snowfall()
 
 func _build_ground() -> void:
 	var b := track.bounds
@@ -181,9 +184,15 @@ uniform vec3 far_col : source_color;
 uniform vec3 near_col : source_color;
 varying vec3 wp;
 void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 p) {
+	vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
 void fragment() {
-	vec2 g = fract(wp.xz / 0.8);
-	float d = step(g.x, 0.05) * step(g.y, 0.05);
+	// soft wind-blown drifts plus a faint sparkle
+	float n = vnoise(wp.xz * 0.35) * 0.65 + vnoise(wp.xz * 1.3) * 0.35;
+	float d = smoothstep(0.4, 0.8, n) + step(0.985, hash(floor(wp.xz * 9.0))) * 0.25;
 	// soft gradient: lighter towards the bottom-centre of the screen, darker at the far edge
 	vec2 uv = SCREEN_UV;
 	float v = clamp(uv.y * 0.9 + 0.1, 0.0, 1.0);
@@ -212,7 +221,9 @@ class Strip:
 	func _init() -> void:
 		st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	# quad a-b-c-d (in order round the edge), flat normal pointing towards `hint`
-	func quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, col: Color, hint: Vector3) -> void:
+	# uv.x = 1 marks the asphalt (the road shader adds ice and snowy edges there),
+	# uv.y = side of the lane (+1 / -1)
+	func quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, col: Color, hint: Vector3, road := false) -> void:
 		var nrm := (b - a).cross(d - a)
 		if nrm.length_squared() < 1e-12:
 			nrm = (c - b).cross(a - b)
@@ -221,8 +232,10 @@ class Strip:
 			nrm = -nrm
 		st.set_color(col)
 		st.set_normal(nrm)
-		for v in [a, b, c, a, c, d]:
-			st.add_vertex(v)
+		var uvs := [Vector2(1, 1), Vector2(1, 1), Vector2(1, -1), Vector2(1, -1)] if road else [Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO]
+		for k in [0, 1, 2, 0, 2, 3]:
+			st.set_uv(uvs[k])
+			st.add_vertex([a, b, c, d][k])
 
 func _road_samples() -> Array:
 	# uniform samples plus exact jump-gap boundaries
@@ -275,7 +288,7 @@ func _build_road() -> void:
 		var P := func(c: Vector2, n: Vector2, off: float, h: float) -> Vector3:
 			return w3(c + n * off, h)
 		# asphalt
-		road.quad(P.call(ca, na, HW, ha), P.call(cb, nb, HW, hb), P.call(cb, nb, -HW, hb), P.call(ca, na, -HW, ha), COL_ASPHALT, up)
+		road.quad(P.call(ca, na, HW, ha), P.call(cb, nb, HW, hb), P.call(cb, nb, -HW, hb), P.call(ca, na, -HW, ha), COL_ASPHALT, up, true)
 		# centre dashes (40 on, 50 off)
 		if fposmod(smid, 90.0) < 40.0:
 			road.quad(P.call(ca, na, 2.5, ha + 0.4), P.call(cb, nb, 2.5, hb + 0.4), P.call(cb, nb, -2.5, hb + 0.4), P.call(ca, na, -2.5, ha + 0.4), Color(COL_CHALK, 1.0).darkened(0.55), up)
@@ -311,8 +324,288 @@ func _build_road() -> void:
 			pillar_acc = 260.0
 	var mi := MeshInstance3D.new()
 	mi.mesh = road.st.commit()
+	mi.material_override = _road_mat()
+	static_root.add_child(mi)
+
+# Icy asphalt: glossy ice patches from a cheap value noise, and packed snow creeping
+# in from both edges (it marks where the rail starts to cost speed).
+var _road_m: ShaderMaterial
+func _road_mat() -> ShaderMaterial:
+	if _road_m:
+		return _road_m
+	var sh := Shader.new()
+	sh.code = """
+shader_type spatial;
+render_mode cull_disabled;
+varying vec3 wp;
+void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 p) {
+	vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+void fragment() {
+	vec3 c = COLOR.rgb;
+	float rough = 0.9;
+	if (UV.x > 0.5) {
+		vec2 q = wp.xz;
+		float n = vnoise(q * 0.6) * 0.7 + vnoise(q * 2.0) * 0.3;
+		float ice = smoothstep(0.52, 0.66, n);
+		// long polished streaks inside the patches
+		float streak = smoothstep(0.7, 0.95, vnoise(vec2(q.x * 3.0 + q.y * 0.4, q.y * 3.0 - q.x * 0.4)));
+		c = mix(c, vec3(0.48, 0.60, 0.70), ice * 0.5);
+		c = mix(c, vec3(0.75, 0.84, 0.92), ice * streak * 0.25);
+		float edge = abs(UV.y) + (vnoise(q * 3.0) - 0.5) * 0.12;
+		float snow = smoothstep(0.82, 0.95, edge);
+		c = mix(c, vec3(0.86, 0.91, 0.95), snow);
+		rough = mix(mix(0.8, 0.25, ice), 0.95, snow);
+	}
+	ALBEDO = c;
+	ROUGHNESS = rough;
+	SPECULAR = 0.5;
+}
+"""
+	_road_m = ShaderMaterial.new()
+	_road_m.shader = sh
+	return _road_m
+
+# ---------------------------------------------------------------- winter scenery
+# Low-poly snowy pines, shacks and rocks, all instanced (one draw call per kind) and
+# placed off the road from a seeded generator so each track always looks the same.
+const SCN_CELL := 40.0
+const SCN_MARGIN := 2000.0
+const COL_PINE := Color("#2f5a4a")
+const COL_PINE_DARK := Color("#244538")
+const COL_SNOW := Color("#eef3f7")
+const COL_TRUNK := Color("#5b4636")
+const COL_WOOD := Color("#7d5a3e")
+const COL_ROCK := Color("#7d8791")
+
+# one flat-shaded cone frustum band, `sides` faces
+static func _band(st: SurfaceTool, y0: float, y1: float, r0: float, r1: float, sides: int, col: Color, rot := 0.0) -> void:
+	for k in sides:
+		var a0 := rot + TAU * k / sides
+		var a1 := rot + TAU * (k + 1) / sides
+		var p0 := Vector3(cos(a0) * r0, y0, sin(a0) * r0)
+		var p1 := Vector3(cos(a1) * r0, y0, sin(a1) * r0)
+		var p2 := Vector3(cos(a1) * r1, y1, sin(a1) * r1)
+		var p3 := Vector3(cos(a0) * r1, y1, sin(a0) * r1)
+		var nrm := (p1 - p0).cross(p3 - p0) if r1 > 0.001 else (p1 - p0).cross(p2 - p0)
+		nrm = -nrm.normalized()
+		if nrm.dot(Vector3(cos((a0 + a1) * 0.5), 0.0, sin((a0 + a1) * 0.5))) < 0.0:
+			nrm = -nrm
+		st.set_color(col)
+		st.set_normal(nrm)
+		for v in [p0, p1, p2, p0, p2, p3]:
+			st.add_vertex(v * U)
+
+# a pine: trunk and stacked tiers, each tier green below and snow-capped on top
+static func _pine_mesh(tiers: int, h: float, r: float) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_band(st, 0.0, h * 0.2, r * 0.16, r * 0.13, 5, COL_TRUNK)
+	var y := h * 0.14
+	var th := (h - y) / tiers * 1.35
+	for t in tiers:
+		var rr := r * (1.0 - 0.22 * t)
+		var y_top := y + th
+		var rot := 0.5 * t
+		var snow_y := y + th * 0.55
+		var r_mid := rr * 0.45
+		_band(st, y, snow_y, rr, r_mid, 7, COL_PINE if t % 2 == 0 else COL_PINE_DARK, rot)
+		_band(st, snow_y - 0.01, y_top, r_mid * 1.06, 0.0, 7, COL_SNOW, rot)
+		# a white snow rim on the lower edge of each tier
+		_band(st, y + th * 0.02, y - th * 0.06, rr * 0.9, rr * 1.04, 7, COL_SNOW.darkened(0.05), rot)
+		y += th * 0.62
+	return st.commit()
+
+# a log shack: walls, snow-laden gable roof, door, window, chimney. Long side along x.
+static func _shack_mesh() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var hx := 70.0; var hz := 50.0; var wall := 55.0; var ridge := 100.0; var eave := 14.0
+	var faces := func(pts: Array, col: Color) -> void:
+		var a: Vector3 = pts[0]; var b: Vector3 = pts[1]; var c: Vector3 = pts[2]
+		var nrm := (b - a).cross(c - a).normalized()
+		st.set_color(col)
+		st.set_normal(nrm)
+		for k in range(1, pts.size() - 1):
+			for v in [pts[0], pts[k], pts[k + 1]]:
+				st.add_vertex(v * U)
+	# walls (counter-clockwise seen from outside)
+	faces.call([Vector3(-hx, 0, hz), Vector3(hx, 0, hz), Vector3(hx, wall, hz), Vector3(-hx, wall, hz)], COL_WOOD)
+	faces.call([Vector3(hx, 0, -hz), Vector3(-hx, 0, -hz), Vector3(-hx, wall, -hz), Vector3(hx, wall, -hz)], COL_WOOD.darkened(0.15))
+	faces.call([Vector3(hx, 0, hz), Vector3(hx, 0, -hz), Vector3(hx, wall, -hz), Vector3(hx, ridge - 4, 0), Vector3(hx, wall, hz)], COL_WOOD.darkened(0.08))
+	faces.call([Vector3(-hx, 0, -hz), Vector3(-hx, 0, hz), Vector3(-hx, wall, hz), Vector3(-hx, ridge - 4, 0), Vector3(-hx, wall, -hz)], COL_WOOD.darkened(0.2))
+	# door and window on the front
+	faces.call([Vector3(-20, 0, hz + 0.5), Vector3(4, 0, hz + 0.5), Vector3(4, 38, hz + 0.5), Vector3(-20, 38, hz + 0.5)], Color("#a8342a"))
+	faces.call([Vector3(22, 22, hz + 0.5), Vector3(48, 22, hz + 0.5), Vector3(48, 42, hz + 0.5), Vector3(22, 42, hz + 0.5)], Color("#ffd98a"))
+	# roof: snow on top, dark wood edge under the eaves
+	var ex := hx + eave; var ez := hz + eave
+	var shingle := Color("#6e3f2c")
+	for side: float in [1.0, -1.0]:
+		var lo := Vector3(0, wall - 8, ez * side)
+		var mid := lo.lerp(Vector3(0, ridge, 0), 0.3)
+		var x0 := -ex * side; var x1 := ex * side
+		# bare shingles along the eave, snow above
+		faces.call([Vector3(x0, lo.y, lo.z), Vector3(x1, lo.y, lo.z), Vector3(x1, mid.y, mid.z), Vector3(x0, mid.y, mid.z)], shingle)
+		faces.call([Vector3(x0, mid.y + 0.5, mid.z), Vector3(x1, mid.y + 0.5, mid.z), Vector3(x1, ridge + 1, 0), Vector3(x0, ridge + 1, 0)], COL_SNOW)
+		faces.call([Vector3(x1, lo.y - 6, lo.z), Vector3(x0, lo.y - 6, lo.z), Vector3(x0, lo.y, lo.z), Vector3(x1, lo.y, lo.z)], Color("#3b281c"))
+	# chimney with a snow cap
+	_band(st, wall + 20, ridge + 22, 9.0, 9.0, 4, Color("#6b6f75"), PI / 4)
+	st.set_color(COL_SNOW)
+	_band(st, ridge + 22, ridge + 26, 11.0, 0.0, 4, COL_SNOW, PI / 4)
+	return st.commit()
+
+# a snow-topped boulder: a squashed low-poly dome
+static func _rock_mesh() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_band(st, -4.0, 16.0, 40.0, 33.0, 5, COL_ROCK)
+	_band(st, 16.0, 28.0, 33.0, 16.0, 5, COL_ROCK.lightened(0.12), 0.3)
+	_band(st, 27.0, 33.0, 17.0, 0.0, 5, COL_SNOW, 0.3)
+	return st.commit()
+
+# instances go into ~16 m tiles so the camera only draws (and shadows) the nearby ones
+func _multi(mesh: Mesh, xforms: Array) -> void:
+	var tiles := {}
+	for xf: Transform3D in xforms:
+		var key := Vector2i(floori(xf.origin.x / 16.0), floori(xf.origin.z / 16.0))
+		if not tiles.has(key):
+			tiles[key] = []
+		tiles[key].append(xf)
+	for key in tiles:
+		_multi_tile(mesh, tiles[key])
+
+func _multi_tile(mesh: Mesh, xforms: Array) -> void:
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = mesh
+	mm.instance_count = xforms.size()
+	for k in xforms.size():
+		mm.set_instance_transform(k, xforms[k])
+	var mi := MultiMeshInstance3D.new()
+	mi.multimesh = mm
 	mi.material_override = _vert_mat
 	static_root.add_child(mi)
+
+func _build_scenery() -> void:
+	var b := track.bounds.grow(SCN_MARGIN)
+	var gw := ceili(b.size.x / SCN_CELL)
+	var gh := ceili(b.size.y / SCN_CELL)
+	# occupancy: 1 = keep clear (road, rails, tower infields), 2 = taken by a prop
+	var occ := PackedByteArray()
+	occ.resize(gw * gh)
+	var mark := func(p: Vector2, r: float, v: int) -> void:
+		var x0 := maxi(0, floori((p.x - r - b.position.x) / SCN_CELL))
+		var x1 := mini(gw - 1, floori((p.x + r - b.position.x) / SCN_CELL))
+		var y0 := maxi(0, floori((p.y - r - b.position.y) / SCN_CELL))
+		var y1 := mini(gh - 1, floori((p.y + r - b.position.y) / SCN_CELL))
+		for gy in range(y0, y1 + 1):
+			for gx in range(x0, x1 + 1):
+				var cc := b.position + Vector2(gx + 0.5, gy + 0.5) * SCN_CELL
+				if cc.distance_squared_to(p) <= r * r and occ[gy * gw + gx] < v:
+					occ[gy * gw + gx] = v
+	var free := func(p: Vector2) -> bool:
+		var gx := floori((p.x - b.position.x) / SCN_CELL)
+		var gy := floori((p.y - b.position.y) / SCN_CELL)
+		return gx >= 0 and gy >= 0 and gx < gw and gy < gh and occ[gy * gw + gx] == 0
+	var clear_r := HW + KERB_W + RAIL_W + 45.0
+	var s := 0.0
+	while s < track.L:
+		mark.call(track.point_at(s)["pos"], clear_r, 1)
+		s += 30.0
+	for a in track.anchors:
+		mark.call(a.pos, TrackData.TURN_R + 10.0, 1)   # keep the infield under the tethers clear
+	var q0 := track.point_at(track.start_s)
+	mark.call(q0["pos"], 320.0, 1)
+
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(String(track.def.get("name", "")))
+	var noise := FastNoiseLite.new()
+	noise.seed = rng.randi()
+	noise.frequency = 0.0011
+	var pines_a: Array = []
+	var pines_b: Array = []
+	var shacks: Array = []
+	var rocks: Array = []
+	var basis_for := func(yaw: float, sc: float) -> Basis:
+		return Basis(Vector3.UP, yaw).scaled(Vector3.ONE * sc)
+
+	# shacks first, a few along the outside of the road, facing it
+	var n_shacks := clampi(int(track.L / 2600.0), 2, 6)
+	var tries := 0
+	while shacks.size() < n_shacks and tries < 60:
+		tries += 1
+		var q := track.point_at(rng.randf() * track.L)
+		var nrm := TrackData.perp(q["dir"]) * (1.0 if rng.randf() < 0.5 else -1.0)
+		var p: Vector2 = q["pos"] + nrm * (clear_r + 130.0 + rng.randf() * 120.0)
+		var ok := true
+		for o in [Vector2.ZERO, Vector2(120, 0), Vector2(-120, 0), Vector2(0, 120), Vector2(0, -120)]:
+			if not free.call(p + o):
+				ok = false
+		if not ok:
+			continue
+		mark.call(p, 170.0, 2)
+		# front (+z) faces the road
+		var yaw := -(-nrm).angle() + PI / 2
+		shacks.append(Transform3D(basis_for.call(yaw, 1.35), w3(p)))
+
+	# forest: jittered grid, kept where the noise says "woods", thinner far out
+	var step := 120.0
+	var y := b.position.y
+	while y < b.end.y:
+		var x := b.position.x
+		while x < b.end.x:
+			var p := Vector2(x + rng.randf() * step, y + rng.randf() * step)
+			x += step
+			if not free.call(p):
+				continue
+			var n := noise.get_noise_2d(p.x, p.y)
+			var r := rng.randf()
+			if n > 0.05 and r < 0.35 + n:
+				var sc := 0.75 + rng.randf() * 0.6
+				var xf := Transform3D(basis_for.call(rng.randf() * TAU, sc), w3(p))
+				(pines_a if rng.randf() < 0.6 else pines_b).append(xf)
+				mark.call(p, 30.0 * sc, 2)
+			elif r < 0.035:
+				var rs := 0.6 + rng.randf() * 0.8
+				rocks.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(rs * 1.4, rs, rs * 0.85)), w3(p)))
+				mark.call(p, 40.0, 2)
+		y += step
+	_multi(_pine_mesh(3, 150.0, 48.0), pines_a)
+	_multi(_pine_mesh(4, 210.0, 56.0), pines_b)
+	_multi(_shack_mesh(), shacks)
+	_multi(_rock_mesh(), rocks)
+
+# light snowfall around the camera focus: one CPU particle system, ~150 tiny quads
+var snowfall: CPUParticles3D
+func _build_snowfall() -> void:
+	snowfall = CPUParticles3D.new()
+	snowfall.amount = 150
+	snowfall.lifetime = 4.5
+	snowfall.preprocess = 4.5
+	snowfall.local_coords = false
+	snowfall.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	snowfall.emission_box_extents = Vector3(14, 0.2, 9)
+	snowfall.direction = Vector3(0.35, -1.0, 0.15)
+	snowfall.spread = 12.0
+	snowfall.initial_velocity_min = 0.9
+	snowfall.initial_velocity_max = 1.5
+	snowfall.gravity = Vector3(0, -0.3, 0)
+	snowfall.scale_amount_min = 0.6
+	snowfall.scale_amount_max = 1.2
+	var q := QuadMesh.new()
+	q.size = Vector2(0.1, 0.1)
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	m.albedo_color = Color(1, 1, 1, 0.85)
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	q.material = m
+	snowfall.mesh = q
+	snowfall.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	dyn_root.add_child(snowfall)
 
 func _build_jumps() -> void:
 	for j in track.jumps:
@@ -931,6 +1224,11 @@ func update_camera(race: Race, phase: String, dt: float, snap := false) -> void:
 	var focus := Vector3(cam_t.x, cam_t.y, cam_t.z) * U
 	var off := Vector3(0, sin(PITCH), cos(PITCH)) * dist
 	var jitter := Vector3((randf() - 0.5), 0, (randf() - 0.5)) * shake * 2.0 * U
+	if snowfall:
+		snowfall.emitting = phase != "menu"
+		snowfall.visible = phase != "menu"
+		snowfall.position = focus + Vector3(0, 5.0, 0)
+		snowfall.emission_box_extents = Vector3(cam_vis * U * 1.1, 0.2, cam_vis * U * 0.7)
 	camera.position = focus + off + jitter
 	camera.look_at(focus + jitter, Vector3.UP)
 	light.directional_shadow_max_distance = clampf(dist * 2.2, 30.0, 200.0)
