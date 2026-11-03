@@ -1,4 +1,4 @@
-# Pivot Rush
+# Tether Racing
 
 An original slingshot-style racer for Android and iOS, built with **Godot 4.7** in 3D.
 Your car only drives straight: hold to hook the nearest spinning tower, let the tether
@@ -62,19 +62,19 @@ to the `gh-pages` branch (GitHub Pages: Settings > Pages > Deploy from a branch 
 
 - `main` (updated on every merge):
   - Play in a browser: https://guillaumefont.github.io/tether/
-  - Install on Android: https://guillaumefont.github.io/tether/pivot-rush.apk (allow installs from your browser when asked)
+  - Install on Android: https://guillaumefont.github.io/tether/tether-racing.apk (allow installs from your browser when asked)
 - Each open pull request gets its own preview, linked in a comment on the PR and updated on every push:
-  https://guillaumefont.github.io/tether/pr/N/ and `.../pr/N/pivot-rush.apk`. It is deleted when the PR closes.
+  https://guillaumefont.github.io/tether/pr/N/ and `.../pr/N/tether-racing.apk`. It is deleted when the PR closes.
 
 All APKs share one app id, so installing a preview replaces the installed `main` build (and the other way round).
-The APK is also attached to each workflow run as the `pivot-rush-apk` artifact.
+The APK is also attached to each workflow run as the `tether-racing-apk` artifact.
 
 ## Exporting
 
 Presets for Android, iOS and Web are in `export_presets.cfg`. Install the 4.7.2 export templates
 (Editor > Manage Export Templates) first.
 
-- **Android:** set up the Android SDK and a keystore in Editor Settings, then Project > Export > Android. Package id `io.github.guillaumefont.pivotrush` (change it before publishing if you prefer another).
+- **Android:** set up the Android SDK and a keystore in Editor Settings, then Project > Export > Android. Package id `io.github.guillaumefont.tetherracing` (change it before publishing if you prefer another).
 - **iOS:** needs a Mac with Xcode. Fill in your App Store team id in the iOS preset, export, then build the generated Xcode project.
 - **Web (WASM):** single-threaded build, so it runs on any static host without special headers. Uses the Compatibility renderer.
 
@@ -87,3 +87,7 @@ The game uses the Mobile renderer on phones and the Compatibility renderer on th
 ![Two players racing on Coil](docs/race-2p.png)
 ![Time trial on Knot, Obstacles variant](docs/trial-obstacles.png)
 ![Collect variant on Pretzel](docs/collect.png)
+
+## License
+
+Proprietary, all rights reserved. See `LICENSE`. Third-party components (Godot Engine, fonts) keep their own licenses.

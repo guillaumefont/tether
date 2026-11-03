@@ -1,8 +1,8 @@
 name: Builds
 
 # Exports the game for Web and Android and publishes it on GitHub Pages (gh-pages branch):
-#   main          -> https://<owner>.github.io/<repo>/              (+ pivot-rush.apk)
-#   pull request N -> https://<owner>.github.io/<repo>/pr/N/         (+ pivot-rush.apk)
+#   main          -> https://<owner>.github.io/<repo>/              (+ tether-racing.apk)
+#   pull request N -> https://<owner>.github.io/<repo>/pr/N/         (+ tether-racing.apk)
 # Each open PR keeps its own preview, linked in a comment on the PR; it is removed when
 # the PR is closed. The APK is also attached to each run as an artifact.
 on:
@@ -93,13 +93,13 @@ jobs:
       - name: Export Android (debug-signed APK)
         run: |
           mkdir -p "$OUT/android"
-          $RUNNER_TEMP/godot --headless --path . --export-debug Android "$OUT/android/pivot-rush.apk"
-          test -s "$OUT/android/pivot-rush.apk"
+          $RUNNER_TEMP/godot --headless --path . --export-debug Android "$OUT/android/tether-racing.apk"
+          test -s "$OUT/android/tether-racing.apk"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: pivot-rush-apk
-          path: ${{ runner.temp }}/out/android/pivot-rush.apk
+          name: tether-racing-apk
+          path: ${{ runner.temp }}/out/android/tether-racing.apk
 
       - name: Publish to gh-pages
         env:
@@ -108,7 +108,7 @@ jobs:
         run: |
           mkdir -p "$OUT/stage"
           cp -r "$OUT/web/." "$OUT/stage/"
-          cp "$OUT/android/pivot-rush.apk" "$OUT/stage/"
+          cp "$OUT/android/tether-racing.apk" "$OUT/stage/"
           bash .github/publish-pages.sh "$OUT/stage" "$DEST" "Build of ${GITHUB_SHA::7} for $DEST"
 
       - name: Link the preview on the PR
@@ -118,7 +118,7 @@ jobs:
           script: |
             const n = context.issue.number;
             const base = `https://${context.repo.owner}.github.io/${context.repo.repo}/pr/${n}/`;
-            const body = `<!-- preview -->\n**Preview of this PR** (updated on every push, sha ${context.sha.slice(0, 7)})\n\n- Play in the browser: ${base}\n- Android APK: ${base}pivot-rush.apk\n\nIt may take a minute after the build for GitHub Pages to refresh.`;
+            const body = `<!-- preview -->\n**Preview of this PR** (updated on every push, sha ${context.sha.slice(0, 7)})\n\n- Play in the browser: ${base}\n- Android APK: ${base}tether-racing.apk\n\nIt may take a minute after the build for GitHub Pages to refresh.`;
             const { data: comments } = await github.rest.issues.listComments({ ...context.repo, issue_number: n });
             const old = comments.find(c => c.body.startsWith('<!-- preview -->'));
             if (old) await github.rest.issues.updateComment({ ...context.repo, comment_id: old.id, body });
