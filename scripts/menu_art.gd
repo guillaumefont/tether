@@ -60,16 +60,127 @@ class Logo extends Control:
 			return size.y
 		return size.y * 1.12 + font.get_string_size("TETHER RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 
-# Card icons: "flag" (campaign), "watch" (time attack), "duel" (two players)
+# Hand-drawn icons, all in one stroke style so they read as a set.
+# Cards: "flag" (campaign), "watch" (time attack), "duel" (two players).
+# Buttons: gear, back, prev, next, play, retry, home, check, pause, ghost, spark, music, sound.
+# Variants: standard, reverse, obstacles, collect.
 class Icon extends Control:
-	var kind := "flag"
-	var col := C_AMBER
+	var kind := "flag":
+		set(v):
+			kind = v
+			queue_redraw()
+	var col := C_AMBER:
+		set(v):
+			col = v
+			queue_redraw()
+	var col2 := C_ICE   # second tone (hands of the watch, gem facets...)
+
+	func _chevron(c: Vector2, s: float, dir: float, lw: float) -> void:
+		var d := Vector2(dir, 0)
+		draw_polyline(PackedVector2Array([c - d * s * 0.1 + Vector2(0, -s * 0.24), c + d * s * 0.14, c - d * s * 0.1 + Vector2(0, s * 0.24)]), col, lw * 1.3, true)
+
+	func _arrow_head(tip: Vector2, dir: Vector2, s: float) -> void:
+		var n := dir.orthogonal()
+		draw_colored_polygon(PackedVector2Array([tip + dir * s * 0.12, tip - dir * s * 0.08 + n * s * 0.12, tip - dir * s * 0.08 - n * s * 0.12]), col)
 
 	func _draw() -> void:
 		var s := minf(size.x, size.y)
 		var o := (size - Vector2(s, s)) * 0.5
+		var c := o + Vector2(s, s) * 0.5
 		var lw := maxf(2.0, s * 0.07)
 		match kind:
+			"gear":
+				var r := s * 0.3
+				var pts := PackedVector2Array()
+				for k in 48:
+					var a := TAU * k / 48.0
+					var tooth := fmod(k, 6.0) < 3.0
+					pts.append(c + Vector2.from_angle(a) * (r * 1.3 if tooth else r))
+				draw_colored_polygon(pts, col)
+				draw_circle(c, r * 0.45, Color("#0d1a26"))
+			"back":
+				draw_line(c + Vector2(s * 0.28, 0), c - Vector2(s * 0.2, 0), col, lw * 1.2, true)
+				draw_polyline(PackedVector2Array([c + Vector2(-s * 0.02, -s * 0.22), c - Vector2(s * 0.26, 0), c + Vector2(-s * 0.02, s * 0.22)]), col, lw * 1.2, true)
+			"prev":
+				_chevron(c, s, -1.0, lw)
+			"next":
+				_chevron(c, s, 1.0, lw)
+			"play":
+				draw_colored_polygon(PackedVector2Array([c + Vector2(-s * 0.2, -s * 0.28), c + Vector2(s * 0.3, 0), c + Vector2(-s * 0.2, s * 0.28)]), col)
+			"pause":
+				draw_rect(Rect2(c + Vector2(-s * 0.22, -s * 0.26), Vector2(s * 0.15, s * 0.52)), col)
+				draw_rect(Rect2(c + Vector2(s * 0.07, -s * 0.26), Vector2(s * 0.15, s * 0.52)), col)
+			"retry":
+				var r := s * 0.28
+				draw_arc(c, r, deg_to_rad(-60), deg_to_rad(230), 32, col, lw * 1.2, true)
+				var a := deg_to_rad(-60)
+				_arrow_head(c + Vector2.from_angle(a) * r, Vector2.from_angle(a + PI / 2), s)
+			"home":
+				draw_colored_polygon(PackedVector2Array([c + Vector2(0, -s * 0.34), c + Vector2(s * 0.36, -s * 0.02), c + Vector2(-s * 0.36, -s * 0.02)]), col)
+				draw_rect(Rect2(c + Vector2(-s * 0.25, -s * 0.06), Vector2(s * 0.5, s * 0.36)), col)
+				draw_rect(Rect2(c + Vector2(-s * 0.07, s * 0.1), Vector2(s * 0.14, s * 0.2)), Color("#0d1a26"))
+			"check":
+				draw_polyline(PackedVector2Array([c + Vector2(-s * 0.28, 0), c + Vector2(-s * 0.08, s * 0.2), c + Vector2(s * 0.3, -s * 0.22)]), col, lw * 1.5, true)
+			"ghost":
+				var top := c + Vector2(0, -s * 0.06)
+				var r := s * 0.26
+				var pts := PackedVector2Array()
+				for k in 17:
+					pts.append(top + Vector2.from_angle(PI + PI * k / 16.0) * r)
+				var by := c.y + s * 0.3
+				for k in 7:
+					var x := c.x + r - 2.0 * r * k / 6.0
+					pts.append(Vector2(x, by - (s * 0.07 if k % 2 == 1 else 0.0)))
+				draw_colored_polygon(pts, Color(col, 0.85))
+				draw_circle(top + Vector2(-r * 0.35, 0), s * 0.05, Color("#0d1a26"))
+				draw_circle(top + Vector2(r * 0.35, 0), s * 0.05, Color("#0d1a26"))
+			"spark":      # a four-point sparkle
+				var pts := PackedVector2Array()
+				for k in 8:
+					pts.append(c + Vector2.from_angle(TAU * k / 8.0 - PI / 2) * s * (0.36 if k % 2 == 0 else 0.1))
+				draw_colored_polygon(pts, col)
+				draw_circle(c + Vector2(s * 0.26, -s * 0.26), s * 0.05, col2)
+				draw_circle(c + Vector2(-s * 0.24, s * 0.26), s * 0.04, col2)
+			"music":
+				var h1 := c + Vector2(-s * 0.12, s * 0.2)
+				var h2 := c + Vector2(s * 0.22, s * 0.12)
+				draw_circle(h1, s * 0.1, col)
+				draw_circle(h2, s * 0.1, col)
+				var t1 := h1 + Vector2(s * 0.09, -s * 0.46)
+				var t2 := h2 + Vector2(s * 0.09, -s * 0.46)
+				draw_line(h1 + Vector2(s * 0.09, 0), t1, col, lw, true)
+				draw_line(h2 + Vector2(s * 0.09, 0), t2, col, lw, true)
+				draw_line(t1, t2, col, lw * 1.6, true)
+			"sound":
+				draw_colored_polygon(PackedVector2Array([c + Vector2(-s * 0.32, -s * 0.1), c + Vector2(-s * 0.18, -s * 0.1), c + Vector2(0, -s * 0.28),
+					c + Vector2(0, s * 0.28), c + Vector2(-s * 0.18, s * 0.1), c + Vector2(-s * 0.32, s * 0.1)]), col)
+				draw_arc(c + Vector2(s * 0.02, 0), s * 0.16, -0.8, 0.8, 12, col, lw, true)
+				draw_arc(c + Vector2(s * 0.02, 0), s * 0.3, -0.8, 0.8, 16, col, lw, true)
+			"standard":   # a loop with an arrow: go round
+				var r := s * 0.3
+				draw_arc(c, r, deg_to_rad(-80), deg_to_rad(250), 36, col, lw * 1.2, true)
+				_arrow_head(c + Vector2.from_angle(deg_to_rad(-80)) * r, Vector2.from_angle(deg_to_rad(10)), s)
+			"reverse":    # two arrows going opposite ways
+				draw_line(c + Vector2(-s * 0.28, -s * 0.13), c + Vector2(s * 0.2, -s * 0.13), col, lw * 1.2, true)
+				_arrow_head(c + Vector2(s * 0.22, -s * 0.13), Vector2.RIGHT, s)
+				draw_line(c + Vector2(s * 0.28, s * 0.15), c + Vector2(-s * 0.2, s * 0.15), col2, lw * 1.2, true)
+				var keep := col
+				col = col2
+				_arrow_head(c + Vector2(-s * 0.22, s * 0.15), Vector2.LEFT, s)
+				col = keep
+			"obstacles":  # a striped post
+				var r := Rect2(c + Vector2(-s * 0.12, -s * 0.32), Vector2(s * 0.24, s * 0.6))
+				draw_rect(r, col)
+				for k in 3:
+					draw_rect(Rect2(r.position + Vector2(0, s * (0.08 + k * 0.18)), Vector2(r.size.x, s * 0.07)), Color("#0d1a26"))
+				draw_rect(Rect2(c + Vector2(-s * 0.24, s * 0.26), Vector2(s * 0.48, s * 0.07)), col2)
+			"collect":    # a gem
+				var t := c + Vector2(0, -s * 0.26)
+				var pts := PackedVector2Array([c + Vector2(-s * 0.3, -s * 0.08), c + Vector2(-s * 0.16, -s * 0.26), c + Vector2(s * 0.16, -s * 0.26),
+					c + Vector2(s * 0.3, -s * 0.08), c + Vector2(0, s * 0.32)])
+				draw_colored_polygon(pts, Color("#7fe3d0"))
+				draw_polyline(PackedVector2Array([c + Vector2(-s * 0.3, -s * 0.08), c + Vector2(s * 0.3, -s * 0.08)]), Color(C_ICE, 0.9), maxf(1.0, lw * 0.5), true)
+				draw_polyline(PackedVector2Array([t + Vector2(-s * 0.16, 0), c + Vector2(-s * 0.06, -s * 0.08), c + Vector2(0, s * 0.32), c + Vector2(s * 0.06, -s * 0.08), t + Vector2(s * 0.16, 0)]), Color(C_ICE, 0.7), maxf(1.0, lw * 0.4), true)
 			"flag":
 				var pole := o + Vector2(s * 0.25, s * 0.08)
 				draw_line(pole, pole + Vector2(0, s * 0.86), col, lw, true)
@@ -79,19 +190,38 @@ class Icon extends Control:
 						var r := Rect2(pole + Vector2(lw * 0.5 + gx * cell, gy * cell), Vector2(cell, cell))
 						draw_rect(r, col if (gx + gy) % 2 == 0 else Color(C_ICE, 0.9))
 			"watch":
-				var c := o + Vector2(s * 0.5, s * 0.56)
+				var cw := o + Vector2(s * 0.5, s * 0.56)
 				var r := s * 0.38
-				draw_arc(c, r, 0, TAU, 40, col, lw, true)
-				draw_rect(Rect2(c + Vector2(-s * 0.07, -r - s * 0.13), Vector2(s * 0.14, s * 0.08)), col)
-				draw_line(c, c + Vector2(0, -r * 0.7), C_ICE, lw, true)
-				draw_line(c, c + Vector2(r * 0.5, r * 0.25), C_ICE, lw, true)
-				draw_circle(c, lw * 0.8, col)
+				draw_arc(cw, r, 0, TAU, 40, col, lw, true)
+				draw_rect(Rect2(cw + Vector2(-s * 0.07, -r - s * 0.13), Vector2(s * 0.14, s * 0.08)), col)
+				draw_line(cw, cw + Vector2(0, -r * 0.7), col2, lw, true)
+				draw_line(cw, cw + Vector2(r * 0.5, r * 0.25), col2, lw, true)
+				draw_circle(cw, lw * 0.8, col)
 			"duel":
 				for k in 2:
 					var cc := o + Vector2(s * (0.33 + 0.34 * k), s * 0.5)
 					var cl: Color = [C_AMBER, Color("#5fd38d")][k]
 					draw_rect(Rect2(cc - Vector2(s * 0.11, s * 0.2), Vector2(s * 0.22, s * 0.4)), cl)
 					draw_rect(Rect2(cc - Vector2(s * 0.08, s * 0.04), Vector2(s * 0.16, s * 0.12)), Color("#1a2330"))
+
+# Page dots under a carousel: where you are, and that there is more to swipe to.
+class Dots extends Control:
+	var count := 1
+	var current := 0
+
+	func _draw() -> void:
+		var r := minf(size.y * 0.35, 3.5)
+		var gap := r * 3.4
+		if count * gap > size.x * 0.9:
+			gap = size.x * 0.9 / count
+			r = minf(r, gap * 0.32)
+		var x0 := size.x * 0.5 - gap * (count - 1) * 0.5
+		for k in count:
+			var p := Vector2(x0 + gap * k, size.y * 0.5)
+			if k == current:
+				draw_circle(p, r * 1.5, C_AMBER)
+			else:
+				draw_circle(p, r, Color(C_ICE, 0.35))
 
 # The player's medal cabinet: one rotor disc per tier with how many they hold.
 class Cabinet extends Control:

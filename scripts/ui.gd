@@ -49,6 +49,7 @@ var res_table: GridContainer
 var res_note: Label
 var hud_vals := {}
 var next_btn: Button
+var res_again: Button
 var results_panel: PanelContainer
 
 # The UI is laid out for a fixed number of logical pixels across the screen height, so it
@@ -258,17 +259,83 @@ func safe_insets() -> Dictionary:
 	ins["b"] = maxf(0.0, win.y - safe.end.y) * k
 	return ins
 
-func _style_go(b: Button) -> void:
-	for st in ["normal", "hover", "pressed", "hover_pressed"]:
-		var s := StyleBoxFlat.new()
-		s.bg_color = C_POST if st == "normal" else C_POST.lightened(0.1)
-		s.set_corner_radius_all(6)
-		s.content_margin_top = 10; s.content_margin_bottom = 10
-		b.add_theme_stylebox_override(st, s)
-	b.add_theme_font_override("font", f_display)
-	b.add_theme_font_size_override("font_size", 22)
-	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
-		b.add_theme_color_override(c, Color("#1a1408"))
+# ---------------------------------------------------------------- icon buttons
+const C_INK := Color("#1a1408")
+const C_TILE := Color(0.05, 0.11, 0.17, 0.82)
+const C_FROST := Color(0.86, 0.93, 0.98, 0.55)
+
+# A big touch target with a drawn icon and an optional short label: the label sits under
+# the icon (tile) or beside it. look: "go" (amber, the main action) or "card" (frosted).
+func icon_button(icon: String, text := "", look := "card", tile := true, h := 64) -> Button:
+	var b := Button.new()
+	b.custom_minimum_size = Vector2(h, h)
+	b.tooltip_text = text.capitalize()
+	b.set_meta("look", look)
+	var box: BoxContainer = VBoxContainer.new() if tile else HBoxContainer.new()
+	box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 0 if tile else 10)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var ic := Art.Icon.new()
+	ic.kind = icon
+	var isz := h * (0.46 if tile and text != "" else 0.5)
+	ic.custom_minimum_size = Vector2(isz, isz)
+	ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(ic)
+	b.set_meta("icon", ic)
+	if text != "":
+		var big_row := look == "go" and not tile
+		var l := _label(text, 22 if big_row else 13, C_FG, f_display if big_row else f_bold)
+		l.autowrap_mode = TextServer.AUTOWRAP_OFF
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		box.add_child(l)
+		b.set_meta("label", l)
+		if not tile:   # wide enough for icon + label
+			var w := l.get_minimum_size().x + isz + 10.0 + 28.0
+			b.custom_minimum_size.x = maxf(h, w)
+	b.add_child(box)
+	_tile_look(b, look, false)
+	return b
+
+# selected state for a toggle tile (variant picker, Ghost / Effects)
+func set_tile_on(b: Button, on: bool) -> void:
+	_tile_look(b, b.get_meta("look"), on)
+
+func _tile_look(b: Button, look: String, on: bool) -> void:
+	var go := look == "go"
+	for st in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
+		var sbx := StyleBoxFlat.new()
+		sbx.set_corner_radius_all(12)
+		sbx.shadow_color = Color(0, 0, 0, 0.25)
+		sbx.shadow_size = 5
+		sbx.shadow_offset = Vector2(0, 2)
+		var lit: bool = st.begins_with("hover") or st.contains("pressed")
+		if go:
+			sbx.bg_color = C_POST.lightened(0.12) if lit else C_POST
+			sbx.border_color = Color(1, 1, 1, 0.5)
+			sbx.border_width_top = 3
+		else:
+			sbx.bg_color = C_TILE.lightened(0.07) if lit else C_TILE
+			if on:
+				sbx.bg_color = Color(0.25, 0.2, 0.08, 0.9)
+			sbx.border_color = C_POST if (on or st.contains("pressed")) else Color(C_FROST, 0.4)
+			sbx.set_border_width_all(3 if on else 2)
+			if not on:
+				sbx.border_width_top = 4   # a rim of frost along the top, like the menu cards
+		if st == "disabled":
+			sbx.bg_color = Color(sbx.bg_color, 0.45)
+		b.add_theme_stylebox_override(st, sbx)
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	var ink := C_INK if go else C_POST
+	var ic: Art.Icon = b.get_meta("icon")
+	ic.col = ink
+	ic.col2 = C_INK.lightened(0.2) if go else Art.C_ICE
+	if b.has_meta("label"):
+		var l: Label = b.get_meta("label")
+		l.add_theme_color_override("font_color", C_INK if go else (C_POST if on else C_FG))
 
 func _build_results() -> void:
 	var r := _overlay()
@@ -283,23 +350,20 @@ func _build_results() -> void:
 	vb.add_child(res_table)
 	res_note = _label("", 14, C_MUTED)
 	vb.add_child(res_note)
-	var again := Button.new()
-	again.text = "RACE AGAIN"
-	again.custom_minimum_size = Vector2(0, 50)
-	_style_go(again)
-	again.pressed.connect(func(): again_pressed.emit())
-	vb.add_child(again)
-	next_btn = Button.new()
-	next_btn.text = "NEXT EVENT"
-	next_btn.custom_minimum_size = Vector2(0, 50)
-	_style_go(next_btn)
-	next_btn.pressed.connect(func(): next_pressed.emit())
-	vb.add_child(next_btn)
-	var back := Button.new()
-	back.text = "Back to menu"
-	back.custom_minimum_size = Vector2(0, 46)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	vb.add_child(row)
+	var back := icon_button("home", "MENU", "card")
 	back.pressed.connect(func(): menu_pressed.emit())
-	vb.add_child(back)
+	row.add_child(back)
+	res_again = icon_button("retry", "AGAIN", "go")
+	res_again.pressed.connect(func(): again_pressed.emit())
+	row.add_child(res_again)
+	next_btn = icon_button("next", "NEXT", "go")
+	next_btn.pressed.connect(func(): next_pressed.emit())
+	row.add_child(next_btn)
+	for b in row.get_children():
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	results.visible = false
 
 # ---------------------------------------------------------------- pause
@@ -317,33 +381,29 @@ func _build_pause() -> void:
 	_frost_panel(pause_panel)
 	var vb: VBoxContainer = r[1]
 	_pause_sub = _panel_header(vb, "PAUSED")
-	var resume := Button.new()
-	resume.text = "RESUME"
-	resume.custom_minimum_size = Vector2(0, 52)
-	_style_go(resume)
-	resume.pressed.connect(func(): pause_action.emit("resume"))
-	vb.add_child(resume)
-	var restart := Button.new()
-	restart.text = "Restart race"
-	restart.custom_minimum_size = Vector2(0, 46)
-	restart.pressed.connect(func(): pause_action.emit("restart"))
-	vb.add_child(restart)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	vb.add_child(row)
+	for a in [["exit", "home", "MENU", "card"], ["restart", "retry", "RESTART", "card"], ["resume", "play", "RESUME", "go"]]:
+		var b := icon_button(a[1], a[2], a[3])
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var what: String = a[0]
+		b.pressed.connect(func(): pause_action.emit(what))
+		row.add_child(b)
 	_pause_o = _make_options()
 	vb.add_child(_pause_o["box"])
-	var ex := Button.new()
-	ex.text = "Exit to menu"
-	ex.custom_minimum_size = Vector2(0, 46)
-	ex.pressed.connect(func(): pause_action.emit("exit"))
-	vb.add_child(ex)
 	vb.add_child(_label("Esc or the back button also resumes.", 12, C_MUTED))
 	pause_ov.visible = false
 
 	pause_btn = Button.new()
-	pause_btn.text = "II"
-	pause_btn.custom_minimum_size = Vector2(44, 40)
-	pause_btn.add_theme_font_override("font", f_display)
-	pause_btn.add_theme_font_size_override("font_size", 16)
-	pause_btn.add_theme_color_override("font_color", C_POST)
+	pause_btn.custom_minimum_size = Vector2(48, 44)
+	pause_btn.tooltip_text = "Pause"
+	var pi := Art.Icon.new()
+	pi.kind = "pause"
+	pi.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	pi.offset_left = 12; pi.offset_right = -12; pi.offset_top = 10; pi.offset_bottom = -10
+	pi.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pause_btn.add_child(pi)
 	var pb := StyleBoxFlat.new()
 	pb.bg_color = C_PANEL
 	pb.set_corner_radius_all(6)
@@ -418,8 +478,14 @@ static func _knob_tex() -> Texture2D:
 func _volume_row(key: String, title: String) -> Array:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
+	var ic := Art.Icon.new()
+	ic.kind = "music" if key == "music_vol" else "sound"
+	ic.custom_minimum_size = Vector2(28, 28)
+	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(ic)
 	var l := _label(title, 15, C_FG, f_bold)
-	l.custom_minimum_size.x = 64
+	l.custom_minimum_size.x = 54
 	l.autowrap_mode = TextServer.AUTOWRAP_OFF
 	row.add_child(l)
 	var sl := HSlider.new()
@@ -464,15 +530,12 @@ func _make_options() -> Dictionary:
 		box.add_child(r[0])
 		o["sliders"][s[0]] = [r[1], r[2]]
 	var grid := _grid(2)
-	for t in [["ghost", "Ghost car"], ["effects", "Effects"]]:
-		var b := Button.new()
-		b.custom_minimum_size = Vector2(0, 44)
+	for t in [["ghost", "GHOST", "ghost"], ["effects", "EFFECTS", "spark"]]:
+		var b := icon_button(t[2], t[1], "card", false, 50)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.add_theme_font_size_override("font_size", 13)
-		b.clip_text = true
 		b.focus_mode = Control.FOCUS_NONE
 		var key: String = t[0]
-		b.set_meta("label", t[1])
+		b.set_meta("name", t[1])
 		b.pressed.connect(func():
 			var on: bool = not b.get_meta("on")
 			_set_toggle(b, on)
@@ -485,7 +548,11 @@ func _make_options() -> Dictionary:
 
 func _set_toggle(b: Button, on: bool) -> void:
 	b.set_meta("on", on)
-	b.text = "%s: %s" % [b.get_meta("label"), "On" if on else "Off"]
+	var l: Label = b.get_meta("label")
+	l.text = "%s  %s" % [b.get_meta("name"), "ON" if on else "OFF"]
+	set_tile_on(b, on)
+	var ic: Art.Icon = b.get_meta("icon")
+	ic.col = C_POST if on else Color(C_MUTED, 0.6)
 
 func set_options(o: Dictionary, opts: Dictionary) -> void:
 	for key in o["sliders"]:
@@ -517,10 +584,7 @@ func _build_settings() -> void:
 	_panel_header(vb, "SETTINGS").text = "Saved on this device"
 	_settings_o = _make_options()
 	vb.add_child(_settings_o["box"])
-	var done := Button.new()
-	done.text = "DONE"
-	done.custom_minimum_size = Vector2(0, 52)
-	_style_go(done)
+	var done := icon_button("check", "DONE", "go", false, 56)
 	done.pressed.connect(hide_settings)
 	vb.add_child(done)
 	settings_ov.visible = false
@@ -709,6 +773,9 @@ func set_big(bb: String, size := 120) -> void:
 # ---------------------------------------------------------------- results
 func show_results(title: String, rows: Array, note: String, has_next := false, cols := 3) -> void:
 	next_btn.visible = has_next
+	# with a next event waiting, that is the main action and Again steps back
+	res_again.set_meta("look", "card" if has_next else "go")
+	set_tile_on(res_again, false)
 	res_title.text = title
 	for ch in res_table.get_children():
 		ch.queue_free()
