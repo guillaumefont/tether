@@ -1190,7 +1190,13 @@ func update_camera(race: Race, phase: String, dt: float, snap := false) -> void:
 	var target: Vector3
 	var vis: float
 	var b := track.bounds
-	if phase == "menu" or race == null:
+	if phase == "attract" and race != null and race.cars.size() > 0:
+		# menu backdrop: drift along with an AI car, a little zoomed out
+		var lead = race.cars[0]   # the quickest AI, so the view rarely loses the pack
+		var p: Vector2 = lead.pos + lead.vel * 0.5
+		target = Vector3(p.x, track.height_at(lead.s), p.y)
+		vis = 1650.0 * vp.y / minf(vp.x, vp.y)
+	elif phase == "menu" or race == null:
 		# frame the track in the part of the screen the menu panel leaves free
 		var free_w := maxf(200.0, vp.x - menu_cover_px)
 		vis = maxf(b.size.y, b.size.x / (free_w / maxf(1.0, vp.y))) * 1.02

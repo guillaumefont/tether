@@ -30,6 +30,11 @@ var flash_t := 0.0
 var ghost: Array = []
 var new_record := false
 var touch_owner := {}        # touch index -> player
+# behind the menu: AI drivers race a snowy track, changing track every ATTRACT_SECS
+var attract: Race = null
+var attract_t := 0.0
+var attract_i := -1
+const ATTRACT_SECS := 45.0
 
 func _ready() -> void:
 	view = WorldView.new()
@@ -59,8 +64,18 @@ func rec_key() -> String:
 func _to_menu() -> void:
 	phase = "menu"
 	race = null
-	view.visible = false   # the menu covers the screen; no 3D to draw behind it
 	ui.show_menu()
+	_start_attract()
+
+func _start_attract() -> void:
+	attract_i = randi() % Defs.TRACKS.size() if attract_i < 0 else (attract_i + 1) % Defs.TRACKS.size()
+	track = TrackData.new(Defs.TRACKS[attract_i], "standard")
+	view.build(track)
+	view.visible = true
+	attract = Race.new(track, "race", 0)
+	view.setup_cars(attract, false)
+	attract_t = 0.0
+	view.update_camera(attract, "attract", 0.0, true)
 
 func _start_event(ev: Dictionary) -> void:
 	track_idx = ev["track"]
@@ -70,6 +85,7 @@ func _start_event(ev: Dictionary) -> void:
 	new_race()
 
 func new_race() -> void:
+	attract = null
 	track = TrackData.new(Defs.TRACKS[track_idx], variant)
 	view.build(track)
 	view.visible = true
@@ -131,6 +147,16 @@ func _process(delta: float) -> void:
 	if track:
 		Race.spin_anchors(track, dt)
 	match phase:
+		"menu":
+			if attract:
+				attract.update(dt)
+				for e in attract.events:
+					if e["t"] in ["skid", "wall", "post"]:
+						view.handle_event(e)
+				attract.events.clear()
+				attract_t += dt
+				if attract_t > ATTRACT_SECS:
+					_start_attract()
 		"count":
 			countdown -= dt
 			var n := ceili(countdown - 0.2)
@@ -167,8 +193,12 @@ func _process(delta: float) -> void:
 	var me = race.cars[0] if race and race.cars.size() else null
 	sfx.set_engine(me.vel.length() if me else 0.0, phase == "race")
 	if view.track and view.visible:
-		view.sync(race, phase, _ghost_sample(), _aims(), dt)
-		view.update_camera(race if phase != "menu" else null, phase, dt)
+		if phase == "menu" and attract:
+			view.sync(attract, phase, null, {}, dt)
+			view.update_camera(attract, "attract", dt)
+		else:
+			view.sync(race, phase, _ghost_sample(), _aims(), dt)
+			view.update_camera(race if phase != "menu" else null, phase, dt)
 
 func _aims() -> Dictionary:
 	var aims := {}
