@@ -412,10 +412,17 @@ var _load_tip: Label
 var _load_tween: Tween
 var _load_box: VBoxContainer
 
-# the title and tip sit just under the wordmark, whatever the screen shape
+var _load_bar
+const ART_LAND := preload("res://art/loading_land.jpg")
+const ART_PORT := preload("res://art/loading_port.jpg")
+var _load_art
+
+# logo near the top, title / tip / bar at the bottom, whatever the screen shape
 func _place_loading() -> void:
-	var vp := root.get_viewport_rect().size
-	_load_box.offset_top = vp.y * 0.30 + minf(vp.x, vp.y) * 0.34
+	var ins := safe_insets()
+	_load_box.offset_bottom = -22 - ins["b"]
+	_load_box.offset_top = _load_box.offset_bottom - 104
+	_load_art.bg = ART_PORT if is_portrait() else ART_LAND
 
 func _build_loading() -> void:
 	loading = Control.new()
@@ -423,12 +430,15 @@ func _build_loading() -> void:
 	loading.mouse_filter = Control.MOUSE_FILTER_STOP
 	var sp := Art.Splash.new()
 	sp.font = f_display
-	sp.lift = 1.0
+	_load_art = sp
+	sp.bg = ART_LAND
+	sp.emblem_y = 0.15
+	sp.emblem_k = 0.7
 	sp.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	sp.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	loading.add_child(sp)
 	var vb := VBoxContainer.new()
-	vb.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vb.anchor_left = 0.0; vb.anchor_right = 1.0; vb.anchor_top = 1.0; vb.anchor_bottom = 1.0
 	_load_box = vb
 	vb.offset_left = 24; vb.offset_right = -24
 	vb.add_theme_constant_override("separation", 6)
@@ -442,6 +452,13 @@ func _build_loading() -> void:
 	_load_tip.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
 	_load_tip.add_theme_constant_override("shadow_offset_y", 1)
 	vb.add_child(_load_tip)
+	var bar_row := CenterContainer.new()
+	bar_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_load_bar = Art.LoadBar.new()
+	_load_bar.custom_minimum_size = Vector2(300, 26)
+	_load_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar_row.add_child(_load_bar)
+	vb.add_child(bar_row)
 	loading.visible = false
 	root.add_child(loading)
 
@@ -453,12 +470,19 @@ func show_loading(title: String) -> void:
 	_load_tip.text = TIPS[randi() % TIPS.size()]
 	loading.modulate.a = 1.0
 	loading.visible = true
+	_load_bar.value = 0.0
+	_load_bar.target = 0.08
 	_place_loading()
+
+func set_loading_progress(v: float) -> void:
+	_load_bar.target = v
 
 func hide_loading() -> void:
 	if not loading.visible:
 		return
+	_load_bar.target = 1.0
 	_load_tween = create_tween()
+	_load_tween.tween_interval(0.25)   # let the bar reach the end
 	_load_tween.tween_property(loading, "modulate:a", 0.0, 0.35)
 	_load_tween.tween_callback(func(): loading.visible = false)
 

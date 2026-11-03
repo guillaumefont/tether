@@ -147,6 +147,16 @@ static func cyl(r: float, h: float, c: Color, pos := Vector3.ZERO, r_bottom := -
 
 # ---------------------------------------------------------------- track build
 func build(tr: TrackData) -> void:
+	for step in build_steps(tr):
+		step.call()
+
+# The build cut into a few steps so a loading screen can draw its bar between them.
+func build_steps(tr: TrackData) -> Array:
+	return [func(): _clear(tr), _build_ground, _build_road, _build_scenery,
+		func(): _build_jumps(); _build_start(); _build_towers(),
+		func(): _build_posts(); _build_gems(); _build_fx(); _build_snowfall()]
+
+func _clear(tr: TrackData) -> void:
 	track = tr
 	for ch in static_root.get_children():
 		ch.queue_free()
@@ -158,16 +168,6 @@ func build(tr: TrackData) -> void:
 	gem_nodes.clear()
 	ghost_node = null
 	parts.clear()
-	_build_ground()
-	_build_road()
-	_build_scenery()
-	_build_jumps()
-	_build_start()
-	_build_towers()
-	_build_posts()
-	_build_gems()
-	_build_fx()
-	_build_snowfall()
 
 func _build_ground() -> void:
 	var b := track.bounds

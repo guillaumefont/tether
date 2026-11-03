@@ -32,6 +32,7 @@ var ghost: Array = []
 var new_record := false
 var touch_owner := {}        # touch index -> player
 var paused := false
+var building := false        # a loading screen is building the next track
 # behind the menu: AI drivers race a snowy track, changing track every ATTRACT_SECS
 var attract: Race = null
 var attract_t := 0.0
@@ -79,10 +80,31 @@ func _fade_in_later() -> void:
 
 # show the loading screen for a frame, then do the slow track build behind it
 func _with_loading(title: String, work: Callable) -> void:
+	building = true
 	ui.show_loading(title)
 	await get_tree().process_frame
 	await get_tree().process_frame
+	ui.set_loading_progress(0.6)
+	building = false
 	work.call()
+	ui.hide_loading()
+
+# build the race track a step at a time so the loading bar moves with the real work
+func _load_race() -> void:
+	building = true
+	ui.show_loading(Defs.TRACKS[track_idx]["name"])
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var tr := TrackData.new(Defs.TRACKS[track_idx], variant)
+	ui.set_loading_progress(0.15)
+	await get_tree().process_frame
+	var steps: Array = view.build_steps(tr)
+	for i in steps.size():
+		steps[i].call()
+		ui.set_loading_progress(0.15 + 0.8 * (i + 1) / steps.size())
+		await get_tree().process_frame
+	building = false
+	new_race(tr)
 	ui.hide_loading()
 
 func _to_menu() -> void:
@@ -153,6 +175,8 @@ func _pause_action(what: String) -> void:
 
 # Android back button / Esc: pause or resume a race, step back through the menus
 func _go_back() -> void:
+	if building:
+		return
 	if race != null and phase != "menu":
 		if paused or _can_pause():
 			_toggle_pause()
@@ -167,14 +191,17 @@ func _start_event(ev: Dictionary) -> void:
 	variant = ev["variant"]
 	mode = ev["mode"]
 	humans = ev["humans"]
-	_with_loading(Defs.TRACKS[track_idx]["name"], new_race)
+	_load_race()
 
-func new_race() -> void:
+func new_race(built: TrackData = null) -> void:
 	paused = false
 	ui.hide_pause()
 	attract = null
-	track = TrackData.new(Defs.TRACKS[track_idx], variant)
-	view.build(track)
+	if built:
+		track = built   # already built by the loading screen
+	else:
+		track = TrackData.new(Defs.TRACKS[track_idx], variant)
+		view.build(track)
 	view.visible = true
 	race = Race.new(track, mode, humans)
 	ghost = Records.get_ghost(rec_key()) if mode == "trial" else []
@@ -198,7 +225,7 @@ func _input(e: InputEvent) -> void:
 		_go_back()
 		get_viewport().set_input_as_handled()
 		return
-	if race == null or paused:
+	if race == null or paused or building:
 		return
 	if e is InputEventScreenTouch:
 		if e.pressed:
@@ -240,7 +267,7 @@ func _notification(what: int) -> void:
 
 # ---------------------------------------------------------------- loop
 func _process(delta: float) -> void:
-	if paused:
+	if paused or building:
 		return
 	var dt := minf(delta, 1.0 / 30.0)
 	if track:
@@ -457,7 +484,7 @@ func _run_demo(arg: String) -> void:
 	var shots := [["menu_home", func(): ui.loading.visible = false; ui.menu.show_home()],
 		["menu_campaign", func(): ui.menu.kind = "campaign"; ui.menu.page = 0; ui.menu.show_list()],
 		["menu_attack", func(): ui.menu.kind = "attack"; ui.menu.page = 1; ui.menu.show_list()],
-		["loading", func(): ui.show_loading(Defs.TRACKS[track_idx]["name"])],
+		["loading", func(): ui.show_loading(Defs.TRACKS[track_idx]["name"]); ui.set_loading_progress(0.6)],
 		["menu_event", func():
 			ui.loading.visible = false
 			ui.menu.ev = { "track": track_idx, "variant": variant, "mode": mode, "humans": humans, "kind": "attack" if mode == "trial" else "campaign", "idx": 1 }
