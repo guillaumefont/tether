@@ -147,6 +147,16 @@ static func cyl(r: float, h: float, c: Color, pos := Vector3.ZERO, r_bottom := -
 
 # ---------------------------------------------------------------- track build
 func build(tr: TrackData) -> void:
+	for step in build_steps(tr):
+		step.call()
+
+# The build cut into a few steps so a loading screen can draw its bar between them.
+func build_steps(tr: TrackData) -> Array:
+	return [func(): _clear(tr), _build_ground, _build_road, _build_scenery,
+		func(): _build_jumps(); _build_start(); _build_towers(),
+		func(): _build_posts(); _build_gems(); _build_fx(); _build_snowfall()]
+
+func _clear(tr: TrackData) -> void:
 	track = tr
 	for ch in static_root.get_children():
 		ch.queue_free()
@@ -158,16 +168,6 @@ func build(tr: TrackData) -> void:
 	gem_nodes.clear()
 	ghost_node = null
 	parts.clear()
-	_build_ground()
-	_build_road()
-	_build_scenery()
-	_build_jumps()
-	_build_start()
-	_build_towers()
-	_build_posts()
-	_build_gems()
-	_build_fx()
-	_build_snowfall()
 
 func _build_ground() -> void:
 	var b := track.bounds
@@ -577,6 +577,12 @@ func _build_scenery() -> void:
 	_multi(_pine_mesh(4, 210.0, 56.0), pines_b)
 	_multi(_shack_mesh(), shacks)
 	_multi(_rock_mesh(), rocks)
+
+# "Snow & shadows" option: off saves battery on slower phones
+var effects_on := true
+func set_effects(on: bool) -> void:
+	effects_on = on
+	light.shadow_enabled = on
 
 # light snowfall around the camera focus: one CPU particle system, ~150 tiny quads
 var snowfall: CPUParticles3D
@@ -1232,8 +1238,8 @@ func update_camera(race: Race, phase: String, dt: float, snap := false) -> void:
 	var off := Vector3(0, sin(PITCH), cos(PITCH)) * dist
 	var jitter := Vector3((randf() - 0.5), 0, (randf() - 0.5)) * shake * 2.0 * U
 	if snowfall:
-		snowfall.emitting = phase != "menu"
-		snowfall.visible = phase != "menu"
+		snowfall.emitting = phase != "menu" and effects_on
+		snowfall.visible = snowfall.emitting
 		snowfall.position = focus + Vector3(0, 5.0, 0)
 		snowfall.emission_box_extents = Vector3(cam_vis * U * 1.1, 0.2, cam_vis * U * 0.7)
 	camera.position = focus + off + jitter

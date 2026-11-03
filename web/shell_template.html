@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
+<meta name="theme-color" content="#06121b">
+<title>$GODOT_PROJECT_NAME</title>
+<style>
+html, body, #canvas { margin: 0; padding: 0; border: 0; }
+body { color: #e6f1f8; background-color: #06121b; overflow: hidden; touch-action: none;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+#canvas { display: block; }
+#canvas:focus { outline: none; }
+/* Tether Racing loading page: dusk artwork, logo, tip and a themed progress bar */
+#status { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+  justify-content: space-between; visibility: hidden; transition: opacity 0.4s;
+  background: linear-gradient(to bottom, rgba(13,34,51,0.85) 0%, rgba(13,34,51,0) 48%, rgba(6,18,27,0) 55%, rgba(6,18,27,0.92) 100%),
+    url("data:image/jpeg;base64,__ART__") center 12% / cover no-repeat, #06121b; }
+#logo { width: min(78vw, 52vh, 560px); margin-top: 5vh; }
+#bottom { width: min(86vw, 420px); margin-bottom: 6vh; text-align: center; }
+#title { color: #f2b134; font-weight: 800; letter-spacing: 0.08em; font-size: 15px; margin-bottom: 6px; }
+#tip { font-size: 14px; line-height: 1.35; text-shadow: 0 1px 2px rgba(0,0,0,0.6); min-height: 2.7em; }
+#bar { position: relative; height: 10px; margin: 14px 12px 0; border-radius: 6px; background: rgba(8,20,33,0.85);
+  border: 1px solid rgba(230,241,248,0.45); }
+#fill { position: absolute; left: 0; top: 0; bottom: 0; width: 4%; border-radius: 6px; background: #f2b134;
+  transition: width 0.25s; overflow: hidden; }
+#fill::after { content: ""; position: absolute; top: 2px; width: 18px; height: 3px; background: rgba(255,255,255,0.4);
+  animation: sheen 1.4s linear infinite; }
+@keyframes sheen { from { left: -20px; } to { left: 100%; } }
+#car { position: absolute; top: -6px; width: 26px; height: 20px; margin-left: -13px; left: 4%; border-radius: 3px;
+  background: linear-gradient(to right, #f2b134 0 30%, #1a2330 30% 62%, #f2b134 62%); transition: left 0.25s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.4); }
+#bar.indeterminate #fill { width: 30% !important; animation: slide 1.2s ease-in-out infinite alternate; }
+#bar.indeterminate #car { display: none; }
+@keyframes slide { from { left: 0; } to { left: 70%; } }
+#notice { display: none; margin-top: 14px; padding: 10px 14px; border-radius: 8px; background: rgba(169,52,42,0.9);
+  font-size: 14px; white-space: pre-line; }
+</style>
+$GODOT_HEAD_INCLUDE
+</head>
+<body>
+<canvas id="canvas">Your browser does not support the canvas tag.</canvas>
+<noscript>Your browser does not support JavaScript.</noscript>
+<div id="status">
+  <img id="logo" alt="Tether Racing" src="data:image/png;base64,__LOGO__">
+  <div id="bottom">
+    <div id="title">LOADING</div>
+    <div id="tip"></div>
+    <div id="bar"><div id="fill"></div><div id="car"></div></div>
+    <div id="notice"></div>
+  </div>
+</div>
+<script src="$GODOT_URL"></script>
+<script>
+const GODOT_CONFIG = $GODOT_CONFIG;
+const engine = new Engine(GODOT_CONFIG);
+(function () {
+  const TIPS = [
+    "Hook the tower as you enter the bend, let go when your nose points down the exit.",
+    "Rubbing the rail cuts your throttle. Let go a touch earlier to stay off it.",
+    "Every bend has its own tower. The rope keeps its length, so grab timing sets your line.",
+    "After you let go the car slides a little on the ice. Aim for it.",
+    "Beat a medal time to unlock the next campaign event.",
+  ];
+  const status = document.getElementById("status");
+  const bar = document.getElementById("bar");
+  const fill = document.getElementById("fill");
+  const car = document.getElementById("car");
+  const notice = document.getElementById("notice");
+  document.getElementById("tip").textContent = TIPS[Math.floor(Math.random() * TIPS.length)];
+  status.style.visibility = "visible";
+
+  function fail(err) {
+    const msg = err && err.message ? err.message : String(err);
+    console.error(msg);
+    bar.style.display = "none";
+    notice.style.display = "block";
+    notice.textContent = msg;
+    engine.unload && engine.unload();
+  }
+  // this build runs without threads, so it needs no cross-origin isolation
+  const missing = Engine.getMissingFeatures({ threads: false });
+  if (missing.length !== 0) {
+    fail("Your browser is missing features this game needs:\n" + missing.join("\n"));
+    return;
+  }
+  engine.startGame({
+    onProgress: function (current, total) {
+      if (current > 0 && total > 0) {
+        bar.classList.remove("indeterminate");
+        const pct = Math.max(4, Math.min(100, (current / total) * 100)) + "%";
+        fill.style.width = pct;
+        car.style.left = pct;
+      } else {
+        bar.classList.add("indeterminate");
+      }
+    },
+  }).then(function () {
+    fill.style.width = "100%";
+    car.style.left = "100%";
+    status.style.opacity = "0";
+    setTimeout(function () { status.style.visibility = "hidden"; }, 450);
+  }, fail);
+}());
+</script>
+</body>
+</html>
