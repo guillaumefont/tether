@@ -494,8 +494,8 @@ func _run_demo(arg: String) -> void:
 	var shots := [["menu_home", func(): ui.loading.visible = false; ui.menu.show_home()],
 		["settings", func(): ui.show_settings(_options(true))],
 		["menu_home_again", func(): ui.hide_settings()],
-		["menu_campaign", func(): ui.menu.kind = "campaign"; ui.menu.page = 0; ui.menu.show_list()],
-		["menu_attack", func(): ui.menu.kind = "attack"; ui.menu.page = 1; ui.menu.show_list()],
+		["menu_campaign", func(): ui.menu.kind = "campaign"; ui.menu.focus = 0; ui.menu.show_list()],
+		["menu_attack", func(): ui.menu.kind = "attack"; ui.menu.focus = 8; ui.menu.show_list()],
 		["loading", func(): ui.show_loading(Defs.TRACKS[track_idx]["name"]); ui.set_loading_progress(0.6)],
 		["menu_event", func():
 			ui.loading.visible = false
