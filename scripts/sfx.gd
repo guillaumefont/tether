@@ -61,20 +61,20 @@ static func _rumble() -> PackedByteArray:
 	for k in fires:
 		var start := int((k + rng.randf_range(-0.06, 0.06)) * RATE / RUMBLE_BASE)
 		var amp := rng.randf_range(0.7, 1.0) * (1.0 if k % 2 == 0 else 0.8)
-		var res := rng.randf_range(105.0, 140.0)
+		var res := rng.randf_range(170.0, 230.0)
 		var lp := 0.0
 		for j in ring:
 			var t := float(j) / RATE
 			lp += (rng.randf_range(-1.0, 1.0) - lp) * 0.08
-			var v := (sin(TAU * res * t) + lp * 1.5) * exp(-t * 140.0) * amp
+			var v := (sin(TAU * res * t) + 0.5 * sin(TAU * res * 0.5 * t) + lp * 1.5) * exp(-t * 110.0) * amp
 			var i := posmod(start + j, n)
 			buf[i] += v
 	var peak := 0.0
 	for i in n:
 		var t := float(i) / RATE
 		buf[i] += 0.2 * sin(TAU * RUMBLE_BASE * t) + 0.12 * sin(TAU * RUMBLE_BASE * 0.5 * t)
-	# two one-pole low-passes (~300 Hz); second pass over the loop so the filter wraps cleanly
-	var a := 1.0 - exp(-TAU * 300.0 / RATE)
+	# two one-pole low-passes (~800 Hz); second pass over the loop so the filter wraps cleanly
+	var a := 1.0 - exp(-TAU * 800.0 / RATE)
 	var l1 := 0.0
 	var l2 := 0.0
 	var out := PackedFloat32Array()
@@ -84,6 +84,13 @@ static func _rumble() -> PackedByteArray:
 			l1 += (buf[i] - l1) * a
 			l2 += (l1 - l2) * a
 			out[i] = l2
+	for i in n:
+		peak = maxf(peak, absf(out[i]))
+	# soft-clip for a gritty growl and more body: phone speakers can't play the deep
+	# sub-bass, so most of what they reproduce is the thumps' 170-230 Hz ring and its overtones
+	for i in n:
+		out[i] = tanh(out[i] / peak * 2.2)
+	peak = 0.0
 	for i in n:
 		peak = maxf(peak, absf(out[i]))
 	var data := PackedByteArray()
@@ -173,4 +180,4 @@ func _process(dt: float) -> void:
 	if not _engine.playing:
 		_engine.play()
 	_engine.pitch_scale = clampf(_freq / RUMBLE_BASE, 0.5, 2.0)
-	_engine.volume_db = linear_to_db(_gain * 3.0)
+	_engine.volume_db = linear_to_db(_gain * 4.5)
