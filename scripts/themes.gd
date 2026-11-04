@@ -4,7 +4,7 @@
 # jumps, scenery, weather) and by the car builder (which kit the cars wear).
 extends RefCounted
 
-const ORDER := ["snow", "forest", "rock", "sand"]
+const ORDER := ["snow", "forest", "sand", "rock"]   # campaign order
 
 const THEMES := {
 	"snow": {

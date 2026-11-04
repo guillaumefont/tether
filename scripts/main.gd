@@ -11,6 +11,8 @@ const WorldView = preload("res://scripts/world_view.gd")
 const UI = preload("res://scripts/ui.gd")
 const Sfx = preload("res://scripts/sfx.gd")
 const Settings = preload("res://scripts/settings.gd")
+const Campaign = preload("res://scripts/campaign.gd")
+const Themes = preload("res://scripts/themes.gd")
 
 var view: WorldView
 var ui: UI
@@ -32,6 +34,7 @@ var ghost: Array = []
 var new_record := false
 var touch_owner := {}        # touch index -> player
 var paused := false
+var themes_before: Array = []   # themes unlocked when the race started
 var building := false        # a loading screen is building the next track
 # behind the menu: AI drivers race a snowy track, changing track every ATTRACT_SECS
 var attract: Race = null
@@ -117,7 +120,7 @@ func _to_menu() -> void:
 func _start_attract() -> void:
 	attract_i = randi() % Defs.TRACKS.size() if attract_i < 0 else (attract_i + 1) % Defs.TRACKS.size()
 	track = TrackData.new(Defs.TRACKS[attract_i], "standard")
-	view.theme_override = ""
+	view.theme_override = Campaign.menu_theme()   # the menu wears the latest unlocked world
 	view.build(track)
 	view.visible = true
 	attract = Race.new(track, "race", 0)
@@ -217,6 +220,7 @@ func new_race(built: TrackData = null) -> void:
 		view.build(track)
 	view.visible = true
 	race = Race.new(track, mode, humans)
+	themes_before = Themes.ORDER.filter(func(t): return Campaign.theme_unlocked(t))
 	ghost = Records.get_ghost(rec_key()) if mode == "trial" else []
 	view.setup_cars(race, mode == "trial")
 	new_record = false
@@ -457,7 +461,7 @@ func _show_results() -> void:
 			var tg: float = Medals.targets(name, variant)[tier]
 			if tg > 0.0:
 				note += " Next medal (%s): %s." % [Medals.NAMES[tier], UI.fmt2(tg)]
-		ui.show_results("New record" if new_record else "Time trial", rows, note, not ui.menu.next_event().is_empty())
+		ui.show_results("New record" if new_record else "Time trial", rows, _unlock_note() + note, not ui.menu.next_event().is_empty())
 		return
 	var st := race.standings()
 	var winner = st[0]
@@ -480,7 +484,15 @@ func _show_results() -> void:
 		var tier := Medals.race_tier(place, lead) if me.finished else 0
 		if Records.award_medal(rec_key(), "race", tier):
 			rnote = "%s medal!  " % Medals.NAMES[tier - 1] + rnote
-	ui.show_results(title, rows2, rnote, not ui.menu.next_event().is_empty())
+	ui.show_results(title, rows2, _unlock_note() + rnote, not ui.menu.next_event().is_empty())
+
+# a campaign world just finished: say which theme it opened
+func _unlock_note() -> String:
+	for t in Themes.ORDER:
+		if Campaign.theme_unlocked(t) and not themes_before.has(t):
+			themes_before.append(t)
+			return "World finished: %s unlocked in Time attack and the menu!  " % Themes.get_theme(t)["name"]
+	return ""
 
 # ---------------------------------------------------------------- demo / screenshots
 # Drives the real game with a scripted player so a headless run can capture frames.
@@ -499,12 +511,14 @@ func _run_demo(arg: String) -> void:
 	var shots := [["menu_home", func(): ui.loading.visible = false; ui.menu.show_home()],
 		["settings", func(): ui.show_settings(_options(true))],
 		["menu_home_again", func(): ui.hide_settings()],
-		["menu_campaign", func(): ui.menu.kind = "campaign"; ui.menu.focus = 0; ui.menu.show_list()],
+		["menu_campaign", func(): ui.menu.kind = "campaign"; ui.menu.world = -1; ui.menu.focus = 0; ui.menu.show_list()],
+		["menu_world", func(): ui.menu.kind = "campaign"; ui.menu.world = 0; ui.menu.focus = 0; ui.menu.show_list()],
 		["menu_attack", func(): ui.menu.kind = "attack"; ui.menu.focus = 8; ui.menu.show_list()],
 		["loading", func(): ui.show_loading(Defs.TRACKS[track_idx]["name"]); ui.set_loading_progress(0.6)],
 		["menu_event", func():
 			ui.loading.visible = false
-			ui.menu.ev = { "track": track_idx, "variant": variant, "mode": mode, "humans": humans, "kind": "attack" if mode == "trial" else "campaign", "idx": 1 }
+			ui.menu.kind = "attack" if mode == "trial" else "campaign"
+			ui.menu.ev = { "track": track_idx, "variant": variant, "mode": mode, "humans": humans, "kind": ui.menu.kind, "idx": 1, "theme": view.theme_override if view.theme_override != "" else "snow" }
 			ui.menu.show_event()],
 		["results", func():
 			ui.menu.visible = false
