@@ -18,7 +18,7 @@ var _freq_target := RUMBLE_IDLE
 var _gain := 0.0
 var _gain_target := 0.0
 const RUMBLE_BASE := 40.0  # firing rate (Hz) the rumble loop is rendered at
-const RUMBLE_IDLE := 30.0  # firing rate at standstill; rises gently with speed
+const RUMBLE_IDLE := 40.0  # firing rate at standstill; rises gently with speed
 const RUMBLE_LOOP := 2.0   # seconds; a whole number of firings so it loops seamlessly
 
 func _ready() -> void:
@@ -61,7 +61,7 @@ static func _rumble() -> PackedByteArray:
 	for k in fires:
 		var start := int((k + rng.randf_range(-0.06, 0.06)) * RATE / RUMBLE_BASE)
 		var amp := rng.randf_range(0.7, 1.0) * (1.0 if k % 2 == 0 else 0.8)
-		var res := rng.randf_range(170.0, 230.0)
+		var res := rng.randf_range(220.0, 300.0)
 		var lp := 0.0
 		for j in ring:
 			var t := float(j) / RATE
@@ -73,8 +73,8 @@ static func _rumble() -> PackedByteArray:
 	for i in n:
 		var t := float(i) / RATE
 		buf[i] += 0.2 * sin(TAU * RUMBLE_BASE * t) + 0.12 * sin(TAU * RUMBLE_BASE * 0.5 * t)
-	# two one-pole low-passes (~800 Hz); second pass over the loop so the filter wraps cleanly
-	var a := 1.0 - exp(-TAU * 800.0 / RATE)
+	# two one-pole low-passes (~1.2 kHz); second pass over the loop so the filter wraps cleanly
+	var a := 1.0 - exp(-TAU * 1200.0 / RATE)
 	var l1 := 0.0
 	var l2 := 0.0
 	var out := PackedFloat32Array()
@@ -87,7 +87,7 @@ static func _rumble() -> PackedByteArray:
 	for i in n:
 		peak = maxf(peak, absf(out[i]))
 	# soft-clip for a gritty growl and more body: phone speakers can't play the deep
-	# sub-bass, so most of what they reproduce is the thumps' 170-230 Hz ring and its overtones
+	# sub-bass, so most of what they reproduce is the thumps' 220-300 Hz ring and its overtones
 	for i in n:
 		out[i] = tanh(out[i] / peak * 2.2)
 	peak = 0.0
@@ -167,7 +167,7 @@ func blip(f: float, d: float, kind := "square", v := 0.08, slide := 0.0) -> void
 	p.play()
 
 func set_engine(speed: float, on: bool) -> void:
-	_freq_target = RUMBLE_IDLE + speed * 0.025  # ~30 Hz idle, ~55 Hz at full swing
+	_freq_target = RUMBLE_IDLE + speed * 0.035  # ~40 Hz idle, ~80 Hz at full swing
 	_gain_target = (0.03 + minf(speed, 1100.0) * 0.00001) if (on and enabled) else 0.0
 
 func _process(dt: float) -> void:
@@ -179,5 +179,5 @@ func _process(dt: float) -> void:
 		return
 	if not _engine.playing:
 		_engine.play()
-	_engine.pitch_scale = clampf(_freq / RUMBLE_BASE, 0.5, 2.0)
-	_engine.volume_db = linear_to_db(_gain * 4.5)
+	_engine.pitch_scale = clampf(_freq / RUMBLE_BASE, 0.5, 2.5)
+	_engine.volume_db = linear_to_db(_gain * 9.0)
