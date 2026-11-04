@@ -23,7 +23,7 @@ const PITCH := deg_to_rad(68.0)   # fairly top-down so lines through bends are e
 const COL_INFIELD := Color("#c9d6e0")   # snow
 const COL_CHALK := Color("#ece6d8")
 const COL_KERB := Color("#d4452f")     # obstacle posts
-const BANK_OUT := 34.0
+const BANK_OUT := 70.0    # the bank's outer slope, rolling down into the ground
 const COL_DECK := Color("#7a5a3a")
 const COL_DECK_LIGHT := Color("#a07a50")
 const COL_POST := Color("#f2b134")
@@ -228,10 +228,23 @@ class Strip:
 	var st := SurfaceTool.new()
 	func _init() -> void:
 		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# Godot draws clockwise triangles as front faces, and lights a back face (cull is
+	# off) with its normal flipped, so each quad is wound to face its own normal
+	static func _order(a: Vector3, b: Vector3, d: Vector3, nrm: Vector3) -> Array:
+		return [0, 2, 1, 0, 3, 2] if (b - a).cross(d - a).dot(nrm) > 0.0 else [0, 1, 2, 0, 2, 3]
+	# quad with its own colour and normal at each corner (smooth shading); a colour's
+	# alpha below 1 blends that corner into the ground's own shading (1 - alpha)
+	func quad_smooth(v: Array, cols: Array, nrms: Array) -> void:
+		var avg: Vector3 = nrms[0] + nrms[1] + nrms[2] + nrms[3]
+		for k in _order(v[0], v[1], v[3], avg):
+			st.set_color(cols[k])
+			st.set_normal(nrms[k])
+			st.set_uv(Vector2.ZERO)
+			st.add_vertex(v[k])
 	# quad a-b-c-d (in order round the edge), flat normal pointing towards `hint`
 	# uv.x = 1 marks the asphalt (the road shader adds ice and snowy edges there),
 	# uv.y = side of the lane (+1 / -1)
-	func quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, col: Color, hint: Vector3, road := false) -> void:
+	func quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, col: Color, hint: Vector3, road := false, flat := false) -> void:
 		var nrm := (b - a).cross(d - a)
 		if nrm.length_squared() < 1e-12:
 			nrm = (c - b).cross(a - b)
@@ -241,7 +254,9 @@ class Strip:
 		st.set_color(col)
 		st.set_normal(nrm)
 		var uvs := [Vector2(1, 1), Vector2(1, 1), Vector2(1, -1), Vector2(1, -1)] if road else [Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO]
-		for k in [0, 1, 2, 0, 2, 3]:
+		# the asphalt and its dashes (`flat`) keep their old back-facing winding: their
+		# dark, matt look and the theme road colours were tuned with it
+		for k in ([0, 1, 2, 0, 2, 3] if road or flat else _order(a, b, d, nrm)):
 			st.set_uv(uvs[k])
 			st.add_vertex([a, b, c, d][k])
 
@@ -299,7 +314,7 @@ func _build_road() -> void:
 		road.quad(P.call(ca, na, HW, ha), P.call(cb, nb, HW, hb), P.call(cb, nb, -HW, hb), P.call(ca, na, -HW, ha), th["road"], up, true)
 		# centre dashes (40 on, 50 off)
 		if fposmod(smid, 90.0) < 40.0:
-			road.quad(P.call(ca, na, 2.5, ha + 0.4), P.call(cb, nb, 2.5, hb + 0.4), P.call(cb, nb, -2.5, hb + 0.4), P.call(ca, na, -2.5, ha + 0.4), Color(COL_CHALK, 1.0).darkened(0.55), up)
+			road.quad(P.call(ca, na, 2.5, ha + 0.4), P.call(cb, nb, 2.5, hb + 0.4), P.call(cb, nb, -2.5, hb + 0.4), P.call(ca, na, -2.5, ha + 0.4), Color(COL_CHALK, 1.0).darkened(0.55), up, false, true)
 		var elevated: bool = A["h"] > 2.0 or B["h"] > 2.0
 		for side: float in [1.0, -1.0]:
 			var o0 := HW * side
@@ -324,7 +339,31 @@ func _build_road() -> void:
 				var oo := (HW + KERB_W + RAIL_W + BANK_OUT) * side
 				road.quad(P.call(ca, na, o1, ha), P.call(cb, nb, o1, hb), P.call(cb, nb, ob, hb + bh), P.call(ca, na, ob, ha + bh), th["bank_face"], -out_hint + up * 0.4)
 				road.quad(P.call(ca, na, ob, ha + bh), P.call(cb, nb, ob, hb + bh), P.call(cb, nb, oc, hb + bh), P.call(ca, na, oc, ha + bh), th["bank_top"], up)
-				road.quad(P.call(ca, na, oc, ha + bh), P.call(cb, nb, oc, hb + bh), P.call(cb, nb, oo, 0.0), P.call(ca, na, oo, 0.0), th["bank_slope"], out_hint + up * 2.0)
+				# outer slope: an S-shaped roll from the crest down to the ground, smooth
+				# shaded, its colour fading into the ground's own so there is no seam
+				var segs := 6
+				var wide := absf(oo - oc)
+				for m in segs:
+					var t0 := float(m) / segs
+					var t1 := float(m + 1) / segs
+					var vs: Array = []
+					var cs: Array = []
+					var ns: Array = []
+					for corner in [[ca, na, ha, t0], [cb, nb, hb, t0], [cb, nb, hb, t1], [ca, na, ha, t1]]:
+						var t: float = corner[3]
+						var nn: Vector2 = corner[1]
+						var hh: float = bh * 0.5 * (1.0 + cos(PI * t))
+						var base: float = corner[2] * (1.0 - t)   # meets the ground (height 0) at the foot
+						vs.append(P.call(corner[0], nn, lerpf(oc, oo, t), base + hh))
+						var slope := bh * PI * 0.5 * sin(PI * t) / wide
+						# fades into the ground from just past the crest; the light flattens out
+						# with it so the slope never reads as a dark band
+						var fade := smoothstep(0.1, 0.75, t)
+						ns.append((Vector3(nn.x * side, 0, nn.y * side) * slope * (1.0 - fade) + up).normalized())
+						var col: Color = (th["bank_top"] as Color).lerp(th["bank_slope"], smoothstep(0.0, 0.4, t))
+						col.a = 1.0 - fade
+						cs.append(col)
+					road.quad_smooth(vs, cs, ns)
 		if elevated:
 			# deck underside
 			var oo := HW + KERB_W + RAIL_W
@@ -341,6 +380,9 @@ func _build_road() -> void:
 	var mi := MeshInstance3D.new()
 	mi.mesh = road.st.commit()
 	mi.material_override = _road_mat()
+	# the banks are low and soft: their own shadow only drew a dark, striped band
+	# along the outer slope
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	static_root.add_child(mi)
 
 # Loose stuff heaped along both lane edges, half on the verge and half spilling onto
@@ -442,6 +484,11 @@ func _road_mat() -> ShaderMaterial:
 		_road_m.set_shader_parameter(k + "_col", th[k])
 	for k in ["patch_amt", "patch_rough", "road_rough"]:
 		_road_m.set_shader_parameter(k, th[k])
+	var gc: Color = th["ground"]
+	_road_m.set_shader_parameter("base_col", gc)
+	_road_m.set_shader_parameter("dot_col", th["ground_dots"])
+	_road_m.set_shader_parameter("far_col", gc.darkened(0.25))
+	_road_m.set_shader_parameter("near_col", gc.lightened(0.12))
 	return _road_m
 
 func _make_road_mat() -> void:
@@ -455,6 +502,10 @@ uniform vec3 edge_col : source_color;
 uniform float patch_amt = 0.5;
 uniform float patch_rough = 0.25;
 uniform float road_rough = 0.8;
+uniform vec3 base_col : source_color;
+uniform vec3 dot_col : source_color;
+uniform vec3 far_col : source_color;
+uniform vec3 near_col : source_color;
 varying vec3 wp;
 void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -481,6 +532,20 @@ void fragment() {
 		snow = max(snow, fleck * 0.85);
 		c = mix(c, edge_col, snow);
 		rough = mix(mix(road_rough, patch_rough, ice), 0.95, snow);
+	}
+	// the bank's outer slope fades into the ground: same colour formula as the ground plane
+	float g = 1.0 - COLOR.a;
+	if (g > 0.0) {
+		float n = vnoise(wp.xz * 0.35) * 0.65 + vnoise(wp.xz * 1.3) * 0.35;
+		float dd = smoothstep(0.4, 0.8, n) + step(0.985, hash(floor(wp.xz * 9.0))) * 0.25;
+		vec2 uv = SCREEN_UV;
+		float v = clamp(uv.y * 0.9 + 0.1, 0.0, 1.0);
+		vec3 grad = mix(far_col, near_col, v);
+		float vig = smoothstep(0.95, 0.25, length((uv - vec2(0.5, 0.62)) * vec2(1.0, 1.25)));
+		vec3 gc = mix(base_col * 0.72, grad, 0.35 + 0.65 * vig);
+		gc = mix(gc, gc + (dot_col - base_col), dd);
+		c = mix(c, gc, g);
+		rough = mix(rough, 1.0, g);
 	}
 	ALBEDO = c;
 	ROUGHNESS = rough;
@@ -718,7 +783,7 @@ func _build_scenery() -> void:
 		var gx := floori((p.x - b.position.x) / SCN_CELL)
 		var gy := floori((p.y - b.position.y) / SCN_CELL)
 		return gx >= 0 and gy >= 0 and gx < gw and gy < gh and occ[gy * gw + gx] == 0
-	var clear_r := HW + KERB_W + RAIL_W + 45.0
+	var clear_r := HW + KERB_W + RAIL_W + BANK_OUT + 10.0
 	var s := 0.0
 	while s < track.L:
 		mark.call(track.point_at(s)["pos"], clear_r, 1)
