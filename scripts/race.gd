@@ -26,6 +26,7 @@ const TOKEN_PEN := 0.25     # seconds per gem missed over the whole run (Collect
 const WALL_KEEP := 0.82
 const WALL_HEADON := 0.18   # extra loss for a square hit (vn ~ speed)
 const SCRAPE_DRAG := 0.8    # 1/s speed decay while rubbing the edge (no throttle then)
+const PEEL := 0.12          # rad: after a wall contact the car points this far back into the road
 const GAP := TrackData.GAP
 const SUBSTEPS := 4
 
@@ -268,6 +269,7 @@ func step_car(c: Car, dt: float) -> void:
 		if nr["d"] > lim:
 			c.pos = nr["p"] + nv * lim
 		var vn := c.vel.dot(nv)
+		var fresh := c.scrape <= 0.0  # first touch, not still rubbing from the last step
 		# rubbing along the rail: steady speed loss and sparks
 		c.vel *= exp(-SCRAPE_DRAG * dt)
 		c.scrape = 0.1
@@ -279,15 +281,19 @@ func step_car(c: Car, dt: float) -> void:
 			# a real knock costs more the squarer it is; a graze only the old 10%
 			if vn > 40.0:
 				c.vel *= WALL_KEEP - WALL_HEADON * clampf(vn / maxf(1.0, spd), 0.0, 1.0)
-			else:
+			elif fresh:
 				c.vel *= 0.9
+			# (sliding on along a curved rail touches it again every substep: that is the
+			# rub above, not a new graze, or the 10% would grind the car to a crawl)
 			c.wall_t = 0.3
 			# slide along the wall in the racing direction
 			var fd: Vector2 = track.seg_dir[(int(nr["i"]) + 1) % track.n]
 			var tv := Vector2(-nv.y, nv.x)
 			if tv.dot(fd) < 0.0:
 				tv = -tv
-			c.wall_dir = tv.angle()
+			# ...nosing slightly back into the road so the car peels off the rail and the
+			# throttle comes back, instead of gliding along it forever with the engine cut
+			c.wall_dir = tv.angle() + PEEL * signf(tv.cross(-nv))
 			if c.vel.length() < 80.0:
 				c.vel = tv * 80.0
 			if c.hook >= 0 and vn > 40.0:
