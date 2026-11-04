@@ -3,9 +3,10 @@
 # y "south". The 3D view maps (x, y) to (x, height, y) / 100.
 extends RefCounted
 
-const HW := 150.0          # track half width
+const SPREAD := 1.1        # layouts in track_defs are spread by this much (roads widened 10% in 2026-11)
+const HW := 165.0          # track half width (lane 330: car = 22% of the lane)
 const CR := 36.0           # car collision radius
-const TURN_R := 350.0      # centreline radius: inner kerb 200, outer kerb 500
+const TURN_R := 350.0      # default centreline radius in layout units (x SPREAD = 385: inner kerb 220, outer 550)
 const GAP := 170.0         # length of the gap a jump clears
 const GRID_ROWS := [90.0, 240.0]
 const BRIDGE_H := 160.0    # visual deck height of a bridge (world units)
@@ -64,7 +65,7 @@ func _build() -> void:
 	var rev := variant == "reverse"
 	var tl: Array = []
 	for t in def["turns"]:
-		tl.append({ "p": Vector2(t[0], t[1]), "s": float(t[2]), "r": float(t[3]) if t.size() > 3 else TURN_R })
+		tl.append({ "p": Vector2(t[0], t[1]) * SPREAD, "s": float(t[2]), "r": (float(t[3]) if t.size() > 3 else TURN_R) * SPREAD })
 	if rev:
 		tl.reverse()
 		for t in tl:
