@@ -14,6 +14,11 @@ const Records = preload("res://scripts/records.gd")
 const Medals = preload("res://scripts/medals.gd")
 const Campaign = preload("res://scripts/campaign.gd")
 const Art = preload("res://scripts/menu_art.gd")
+# world card pictures: the land of each theme, no track (tools/gen_loading_art.gd ART_SCENERY=1)
+const WORLD_ART := {
+	"snow": preload("res://art/world_snow.jpg"), "forest": preload("res://art/world_forest.jpg"),
+	"sand": preload("res://art/world_sand.jpg"), "rock": preload("res://art/world_rock.jpg"),
+}
 
 signal start_event(ev: Dictionary)   # { track, variant, mode, humans, kind, idx }
 signal settings_pressed
@@ -363,6 +368,8 @@ func show_list() -> void:
 			g.add_child(b)
 			cards.append(b)
 	var card_h := 92.0 if tall else 132.0
+	if kind == "campaign" and world < 0:
+		card_h = 200.0 if tall else 250.0   # world cards carry a picture
 	for b in cards:
 		b.custom_minimum_size.y = card_h
 	var bottom := Control.new()   # breathing room under the last card
@@ -439,10 +446,11 @@ func _tag(variant: String, mode: String) -> String:
 func _list_key() -> String:
 	return "campaign%d" % world if kind == "campaign" else kind
 
-# a world of the campaign: its theme, progress, and what opens it
+# a world of the campaign: a picture of its theme, its name, progress, and what opens it
 func _world_card(c: int) -> Button:
 	var ch: Dictionary = Campaign.CHAPTERS[c]
-	var th: Dictionary = Themes.get_theme(ch["theme"])
+	var theme: String = ch["theme"]
+	var th: Dictionary = Themes.get_theme(theme)
 	var open := Campaign.chapter_open(c)
 	var line2 := ""
 	if not open:
@@ -451,9 +459,63 @@ func _world_card(c: int) -> Button:
 		line2 = "%s  ·  done, theme unlocked" % ch["name"]
 	else:
 		line2 = "%s  ·  %d / %d medals" % [ch["name"], Campaign.chapter_medals(c), Campaign.chapter_size(c)]
-	var e := Campaign.event(Campaign.chapter_start(c))
-	var b := _card(e["track"], "%d · %s" % [c + 1, String(th["name"]).to_upper()], line2, -1, not open)
+	var b := Button.new()
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	b.clip_contents = true
+	_card_style(b, not open)
 	b.disabled = not open
+	# the world's loading artwork, cropped to fill the card; greyed out while locked
+	var pic := TextureRect.new()
+	pic.texture = WORLD_ART.get(theme, WORLD_ART["snow"])
+	pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	pic.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	pic.offset_left = 3; pic.offset_top = 4; pic.offset_right = -3; pic.offset_bottom = -3
+	pic.modulate = Color.WHITE if open else Color(0.42, 0.45, 0.5)
+	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(pic)
+	# dark fade along the bottom so the name reads on any picture
+	var g := Gradient.new()
+	g.set_color(0, Color(0.02, 0.05, 0.08, 0.0))
+	g.set_color(1, Color(0.02, 0.05, 0.08, 0.85))
+	var gt := GradientTexture2D.new()
+	gt.gradient = g
+	gt.fill_from = Vector2(0, 0.35)
+	gt.fill_to = Vector2(0, 1)
+	var fade := TextureRect.new()
+	fade.texture = gt
+	fade.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	fade.stretch_mode = TextureRect.STRETCH_SCALE
+	fade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(fade)
+	var row := HBoxContainer.new()
+	row.anchor_left = 0.0; row.anchor_right = 1.0; row.anchor_top = 1.0; row.anchor_bottom = 1.0
+	row.offset_left = 14; row.offset_right = -14; row.offset_bottom = -10; row.offset_top = -60
+	row.add_theme_constant_override("separation", 10)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var ic := Art.Icon.new()
+	ic.kind = theme if open else "lock"
+	ic.custom_minimum_size = Vector2(40, 40)
+	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(ic)
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.add_theme_constant_override("separation", 0)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var l1: Label = ui._label("%d · %s" % [c + 1, String(th["name"]).to_upper()], 22, C_FG if open else C_MUTED, ui.f_display)
+	l1.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	l1.add_theme_constant_override("shadow_offset_y", 2)
+	v.add_child(l1)
+	var l2: Label = ui._label(line2, 13, C_POST if open else C_MUTED, ui.f_bold)
+	l2.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	l2.add_theme_constant_override("shadow_offset_y", 1)
+	v.add_child(l2)
+	row.add_child(v)
+	b.add_child(row)
 	b.pressed.connect(func():
 		world = c
 		_list_scroll.erase(_list_key())
