@@ -99,7 +99,10 @@ static func _rumble() -> PackedByteArray:
 		data.encode_s16(i * 2, int(out[i] / peak * 0.9 * 32000.0))
 	return data
 
-# create a bus routed to Master if it doesn't exist yet; returns its index
+# index of a bus; the "SFX" and "Music" buses come from default_bus_layout.tres.
+# They must exist at startup: buses added at runtime are wired into a loop on the
+# web build (sample playback), cutting Master off from the speakers. The fallback
+# below only runs if the layout file is missing.
 static func _bus(name: String) -> int:
 	var i := AudioServer.get_bus_index(name)
 	if i < 0:
