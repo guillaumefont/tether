@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bn7wvjxeefi0y"
-path="res://.godot/imported/loading_land.jpg-744e4c67101c2a69b51b1e395eb4cde5.ctex"
+uid="uid://ghmcb6k842vk"
+path="res://.godot/imported/loading_snow_land.jpg-4da463434bdef6d8df301176f0c0a2cb.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://art/loading_land.jpg"
-dest_files=["res://.godot/imported/loading_land.jpg-744e4c67101c2a69b51b1e395eb4cde5.ctex"]
+source_file="res://art/loading_snow_land.jpg"
+dest_files=["res://.godot/imported/loading_snow_land.jpg-4da463434bdef6d8df301176f0c0a2cb.ctex"]
 
 [params]
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://djt2wb0plaevs"
-path="res://.godot/imported/loading_port.jpg-6996c768450cbb602427cc8cfa380e78.ctex"
+uid="uid://bmumm14a6xrox"
+path="res://.godot/imported/loading_sand_land.jpg-d508b815ecf80e102c774c56d47f5d94.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://art/loading_port.jpg"
-dest_files=["res://.godot/imported/loading_port.jpg-6996c768450cbb602427cc8cfa380e78.ctex"]
+source_file="res://art/loading_sand_land.jpg"
+dest_files=["res://.godot/imported/loading_sand_land.jpg-d508b815ecf80e102c774c56d47f5d94.ctex"]
 
 [params]
 

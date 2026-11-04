@@ -9,10 +9,16 @@ const TrackData = preload("res://scripts/track.gd")
 const TrackMap = preload("res://scripts/track_map.gd")
 const MedalStrip = preload("res://scripts/medal_strip.gd")
 const Defs = preload("res://scripts/track_defs.gd")
+const Themes = preload("res://scripts/themes.gd")
 const Records = preload("res://scripts/records.gd")
 const Medals = preload("res://scripts/medals.gd")
 const Campaign = preload("res://scripts/campaign.gd")
 const Art = preload("res://scripts/menu_art.gd")
+# world card pictures: the land of each theme, no track (tools/gen_loading_art.gd ART_SCENERY=1)
+const WORLD_ART := {
+	"snow": preload("res://art/world_snow.jpg"), "forest": preload("res://art/world_forest.jpg"),
+	"sand": preload("res://art/world_sand.jpg"), "rock": preload("res://art/world_rock.jpg"),
+}
 
 signal start_event(ev: Dictionary)   # { track, variant, mode, humans, kind, idx }
 signal settings_pressed
@@ -31,7 +37,9 @@ var ui                      # the UI CanvasLayer (fonts, helpers)
 var screen := "home"
 var kind := "campaign"      # campaign | attack | versus
 var focus := -1            # list item (track or campaign event) to bring into view on the next list
-var _list_scroll := {}     # kind -> how far its list was scrolled
+var _list_scroll := {}     # list key -> how far that list was scrolled
+var world := -1            # campaign: the world (chapter) whose events are listed, -1 = the world picker
+var attack_theme := ""     # Time attack: the theme last picked, kept from track to track
 var ev := {}                # the event shown on the Event screen
 var _maps := {}             # track index -> TrackData for miniatures
 var body: Control
@@ -162,7 +170,7 @@ func _frame() -> VBoxContainer:
 	if body:
 		body.queue_free()
 	if _scroller:
-		_list_scroll[kind] = clampf(_scroller.scroll, 0.0, _scroller.max_scroll())
+		_list_scroll[_list_key()] = clampf(_scroller.scroll, 0.0, _scroller.max_scroll())
 	_pager = null
 	_scroller = null
 	_drag = false
@@ -267,8 +275,8 @@ func show_home() -> void:
 	var cleared := 0
 	for i in Campaign.count():
 		if Campaign.event_medal(i) > 0: cleared += 1
-	row.add_child(_big_choice("flag", "CAMPAIGN", "%d / %d events cleared" % [cleared, Campaign.count()], "Hand-picked events. Earn a medal to unlock the next.",
-		func(): kind = "campaign"; _list_scroll.erase(kind); focus = _first_open_event(); show_list()))
+	row.add_child(_big_choice("flag", "CAMPAIGN", "%d / %d events cleared" % [cleared, Campaign.count()], "Four worlds of hand-picked events. Finish one to unlock its theme.",
+		func(): kind = "campaign"; world = -1; _list_scroll.erase(_list_key()); focus = Campaign.chapter_of(_first_open_event()); show_list()))
 	row.add_child(_big_choice("watch", "TIME ATTACK", "%d tracks · 4 variants" % Defs.TRACKS.size(), "Any track, any variant. Chase your ghost and the medal times.",
 		func(): kind = "attack"; _list_scroll.erase(kind); show_list()))
 	row.add_child(_big_choice("duel", "2 PLAYERS", "One phone, two thumbs", "Race a friend on any track.",
@@ -319,12 +327,16 @@ func show_list() -> void:
 	var vb := _frame()
 	var title := "Campaign" if kind == "campaign" else ("Time attack" if kind == "attack" else "2-player race")
 	var sub := ""
-	if kind == "campaign":
-		sub = "%d events  ·  %d chapters" % [Campaign.count(), Campaign.CHAPTERS.size()]
+	if kind == "campaign" and world < 0:
+		sub = "%d worlds  ·  finish one to open the next" % Campaign.CHAPTERS.size()
+	elif kind == "campaign":
+		var ch: Dictionary = Campaign.CHAPTERS[world]
+		title = Themes.get_theme(ch["theme"])["name"]
+		sub = "World %d  ·  %s  ·  %d / %d medals" % [world + 1, ch["name"], Campaign.chapter_medals(world), Campaign.chapter_size(world)]
 	else:
 		sub = "%d tracks  ·  pick one" % Defs.TRACKS.size()
 	var tall: bool = ui.is_portrait()
-	_header(vb, title, sub, func(): show_home())
+	_header(vb, title, sub, func(): go_back())
 	var list := VBoxContainer.new()
 	list.add_theme_constant_override("separation", 10)
 	var cards := []   # by track (attack, versus) or event index (campaign)
@@ -335,25 +347,20 @@ func show_list() -> void:
 		g.add_theme_constant_override("v_separation", 10 if tall else 12)
 		list.add_child(g)
 		return g
-	if kind == "campaign":
-		var i := 0
+	if kind == "campaign" and world < 0:
+		var g: GridContainer = grid.call()
+		g.columns = 1 if tall else 2
 		for c in Campaign.CHAPTERS.size():
-			var ch: Dictionary = Campaign.CHAPTERS[c]
-			var got := 0
-			for k in ch["events"].size():
-				got += Campaign.event_medal(i + k)
-			var hl: Label = ui._label("%d · %s" % [c + 1, ch["name"].to_upper()], 15, C_POST, ui.f_bold)
-			hl.autowrap_mode = TextServer.AUTOWRAP_OFF
-			if c > 0:
-				hl.custom_minimum_size.y = 30
-				hl.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-			list.add_child(hl)
-			var g: GridContainer = grid.call()
-			for k in ch["events"].size():
-				var b := _event_card(i)
-				g.add_child(b)
-				cards.append(b)
-				i += 1
+			var b := _world_card(c)
+			g.add_child(b)
+			cards.append(b)
+	elif kind == "campaign":
+		var g: GridContainer = grid.call()
+		var i0 := Campaign.chapter_start(world)
+		for k in Campaign.chapter_size(world):
+			var b := _event_card(i0 + k)
+			g.add_child(b)
+			cards.append(b)
 	else:
 		var g: GridContainer = grid.call()
 		for i in Defs.TRACKS.size():
@@ -361,6 +368,8 @@ func show_list() -> void:
 			g.add_child(b)
 			cards.append(b)
 	var card_h := 92.0 if tall else 132.0
+	if kind == "campaign" and world < 0:
+		card_h = 200.0 if tall else 250.0   # world cards carry a picture
 	for b in cards:
 		b.custom_minimum_size.y = card_h
 	var bottom := Control.new()   # breathing room under the last card
@@ -371,7 +380,7 @@ func show_list() -> void:
 	_scroller.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_scroller.hold(list)
 	vb.add_child(_scroller)
-	_scroller.scroll = _list_scroll.get(kind, 0.0)
+	_scroller.scroll = _list_scroll.get(_list_key(), 0.0)
 	if focus >= 0 and focus < cards.size():
 		_reveal.call_deferred(_scroller, cards[focus])
 	focus = -1
@@ -434,10 +443,92 @@ func _tag(variant: String, mode: String) -> String:
 		if v[0] == variant: vn = v[1]
 	return "%s  ·  %s" % [MODE_NAMES[mode], vn]
 
+func _list_key() -> String:
+	return "campaign%d" % world if kind == "campaign" else kind
+
+# a world of the campaign: a picture of its theme, its name, progress, and what opens it
+func _world_card(c: int) -> Button:
+	var ch: Dictionary = Campaign.CHAPTERS[c]
+	var theme: String = ch["theme"]
+	var th: Dictionary = Themes.get_theme(theme)
+	var open := Campaign.chapter_open(c)
+	var line2 := ""
+	if not open:
+		line2 = "Locked: finish %s" % Themes.get_theme(Campaign.CHAPTERS[c - 1]["theme"])["name"]
+	elif Campaign.chapter_done(c):
+		line2 = "%s  ·  done, theme unlocked" % ch["name"]
+	else:
+		line2 = "%s  ·  %d / %d medals" % [ch["name"], Campaign.chapter_medals(c), Campaign.chapter_size(c)]
+	var b := Button.new()
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	b.clip_contents = true
+	_card_style(b, not open)
+	b.disabled = not open
+	# the world's loading artwork, cropped to fill the card; greyed out while locked
+	var pic := TextureRect.new()
+	pic.texture = WORLD_ART.get(theme, WORLD_ART["snow"])
+	pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	pic.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	pic.offset_left = 3; pic.offset_top = 4; pic.offset_right = -3; pic.offset_bottom = -3
+	pic.modulate = Color.WHITE if open else Color(0.42, 0.45, 0.5)
+	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(pic)
+	# dark fade along the bottom so the name reads on any picture
+	var g := Gradient.new()
+	g.set_color(0, Color(0.02, 0.05, 0.08, 0.0))
+	g.set_color(1, Color(0.02, 0.05, 0.08, 0.85))
+	var gt := GradientTexture2D.new()
+	gt.gradient = g
+	gt.fill_from = Vector2(0, 0.35)
+	gt.fill_to = Vector2(0, 1)
+	var fade := TextureRect.new()
+	fade.texture = gt
+	fade.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	fade.stretch_mode = TextureRect.STRETCH_SCALE
+	fade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(fade)
+	var row := HBoxContainer.new()
+	row.anchor_left = 0.0; row.anchor_right = 1.0; row.anchor_top = 1.0; row.anchor_bottom = 1.0
+	row.offset_left = 14; row.offset_right = -14; row.offset_bottom = -10; row.offset_top = -60
+	row.add_theme_constant_override("separation", 10)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var ic := Art.Icon.new()
+	ic.kind = theme if open else "lock"
+	ic.custom_minimum_size = Vector2(40, 40)
+	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(ic)
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.add_theme_constant_override("separation", 0)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var l1: Label = ui._label("%d · %s" % [c + 1, String(th["name"]).to_upper()], 22, C_FG if open else C_MUTED, ui.f_display)
+	l1.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	l1.add_theme_constant_override("shadow_offset_y", 2)
+	v.add_child(l1)
+	var l2: Label = ui._label(line2, 13, C_POST if open else C_MUTED, ui.f_bold)
+	l2.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	l2.add_theme_constant_override("shadow_offset_y", 1)
+	v.add_child(l2)
+	row.add_child(v)
+	b.add_child(row)
+	b.pressed.connect(func():
+		world = c
+		_list_scroll.erase(_list_key())
+		var first := _first_open_event()
+		focus = first - Campaign.chapter_start(c) if Campaign.chapter_of(first) == c else 0
+		show_list())
+	return b
+
 func _event_card(i: int) -> Button:
 	var e := Campaign.event(i)
 	var locked := not Campaign.unlocked(i)
-	var b := _card(e["track"], "%d. %s" % [i + 1, e["name"]], "Locked: earn a medal in event %d" % i if locked else _tag(e["variant"], e["mode"]), Campaign.event_medal(i), locked)
+	var n := i - Campaign.chapter_start(Campaign.chapter_of(i))
+	var b := _card(e["track"], "%d. %s" % [n + 1, e["name"]], "Locked: earn a medal in event %d" % n if locked else _tag(e["variant"], e["mode"]), Campaign.event_medal(i), locked)
 	b.disabled = locked
 	b.pressed.connect(func():
 		ev = { "track": e["track"], "variant": e["variant"], "mode": e["mode"], "humans": 1, "kind": "campaign", "idx": i, "theme": e.get("theme", "") }
@@ -453,9 +544,16 @@ func _track_card(i: int) -> Button:
 	var b := _card(i, name, Defs.TRACKS[i]["note"], best, false)
 	b.pressed.connect(func():
 		ev = { "track": i, "variant": "standard", "mode": "trial" if kind == "attack" else "race",
-			"humans": 1 if kind == "attack" else 2, "kind": kind, "idx": i }
+			"humans": 1 if kind == "attack" else 2, "kind": kind, "idx": i, "theme": _theme_for(i) }
 		show_event())
 	return b
+
+# the theme a track opens in outside the campaign: the Time attack pick if it is
+# still unlocked, else the track's own (or the menu's while that one is locked)
+func _theme_for(track_i: int) -> String:
+	if kind == "attack" and attack_theme != "" and Campaign.theme_unlocked(attack_theme):
+		return attack_theme
+	return Campaign.track_theme(track_i)
 
 # ---------------------------------------------------------------- event
 func show_event() -> void:
@@ -464,7 +562,9 @@ func show_event() -> void:
 	var d: Dictionary = Defs.TRACKS[ev["track"]]
 	var sub := ""
 	match ev["kind"]:
-		"campaign": sub = "Event %d of %d  ·  %s" % [ev["idx"] + 1, Campaign.count(), _tag(ev["variant"], ev["mode"])]
+		"campaign":
+			var c := Campaign.chapter_of(ev["idx"])
+			sub = "%s  ·  event %d of %d  ·  %s" % [Themes.get_theme(Campaign.CHAPTERS[c]["theme"])["name"], ev["idx"] - Campaign.chapter_start(c) + 1, Campaign.chapter_size(c), _tag(ev["variant"], ev["mode"])]
 		"attack": sub = "Time attack  ·  %d laps" % int(d.get("laps", 3))
 		"versus": sub = "2-player race  ·  %d laps" % int(d.get("laps", 3))
 	_header(vb, d["name"], sub, func(): go_back())
@@ -514,6 +614,21 @@ func show_event() -> void:
 			b.pressed.connect(func(): ev["variant"] = v[0]; show_event())
 			g.add_child(b)
 		right.add_child(g)
+	if ev["kind"] == "attack":
+		# theme switcher: the worlds unlocked in the campaign; the rest show a lock
+		var tg := GridContainer.new()
+		tg.columns = 4
+		tg.add_theme_constant_override("h_separation", 8)
+		for t in Themes.ORDER:
+			var open := Campaign.theme_unlocked(t)
+			var tb: Button = ui.icon_button(t if open else "lock", String(Themes.get_theme(t)["name"]).to_upper(), "card", true, 54 if tall else 58)
+			tb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			tb.tooltip_text = Themes.get_theme(t)["name"] if open else "Finish its campaign world to unlock"
+			tb.disabled = not open
+			ui.set_tile_on(tb, t == ev.get("theme", ""))
+			tb.pressed.connect(func(): ev["theme"] = t; attack_theme = t; show_event())
+			tg.add_child(tb)
+		right.add_child(tg)
 	var vdesc := ""
 	for v in Defs.VARIANTS:
 		if v[0] == ev["variant"]: vdesc = v[2]
@@ -547,7 +662,8 @@ func show_event() -> void:
 # where the event screen sits in its carousel: [index, count]
 func _event_pos() -> Array:
 	if ev["kind"] == "campaign":
-		return [ev["idx"], Campaign.count()]
+		var c := Campaign.chapter_of(ev["idx"])
+		return [ev["idx"] - Campaign.chapter_start(c), Campaign.chapter_size(c)]
 	return [ev["track"], Defs.TRACKS.size()]
 
 # ---------------------------------------------------------------- swipe
@@ -579,7 +695,7 @@ func _can_flip(dir: int) -> bool:
 			var i: int = pos[0] + dir
 			if i < 0 or i >= pos[1]:
 				return false
-			return ev["kind"] != "campaign" or Campaign.unlocked(i)
+			return ev["kind"] != "campaign" or Campaign.unlocked(ev["idx"] + dir)
 	return false
 
 func _flip(dir: int) -> void:
@@ -593,6 +709,7 @@ func _flip(dir: int) -> void:
 			else:
 				ev["track"] += dir
 				ev["idx"] = ev["track"]
+				ev["theme"] = _theme_for(ev["track"])
 			show_event()
 
 # slide the page out, then build the next one sliding in (or bounce back)
@@ -752,7 +869,7 @@ func next_event() -> Dictionary:
 	if ev.get("kind", "") != "campaign":
 		return {}
 	var i: int = ev["idx"] + 1
-	if i >= Campaign.count() or not Campaign.unlocked(i):
+	if i >= Campaign.count() or not Campaign.unlocked(i) or Campaign.chapter_of(i) != Campaign.chapter_of(ev["idx"]):
 		return {}
 	var e := Campaign.event(i)
 	return { "track": e["track"], "variant": e["variant"], "mode": e["mode"], "humans": 1, "kind": "campaign", "idx": i, "theme": e.get("theme", "") }
@@ -762,9 +879,17 @@ func go_back() -> bool:
 	match screen:
 		"event":
 			focus = ev["idx"]   # the list comes back with this card in view
+			if ev["kind"] == "campaign":
+				world = Campaign.chapter_of(ev["idx"])
+				focus = ev["idx"] - Campaign.chapter_start(world)
 			show_list()
 			return true
 		"list":
-			show_home()
+			if kind == "campaign" and world >= 0:
+				focus = world
+				world = -1
+				show_list()
+			else:
+				show_home()
 			return true
 	return false

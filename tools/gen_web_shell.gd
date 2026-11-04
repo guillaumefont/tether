@@ -23,7 +23,7 @@ func _initialize() -> void:
 	var used := logo.get_used_rect()
 	logo = logo.get_region(used.grow(8).intersection(Rect2i(Vector2i.ZERO, logo.get_size())))
 	logo.resize(logo.get_width() * 560 / logo.get_width(), logo.get_height() * 560 / logo.get_width(), Image.INTERPOLATE_LANCZOS)
-	var art := Image.load_from_file("res://art/loading_land.jpg")
+	var art := Image.load_from_file("res://art/loading_snow_land.jpg")
 	art.resize(1280, 720, Image.INTERPOLATE_LANCZOS)
 	var html := FileAccess.get_file_as_string("res://web/shell_template.html")
 	html = html.replace("__ART__", Marshalls.raw_to_base64(art.save_jpg_to_buffer(0.72)))

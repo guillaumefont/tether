@@ -8,6 +8,7 @@ const MenuScreens = preload("res://scripts/menu.gd")
 const Medals = preload("res://scripts/medals.gd")
 const Defs = preload("res://scripts/track_defs.gd")
 const Art = preload("res://scripts/menu_art.gd")
+const Campaign = preload("res://scripts/campaign.gd")
 
 const TIPS := [
 	"Hook the tower as you enter the bend, let go when your nose points down the exit.",
@@ -607,8 +608,14 @@ var _load_tween: Tween
 var _load_box: VBoxContainer
 
 var _load_bar
-const ART_LAND := preload("res://art/loading_land.jpg")
-const ART_PORT := preload("res://art/loading_port.jpg")
+# loading artwork per theme: [landscape, portrait]; the screen wears the menu's theme
+const ART := {
+	"snow": [preload("res://art/loading_snow_land.jpg"), preload("res://art/loading_snow_port.jpg")],
+	"forest": [preload("res://art/loading_forest_land.jpg"), preload("res://art/loading_forest_port.jpg")],
+	"rock": [preload("res://art/loading_rock_land.jpg"), preload("res://art/loading_rock_port.jpg")],
+	"sand": [preload("res://art/loading_sand_land.jpg"), preload("res://art/loading_sand_port.jpg")],
+}
+var art_theme := "snow"
 var _load_art
 
 # logo near the top, title / tip / bar at the bottom, whatever the screen shape
@@ -616,7 +623,8 @@ func _place_loading() -> void:
 	var ins := safe_insets()
 	_load_box.offset_bottom = -22 - ins["b"]
 	_load_box.offset_top = _load_box.offset_bottom - 104
-	_load_art.bg = ART_PORT if is_portrait() else ART_LAND
+	var pair: Array = ART.get(art_theme, ART["snow"])
+	_load_art.bg = pair[1] if is_portrait() else pair[0]
 
 func _build_loading() -> void:
 	loading = Control.new()
@@ -625,7 +633,7 @@ func _build_loading() -> void:
 	var sp := Art.Splash.new()
 	sp.font = f_display
 	_load_art = sp
-	sp.bg = ART_LAND
+	sp.bg = ART["snow"][0]
 	sp.emblem_y = 0.15
 	sp.emblem_k = 0.7
 	sp.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -660,6 +668,8 @@ func _build_loading() -> void:
 func show_loading(title: String) -> void:
 	if _load_tween:
 		_load_tween.kill()
+	art_theme = Campaign.menu_theme()
+	_place_loading()
 	_load_title.text = title.to_upper()
 	_load_tip.text = TIPS[randi() % TIPS.size()]
 	loading.modulate.a = 1.0

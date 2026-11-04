@@ -1,9 +1,10 @@
 extends SceneTree
 # Renders the loading-screen artwork with the game's own 3D world: AI cars swinging round
 # a tower on a snowy track at dusk. One landscape and one portrait image; needs a display:
-#   ART_OUT=res://art/loading_land.jpg xvfb-run godot --path . --rendering-method gl_compatibility --resolution 1920x1080 --script tools/gen_loading_art.gd
-#   ART_OUT=res://art/loading_port.jpg ART_DIST=1900 ART_AIM_UP=60 xvfb-run godot --path . --rendering-method gl_compatibility --resolution 1080x1920 --script tools/gen_loading_art.gd
-# Optional env: ART_TRACK (index), ART_SECS (sim time), ART_PITCH, ART_YAW (degrees), ART_DIST (world units), ART_OUT
+#   ART_THEME=snow ART_OUT=res://art/loading_snow_land.jpg xvfb-run godot --path . --rendering-method gl_compatibility --resolution 1920x1080 --script tools/gen_loading_art.gd
+#   ART_THEME=snow ART_OUT=res://art/loading_snow_port.jpg ART_DIST=1900 ART_AIM_UP=60 xvfb-run godot --path . --rendering-method gl_compatibility --resolution 1080x1920 --script tools/gen_loading_art.gd
+# ART_SCENERY=1 renders the land beside the track, looking away from it (world cards).
+# Optional env: ART_THEME (snow, forest, rock, sand), ART_TRACK (index), ART_SECS (sim time), ART_PITCH, ART_YAW (degrees), ART_DIST (world units), ART_OUT
 const TrackData = preload("res://scripts/track.gd")
 const Race = preload("res://scripts/race.gd")
 const Defs = preload("res://scripts/track_defs.gd")
@@ -18,6 +19,8 @@ func _initialize() -> void:
 	var view := WorldView.new()
 	root.add_child(view)
 	await process_frame
+	var theme := OS.get_environment("ART_THEME")
+	view.theme_override = theme if theme != "" else "snow"
 	var tr := TrackData.new(Defs.TRACKS[int(_env("ART_TRACK", 1))], "standard")
 	view.build(tr)
 	var race := Race.new(tr, "race", 0)
@@ -49,7 +52,7 @@ func _initialize() -> void:
 	sky_mat.sky_top_color = Color("#1b2f52")
 	sky_mat.sky_horizon_color = Color("#e9b7aa")
 	sky_mat.ground_horizon_color = Color("#e9b7aa")
-	sky_mat.ground_bottom_color = Color("#9fb3c8")
+	sky_mat.ground_bottom_color = (view.th["ground"] as Color).lerp(Color("#9fb3c8"), 0.3)
 	var sky := Sky.new()
 	sky.sky_material = sky_mat
 	env.sky = sky
@@ -70,6 +73,17 @@ func _initialize() -> void:
 	view.camera.fov = 42.0
 	view.camera.position = focus + off
 	view.camera.look_at(focus + Vector3(0, _env("ART_AIM_UP", 0.0) * WorldView.U, 0), Vector3.UP)
+	if OS.get_environment("ART_SCENERY") != "":
+		# world card: no track, just the land. Stand past the track's edge and look out.
+		var ctr := tr.bounds.get_center()
+		var out_dir := Vector2.from_angle(deg_to_rad(_env("ART_YAW", 20.0)))
+		var edge := ctr
+		while tr.bounds.grow(120.0).has_point(edge):
+			edge += out_dir * 20.0
+		var eye := Vector3(edge.x, _env("ART_EYE", 260.0), edge.y) * WorldView.U
+		var tgt := Vector3(edge.x + out_dir.x * 1500.0, 0.0, edge.y + out_dir.y * 1500.0) * WorldView.U
+		view.camera.position = eye
+		view.camera.look_at(tgt, Vector3.UP)
 	view.snowfall.visible = false
 	for k in 6:
 		await process_frame

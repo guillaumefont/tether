@@ -64,6 +64,7 @@ class Logo extends Control:
 # Cards: "flag" (campaign), "watch" (time attack), "duel" (two players).
 # Buttons: gear, back, prev, next, play, retry, home, check, pause, ghost, spark, music, sound.
 # Variants: standard, reverse, obstacles, collect.
+# Themes: snow, forest, rock, sand, and lock for one not yet unlocked.
 class Icon extends Control:
 	var kind := "flag":
 		set(v):
@@ -197,6 +198,38 @@ class Icon extends Control:
 				draw_line(cw, cw + Vector2(0, -r * 0.7), col2, lw, true)
 				draw_line(cw, cw + Vector2(r * 0.5, r * 0.25), col2, lw, true)
 				draw_circle(cw, lw * 0.8, col)
+			"snow":
+				# a six-armed snowflake with little side branches
+				for k in 6:
+					var d := Vector2.from_angle(TAU * k / 6.0 - PI / 2)
+					draw_line(c, c + d * s * 0.36, C_ICE, lw, true)
+					var m := c + d * s * 0.22
+					draw_line(m, m + d.rotated(0.8) * s * 0.1, C_ICE, lw * 0.8, true)
+					draw_line(m, m + d.rotated(-0.8) * s * 0.1, C_ICE, lw * 0.8, true)
+			"forest":
+				# a pine: three stacked triangles on a trunk
+				var g := Color("#6fbf5a")
+				draw_rect(Rect2(c + Vector2(-s * 0.04, s * 0.22), Vector2(s * 0.08, s * 0.14)), Color("#a07a50"))
+				for k in 3:
+					var y := c.y - s * 0.34 + k * s * 0.16
+					var w := s * (0.16 + k * 0.08)
+					draw_colored_polygon(PackedVector2Array([Vector2(c.x, y), Vector2(c.x + w, y + s * 0.26), Vector2(c.x - w, y + s * 0.26)]), g.darkened(0.12 * k))
+			"rock":
+				# two peaks, the near one with a light face
+				var base := c.y + s * 0.3
+				draw_colored_polygon(PackedVector2Array([Vector2(c.x - s * 0.06, base), Vector2(c.x + s * 0.18, c.y - s * 0.2), Vector2(c.x + s * 0.4, base)]), Color("#7d8086"))
+				draw_colored_polygon(PackedVector2Array([Vector2(c.x - s * 0.4, base), Vector2(c.x - s * 0.1, c.y - s * 0.34), Vector2(c.x + s * 0.2, base)]), Color("#a6a9ae"))
+				draw_colored_polygon(PackedVector2Array([Vector2(c.x - s * 0.1, c.y - s * 0.34), Vector2(c.x + s * 0.2, base), Vector2(c.x - s * 0.02, base)]), Color("#7d8086"))
+			"sand":
+				# a sun over two dunes
+				draw_circle(c + Vector2(s * 0.12, -s * 0.14), s * 0.15, C_AMBER)
+				draw_colored_polygon(PackedVector2Array([Vector2(c.x - s * 0.4, c.y + s * 0.3), Vector2(c.x - s * 0.12, c.y + s * 0.02), Vector2(c.x + s * 0.18, c.y + s * 0.3)]), Color("#e6c891"))
+				draw_colored_polygon(PackedVector2Array([Vector2(c.x - s * 0.05, c.y + s * 0.3), Vector2(c.x + s * 0.2, c.y + s * 0.1), Vector2(c.x + s * 0.4, c.y + s * 0.3)]), Color("#c99e64"))
+			"lock":
+				var body_r := Rect2(c + Vector2(-s * 0.22, -s * 0.04), Vector2(s * 0.44, s * 0.34))
+				draw_arc(c + Vector2(0, -s * 0.06), s * 0.15, PI, TAU, 16, Color(C_ICE_DIM, 0.8), lw, true)
+				draw_rect(body_r, Color(C_ICE_DIM, 0.8))
+				draw_circle(c + Vector2(0, s * 0.11), s * 0.04, Color("#0d1a26"))
 			"duel":
 				for k in 2:
 					var cc := o + Vector2(s * (0.33 + 0.34 * k), s * 0.5)
