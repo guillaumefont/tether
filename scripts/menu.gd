@@ -440,7 +440,7 @@ func _event_card(i: int) -> Button:
 	var b := _card(e["track"], "%d. %s" % [i + 1, e["name"]], "Locked: earn a medal in event %d" % i if locked else _tag(e["variant"], e["mode"]), Campaign.event_medal(i), locked)
 	b.disabled = locked
 	b.pressed.connect(func():
-		ev = { "track": e["track"], "variant": e["variant"], "mode": e["mode"], "humans": 1, "kind": "campaign", "idx": i }
+		ev = { "track": e["track"], "variant": e["variant"], "mode": e["mode"], "humans": 1, "kind": "campaign", "idx": i, "theme": e.get("theme", "") }
 		show_event())
 	return b
 
@@ -588,7 +588,7 @@ func _flip(dir: int) -> void:
 		"event":
 			if ev["kind"] == "campaign":
 				var e := Campaign.event(ev["idx"] + dir)
-				ev = { "track": e["track"], "variant": e["variant"], "mode": e["mode"], "humans": 1, "kind": "campaign", "idx": e["idx"] }
+				ev = { "track": e["track"], "variant": e["variant"], "mode": e["mode"], "humans": 1, "kind": "campaign", "idx": e["idx"], "theme": e.get("theme", "") }
 
 			else:
 				ev["track"] += dir
@@ -755,7 +755,7 @@ func next_event() -> Dictionary:
 	if i >= Campaign.count() or not Campaign.unlocked(i):
 		return {}
 	var e := Campaign.event(i)
-	return { "track": e["track"], "variant": e["variant"], "mode": e["mode"], "humans": 1, "kind": "campaign", "idx": i }
+	return { "track": e["track"], "variant": e["variant"], "mode": e["mode"], "humans": 1, "kind": "campaign", "idx": i, "theme": e.get("theme", "") }
 
 # back button: event -> list -> home; false on the home screen (the game may then quit)
 func go_back() -> bool:
