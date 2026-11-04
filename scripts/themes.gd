@@ -25,6 +25,9 @@ const THEMES := {
 		"ramp_a": Color("#eef3f7"), "ramp_b": Color("#4f8fc0"),
 		"gap_edge": Color("#1f5f86"), "gap_mid": Color("#06100f"), "lip": Color("#7fd8f0"),
 		"spray": [Color("#eef3f7"), Color("#9fb4c6")],
+		# loose stuff piled along the lane edge, the visible reason the edge slows you:
+		# fresh powder you plough into (main colour, shade)
+		"drift": "powder", "drift_a": Color("#f4f8fb"), "drift_b": Color("#8ea6bf"),
 		"weather": "snow", "props": "snow", "kit": "snow",
 	},
 	"forest": {
@@ -41,6 +44,8 @@ const THEMES := {
 		"ramp_a": Color("#a07a50"), "ramp_b": Color("#6e5236"),
 		"gap_edge": Color("#2f7d84"), "gap_mid": Color("#0f2c33"), "lip": Color("#c9a46a"),
 		"spray": [Color("#7a5a36"), Color("#5c8a3a")],
+		# undergrowth and leaf litter spilling onto the track
+		"drift": "brush", "drift_a": Color("#4f7d33"), "drift_b": Color("#7a5a36"),
 		"weather": "leaves", "props": "forest", "kit": "forest",
 	},
 	"rock": {
@@ -57,6 +62,8 @@ const THEMES := {
 		"ramp_a": Color("#8e9090"), "ramp_b": Color("#d38a33"),
 		"gap_edge": Color("#3d2c24"), "gap_mid": Color("#0b0706"), "lip": Color("#e8a64a"),
 		"spray": [Color("#b4b6b0"), Color("#6c6e69")],
+		# loose scree and gravel
+		"drift": "scree", "drift_a": Color("#8e9090"), "drift_b": Color("#6a625a"),
 		"weather": "dust", "props": "rock", "kit": "rock",
 	},
 	"sand": {
@@ -73,6 +80,8 @@ const THEMES := {
 		"ramp_a": Color("#efd59f"), "ramp_b": Color("#b0744a"),
 		"gap_edge": Color("#8a5a32"), "gap_mid": Color("#1c1009"), "lip": Color("#f2c064"),
 		"spray": [Color("#efd59f"), Color("#c79c5e")],
+		# soft sand blown over the edge
+		"drift": "sand", "drift_a": Color("#ecd09a"), "drift_b": Color("#c99e64"),
 		"weather": "sand", "props": "sand", "kit": "sand",
 	},
 }

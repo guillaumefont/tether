@@ -50,7 +50,7 @@ var gem_nodes: Array = []
 
 # effects
 var parts: Array = []      # {p: Vector3, v: Vector3, life, col}
-const SPARK_MAX := 160
+const SPARK_MAX := 240
 var spark_pool: Array = []
 var spark_mats := {}
 var skid_mm: MultiMeshInstance3D
@@ -155,7 +155,7 @@ func build(tr: TrackData) -> void:
 
 # The build cut into a few steps so a loading screen can draw its bar between them.
 func build_steps(tr: TrackData) -> Array:
-	return [func(): _clear(tr), _build_ground, _build_road, _build_scenery,
+	return [func(): _clear(tr), _build_ground, func(): _build_road(); _build_drifts(), _build_scenery,
 		func(): _build_jumps(); _build_start(); _build_towers(),
 		func(): _build_posts(); _build_gems(); _build_fx(); _build_weather()]
 
@@ -343,8 +343,97 @@ func _build_road() -> void:
 	mi.material_override = _road_mat()
 	static_root.add_child(mi)
 
-# Icy asphalt: glossy ice patches from a cheap value noise, and packed snow creeping
-# in from both edges (it marks where the rail starts to cost speed).
+# Loose stuff heaped along both lane edges, half on the verge and half spilling onto
+# the lane, so a car rubbing the edge visibly ploughs into it: fresh powder, forest
+# undergrowth, scree or soft sand. Purely visual (the edge penalty is in race.gd).
+func _build_drifts() -> void:
+	var meshes := _drift_meshes()
+	var lots: Array = [[], []]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(String(track.def.get("name", ""))) + 7
+	var s := 0.0
+	while s < track.L:
+		var here := s
+		s += 16.0 + rng.randf() * 12.0
+		if track.height_at(here) > 2.0 or _near_jump(here):
+			continue
+		var q := track.point_at(here)
+		var t: Vector2 = q["dir"]
+		var n := TrackData.perp(t)
+		var h := track.height_at(here) + ROAD_Y
+		for side: float in [1.0, -1.0]:
+			var off := HW + 6.0 + rng.randf() * 10.0
+			var p: Vector2 = q["pos"] + n * off * side + t * (rng.randf() - 0.5) * 6.0
+			var yaw := -t.angle() + (rng.randf() - 0.5) * 0.5
+			var sc := Vector3(1.7 + rng.randf() * 1.0, 1.2 + rng.randf() * 0.8, 1.25 + rng.randf() * 0.4)
+			var xf := Transform3D(Basis(Vector3.UP, yaw).scaled(sc), w3(p, h))
+			lots[0 if rng.randf() < 0.65 else 1].append(xf)
+	_multi(meshes[0], lots[0])
+	_multi(meshes[1], lots[1])
+
+func _near_jump(s: float) -> bool:
+	for j in track.jumps:
+		var d := fposmod(s - j["s"] + RAMP_LEN + 20.0, track.L)
+		if d < RAMP_LEN + GAP + 60.0:
+			return true
+	return false
+
+# two drift pieces per theme, built about 32 long (x, along the road) and 30 deep
+func _drift_meshes() -> Array:
+	var a: Color = th["drift_a"]
+	var b: Color = th["drift_b"]
+	var m1 := SurfaceTool.new()
+	var m2 := SurfaceTool.new()
+	m1.begin(Mesh.PRIMITIVE_TRIANGLES)
+	m2.begin(Mesh.PRIMITIVE_TRIANGLES)
+	match String(th["drift"]):
+		"brush":
+			# low leafy clumps with a little bracken, and a heap of leaf litter and mud
+			_band(m1, 0.0, 4.0, 16.0, 15.0, 6, b.darkened(0.15))
+			_blob(m1, 7.0, 11.0, a, 0.3, Vector3(-5, 0, 2))
+			_blob(m1, 6.0, 8.0, a.lightened(0.1), 1.1, Vector3(7, 0, -3))
+			_blob(m1, 4.0, 6.0, a.darkened(0.12), 0.6, Vector3(1, 0, 8))
+			_band(m2, 0.0, 3.5, 17.0, 12.0, 7, b.darkened(0.1))
+			_band(m2, 3.5, 6.0, 12.0, 0.0, 7, b, 0.4)
+			_blob(m2, 4.0, 5.0, a, 0.2, Vector3(-8, 0, -4))
+			_blob(m2, 3.5, 4.0, Color("#b0782e"), 0.9, Vector3(7, 0, 5))
+		"scree":
+			# a scatter of angular stones, and a heap of gravel with a few big ones
+			for k in 4:
+				var o := Vector3(cos(k * 2.3) * 9.0, 0, sin(k * 1.7) * 8.0)
+				var r := 8.0 - k * 1.2
+				var c := a.darkened(0.06 * k) if k % 2 == 0 else b.lightened(0.05 * k)
+				_band(m1, 0.0, r * 0.7, r, r * 0.65, 5, c, k * 0.9, o)
+				_band(m1, r * 0.7, r * 1.0, r * 0.65, 0.0, 5, c.lightened(0.12), k * 0.9, o)
+			_band(m2, 0.0, 4.0, 16.0, 11.0, 6, b)
+			_band(m2, 4.0, 6.5, 11.0, 0.0, 6, b.lightened(0.08), 0.5)
+			for k in 3:
+				var o := Vector3(cos(k * 2.1 + 1.0) * 9.0, 2.0, sin(k * 2.1 + 1.0) * 7.0)
+				_band(m2, 0.0, 6.0, 6.0 - k, 3.5 - k * 0.5, 5, a.darkened(0.05 * k), k, o)
+				_band(m2, 6.0, 8.0, 3.5 - k * 0.5, 0.0, 5, a.lightened(0.1), k, o)
+		"sand":
+			# a soft drift with a sharp lit crest, and a lower rippled tongue
+			_band(m1, 0.0, 3.0, 17.0, 14.0, 8, b)
+			_band(m1, 3.0, 7.0, 14.0, 7.0, 8, a, 0.2)
+			_band(m1, 7.0, 8.5, 7.0, 0.0, 8, a.lightened(0.08), 0.2)
+			_band(m2, 0.0, 2.5, 16.0, 13.0, 7, b.lightened(0.05))
+			_band(m2, 2.5, 4.5, 13.0, 0.0, 7, a, 0.3)
+			_band(m2, 0.0, 3.5, 7.0, 0.0, 6, a.lightened(0.06), 0.0, Vector3(-11, 0, 6))
+		_:
+			# fresh powder: a fat soft mound, and a pair of smaller lumps
+			_band(m1, 0.0, 3.0, 17.0, 16.0, 7, b)
+			_band(m1, 3.0, 7.0, 16.0, 10.0, 7, b.lerp(a, 0.55), 0.2)
+			_band(m1, 7.0, 10.0, 10.0, 0.0, 7, a, 0.2)
+			_blob(m1, 6.0, 7.0, a, 0.7, Vector3(10, 0, -6))
+			_blob(m1, 5.0, 6.0, b.lerp(a, 0.7), 1.3, Vector3(-11, 0, 5))
+			_band(m2, 0.0, 2.5, 12.0, 11.0, 7, b)
+			_band(m2, 2.5, 7.0, 11.0, 0.0, 7, a, 0.4)
+			_band(m2, 0.0, 2.0, 9.0, 8.0, 7, b, 0.0, Vector3(13, 0, 6))
+			_band(m2, 2.0, 6.0, 8.0, 0.0, 7, a.darkened(0.02), 0.0, Vector3(13, 0, 6))
+	return [m1.commit(), m2.commit()]
+
+# Icy asphalt: glossy ice patches from a cheap value noise, and a ragged band of loose
+# snow (dirt, gravel, sand) creeping in from both edges where the edge costs speed.
 var _road_m: ShaderMaterial
 func _road_mat() -> ShaderMaterial:
 	if _road_m == null:
@@ -384,8 +473,12 @@ void fragment() {
 		float streak = smoothstep(0.7, 0.95, vnoise(vec2(q.x * 3.0 + q.y * 0.4, q.y * 3.0 - q.x * 0.4)));
 		c = mix(c, patch_col, ice * patch_amt);
 		c = mix(c, streak_col, ice * streak * 0.25);
-		float edge = abs(UV.y) + (vnoise(q * 3.0) - 0.5) * 0.12;
-		float snow = smoothstep(0.82, 0.95, edge);
+		// ragged band of loose stuff: a lumpy inner border plus flecks scattered
+		// further in, so the edge reads as rough ground rather than a painted line
+		float edge = abs(UV.y) + (vnoise(q * 0.9) - 0.5) * 0.10 + (vnoise(q * 4.0) - 0.5) * 0.10;
+		float snow = smoothstep(0.84, 0.9, edge);
+		float fleck = smoothstep(0.62, 0.72, vnoise(q * 7.0)) * smoothstep(0.66, 0.86, abs(UV.y));
+		snow = max(snow, fleck * 0.85);
 		c = mix(c, edge_col, snow);
 		rough = mix(mix(road_rough, patch_rough, ice), 0.95, snow);
 	}
@@ -1342,6 +1435,7 @@ func sync(race: Race, phase: String, ghost_sample, aims: Dictionary, dt: float) 
 			var sc := maxf(0.05, c.fall / 0.9) * 0.8 if c.fall > 0.0 else 1.0
 			root.scale = Vector3.ONE * sc
 			_suspension(c, cn, dt)
+			_plough(c, cn, y, dt)
 			if cn["marker"]:
 				cn["marker"].visible = phase != "results"
 				cn["marker"].position.y = (120.0 + sin(fx_time * 4.0) * 6.0) * U
@@ -1428,6 +1522,25 @@ func _suspension(c, cn: Dictionary, dt: float) -> void:
 	body.rotation = Vector3(roll, 0, pitch)
 	body.position = Vector3(0, clampf(heave, -10.0, 10.0) * U, 0)
 
+# Rubbing the edge throws up whatever lies there (powder, leaves, grit, sand), a
+# steady plume to the outside that grows with speed.
+func _plough(c, cn: Dictionary, y: float, dt: float) -> void:
+	var sp: float = c.vel.length()
+	if c.scrape <= 0.0 or c.air > 0.0 or c.fall > 0.0 or sp < 60.0:
+		cn["plough"] = 0.0
+		return
+	cn["plough"] = float(cn.get("plough", 0.0)) + dt * (16.0 + sp / 10.0)
+	var nr := track.nearest(c.pos, c.seg)
+	var nv: Vector2 = (c.pos - nr["p"]) / maxf(0.001, nr["d"])
+	var fwd: Vector2 = c.vel / sp
+	var cols: Array = th["spray"]
+	while cn["plough"] >= 1.0:
+		cn["plough"] -= 1.0
+		var at: Vector2 = c.pos + nv * (TrackData.CR - 6.0) + fwd * (randf() - 0.3) * 40.0
+		var v: Vector2 = nv * (60.0 + randf() * 200.0) + c.vel * (0.2 + randf() * 0.45) + fwd.orthogonal() * (randf() - 0.5) * 80.0
+		var col: Color = cols[0] if randf() < 0.55 else cols[1]
+		_spark(w3(at, y + ROAD_Y + 4.0 + randf() * 8.0), Vector3(v.x, 110.0 + randf() * 230.0, v.y) * U, 0.35 + randf() * 0.4, col, 2.2 + randf() * 2.0)
+
 func handle_event(e: Dictionary) -> void:
 	match e["t"]:
 		"skid":
@@ -1460,10 +1573,10 @@ func handle_event(e: Dictionary) -> void:
 		"shake":
 			shake = minf(10.0, maxf(shake, e["v"]))
 
-func _spark(p: Vector3, v: Vector3, life: float, col: Color) -> void:
+func _spark(p: Vector3, v: Vector3, life: float, col: Color, sz := 1.0) -> void:
 	if parts.size() >= SPARK_MAX:
 		parts.pop_front()
-	parts.append({ "p": p, "v": v, "life": life, "col": col })
+	parts.append({ "p": p, "v": v, "life": life, "col": col, "sz": sz })
 
 func _update_fx(dt: float) -> void:
 	if skid_mat:
@@ -1493,7 +1606,7 @@ func _update_fx(dt: float) -> void:
 			spark_mats[col] = mat(col, true)
 		mi.material_override = spark_mats[col]
 		mi.position = p["p"]
-		mi.scale = Vector3.ONE * maxf(0.05, minf(1.0, p["life"] * 2.5))
+		mi.scale = Vector3.ONE * maxf(0.05, minf(1.0, p["life"] * 2.5)) * float(p["sz"])
 		mi.visible = true
 	shake *= pow(0.02, dt)
 
