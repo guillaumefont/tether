@@ -28,3 +28,5 @@ jobs:
         run: ./godot --headless --path . --script tests/swipe_test.gd
       - name: Cars never stay pinned on the road edge
         run: ./godot --headless --path . --script tests/wall_test.gd
+      - name: Tutorial can be finished
+        run: ./godot --headless --path . --script tests/tutorial_test.gd

@@ -27,6 +27,8 @@ signal pause_pressed
 signal pause_action(what: String)   # resume | restart | exit
 # music_vol / sfx_vol (0..100), ghost / effects (bool)
 signal option_changed(key: String, value)
+signal skip_pressed       # leave the tutorial
+signal tutorial_pressed   # replay the tutorial (settings screen)
 
 const MINIMAP := 110.0
 const C_PANEL := Color(0.035, 0.075, 0.082, 0.92)
@@ -132,6 +134,7 @@ func _ready() -> void:
 	_build_results()
 	_build_pause()
 	_build_settings()
+	_build_coach()
 	_build_loading()
 
 func _make_theme() -> Theme:
@@ -242,6 +245,8 @@ func layout() -> void:
 		settings_panel.custom_minimum_size.x = minf(440.0, vp.x - 40.0)
 	if _load_box:
 		_place_loading()
+	if coach:
+		_place_coach()
 
 # keep clear of notches / rounded corners
 func safe_insets() -> Dictionary:
@@ -585,6 +590,12 @@ func _build_settings() -> void:
 	_panel_header(vb, "SETTINGS").text = "Saved on this device"
 	_settings_o = _make_options()
 	vb.add_child(_settings_o["box"])
+	var tut := icon_button("play", "PLAY THE TUTORIAL", "card", false, 50)
+	tut.focus_mode = Control.FOCUS_NONE
+	tut.pressed.connect(func():
+		hide_settings()
+		tutorial_pressed.emit())
+	vb.add_child(tut)
 	var done := icon_button("check", "DONE", "go", false, 56)
 	done.pressed.connect(hide_settings)
 	vb.add_child(done)
@@ -699,6 +710,7 @@ func show_menu() -> void:
 	results.visible = false
 	hud.visible = false
 	minimap.visible = false
+	hide_coach()
 	big.text = ""
 
 # ---------------------------------------------------------------- HUD
@@ -735,13 +747,27 @@ func _spacer() -> void:
 	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.add_child(c)
 
-func build_hud(race, gems: bool) -> void:
+func build_hud(race, gems: bool, tutorial := false) -> void:
 	if pause_btn.get_parent():
 		pause_btn.get_parent().remove_child(pause_btn)
 	for ch in hud.get_children():
 		ch.queue_free()
 	hud_vals.clear()
-	if race.mode == "trial":
+	hide_coach()
+	if tutorial:
+		_chip("Lap", "lap0", C_POST)
+		_chip("Time" if is_portrait() else "Lap time", "time", C_POST)
+		if gems:
+			_chip("Gems", "gems", Color("#7fe3d0"))
+		_spacer()
+		_chip("Target", "rec", C_POST)
+		# icon only in portrait, where the chips leave no room for the word
+		skip_btn = icon_button("next", "" if is_portrait() else "SKIP", "card", false, 44)
+		skip_btn.focus_mode = Control.FOCUS_NONE
+		skip_btn.tooltip_text = "Skip the tutorial"
+		skip_btn.pressed.connect(func(): skip_pressed.emit())
+		hud.add_child(skip_btn)
+	elif race.mode == "trial":
 		_chip("Lap", "lap0", C_POST)
 		_chip("Lap time", "time", C_POST)
 		if gems:
@@ -780,6 +806,90 @@ func set_big(bb: String, size := 120) -> void:
 	big.add_theme_font_size_override("normal_font_size", size)
 	big.text = "[center]" + bb + "[/center]" if bb != "" else ""
 
+# ---------------------------------------------------------------- tutorial coach card
+# A frosted card low on the screen with the current lesson; the footer names what to do
+# (TAP TO START, HOLD, LET GO). The SKIP button in the tutorial's HUD is made by build_hud.
+var coach: PanelContainer
+var _coach_box: VBoxContainer   # full screen, stacks the card at the bottom
+var skip_btn: Button
+var _coach_title: Label
+var _coach_body: Label
+var _coach_foot: Label
+var _coach_tween: Tween
+
+func _build_coach() -> void:
+	coach = PanelContainer.new()
+	_frost_panel(coach)
+	var ps: StyleBoxFlat = coach.get_theme_stylebox("panel").duplicate()
+	ps.set_content_margin_all(14)
+	ps.content_margin_left = 18; ps.content_margin_right = 18
+	coach.add_theme_stylebox_override("panel", ps)
+	coach.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	coach.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_coach_box = VBoxContainer.new()
+	_coach_box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_coach_box.alignment = BoxContainer.ALIGNMENT_END
+	_coach_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_coach_box.add_child(coach)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 4)
+	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	coach.add_child(vb)
+	_coach_title = _label("", 20, C_POST, f_display)
+	vb.add_child(_coach_title)
+	_coach_body = _label("", 15, C_FG, f_med)
+	vb.add_child(_coach_body)
+	_coach_foot = _label("", 14, Art.C_ICE, f_bold)
+	_coach_foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	vb.add_child(_coach_foot)
+	coach.visible = false
+	root.add_child(_coach_box)
+	root.move_child(_coach_box, big.get_index())   # under the big HOLD / LET GO word
+
+
+# bottom centre, above the minimap in portrait (it would sit under the card)
+func _place_coach() -> void:
+	var ins := safe_insets()
+	var vp := root.get_viewport_rect().size
+	var w := minf(520.0, vp.x - 32.0 - ins["l"] - ins["r"])
+	coach.custom_minimum_size.x = w
+	var lift := MINIMAP + 12.0 if is_portrait() else 0.0
+	_coach_box.offset_bottom = -14.0 - ins["b"] - lift
+
+# card: { title, body, footer }; empty hides it
+func show_coach(card: Dictionary) -> void:
+	if card.is_empty():
+		hide_coach()
+		return
+	_coach_title.text = card["title"]
+	_coach_body.text = card["body"]
+	_coach_foot.text = card.get("footer", "")
+	_coach_foot.visible = _coach_foot.text != ""
+	_place_coach()
+	if _coach_tween:
+		_coach_tween.kill()
+	if not coach.visible:
+		coach.modulate.a = 0.0
+		coach.visible = true
+	_coach_tween = create_tween()
+	_coach_tween.tween_property(coach, "modulate:a", 1.0, 0.18)
+	if _coach_foot.visible:   # the call to action breathes
+		_coach_tween.tween_callback(func():
+			var t := create_tween().set_loops()
+			_coach_tween = t
+			t.tween_property(_coach_foot, "modulate:a", 0.45, 0.5)
+			t.tween_property(_coach_foot, "modulate:a", 1.0, 0.5))
+	else:
+		_coach_foot.modulate.a = 1.0
+
+func hide_coach() -> void:
+	if _coach_tween:
+		_coach_tween.kill()
+		_coach_tween = null
+	if coach:
+		coach.visible = false
+		_coach_foot.modulate.a = 1.0
+
 # ---------------------------------------------------------------- results
 func show_results(title: String, rows: Array, note: String, has_next := false, cols := 3) -> void:
 	next_btn.visible = has_next
@@ -804,6 +914,7 @@ func show_results(title: String, rows: Array, note: String, has_next := false, c
 			res_table.add_child(l)
 	res_note.text = note
 	results.visible = true
+	hide_coach()
 	hud.visible = false
 	minimap.visible = false
 	big.text = ""
