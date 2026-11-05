@@ -13,6 +13,7 @@ const Sfx = preload("res://scripts/sfx.gd")
 const Settings = preload("res://scripts/settings.gd")
 const Campaign = preload("res://scripts/campaign.gd")
 const Themes = preload("res://scripts/themes.gd")
+const Tutorial = preload("res://scripts/tutorial.gd")
 
 var view: WorldView
 var ui: UI
@@ -37,6 +38,8 @@ var touch_owner := {}        # touch index -> player
 var paused := false
 var themes_before: Array = []   # themes unlocked when the race started
 var building := false        # a loading screen is building the next track
+var tutorial := false        # the run is the tutorial (Defs.TUTORIAL), driven by `tut`
+var tut: Tutorial = null
 # behind the menu: AI drivers race a snowy track, changing track every ATTRACT_SECS
 var attract: Race = null
 var attract_t := 0.0
@@ -64,18 +67,56 @@ func _ready() -> void:
 			ui.menu.ev = nx
 			_start_event(nx))
 	ui.menu_pressed.connect(func(): _with_loading("", _to_menu))
+	ui.skip_pressed.connect(_leave_tutorial)
+	ui.tutorial_pressed.connect(start_tutorial)
 	ui.show_loading("")   # picks up from the boot splash, fades out once the menu scene is up
 	_to_menu()
-	_fade_in_later()
 	# automation hooks for headless screenshots: --  --demo=<track>,<variant>,<seconds>[,<mode>,<players>,<theme>]
+	var scripted := false
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--demo="):
+			scripted = true
 			_run_demo(a.substr(7))
 		elif a.begins_with("--promo="):
+			scripted = true
 			_run_promo(a.substr(8))
+		elif a.begins_with("--tutorial-demo"):
+			scripted = true
+			_run_tutorial_demo()
+	# the very first launch goes straight onto the track for the tutorial
+	if not scripted and not Settings.get_opt("tutorial_done") and not Records.any():
+		start_tutorial()
+	else:
+		_fade_in_later()
 
 func rec_key() -> String:
-	return Records.key(Defs.TRACKS[track_idx]["name"], variant)
+	return Records.key(cur_def()["name"], variant)
+
+func cur_def() -> Dictionary:
+	return Defs.TUTORIAL if tutorial else Defs.TRACKS[track_idx]
+
+func _make_track() -> TrackData:
+	var tr := TrackData.new(cur_def(), variant)
+	if tutorial:
+		Tutorial.dress(tr)
+	return tr
+
+# ---------------------------------------------------------------- tutorial
+func start_tutorial() -> void:
+	tutorial = true
+	track_idx = 0
+	variant = "standard"
+	mode = "trial"
+	humans = 1
+	view.theme_override = "snow"
+	_load_race()
+
+# skip button, or leaving from the pause menu: it won't come back on its own
+func _leave_tutorial() -> void:
+	Settings.set_opt("tutorial_done", true)
+	if paused:
+		_set_paused(false)
+	_with_loading("", _to_menu)
 
 func _fade_in_later() -> void:
 	for k in 3:
@@ -96,10 +137,10 @@ func _with_loading(title: String, work: Callable) -> void:
 # build the race track a step at a time so the loading bar moves with the real work
 func _load_race() -> void:
 	building = true
-	ui.show_loading(Defs.TRACKS[track_idx]["name"])
+	ui.show_loading("Tutorial" if tutorial else Defs.TRACKS[track_idx]["name"])
 	await get_tree().process_frame
 	await get_tree().process_frame
-	var tr := TrackData.new(Defs.TRACKS[track_idx], variant)
+	var tr := _make_track()
 	ui.set_loading_progress(0.15)
 	await get_tree().process_frame
 	var steps: Array = view.build_steps(tr)
@@ -112,6 +153,10 @@ func _load_race() -> void:
 	ui.hide_loading()
 
 func _to_menu() -> void:
+	if tutorial:
+		Settings.set_opt("tutorial_done", true)
+	tutorial = false
+	tut = null
 	phase = "menu"
 	race = null
 	sfx.music.play("menu")
@@ -146,15 +191,18 @@ func _set_paused(on: bool) -> void:
 		race.release(1)
 		touch_owner.clear()
 		sfx.set_engine(0.0, false)
-		var d: Dictionary = Defs.TRACKS[track_idx]
+		var d: Dictionary = cur_def()
 		var what := "Time trial" if mode == "trial" else ("2-player race" if humans > 1 else "Race")
 		var c0 = race.cars[0]
-		ui.show_pause("%s  ·  %s  ·  lap %d / %d" % [d["name"], what, clampi(c0.lap, 1, race.laps_total), race.laps_total], _pause_opts())
+		if tut:
+			ui.show_pause("Tutorial  ·  lap %s" % tut.lap_label().replace("/", " / "), _pause_opts())
+		else:
+			ui.show_pause("%s  ·  %s  ·  lap %d / %d" % [d["name"], what, clampi(c0.lap, 1, race.laps_total), race.laps_total], _pause_opts())
 	else:
 		ui.hide_pause()
 
 func _pause_opts() -> Dictionary:
-	return _options(mode == "trial")
+	return _options(mode == "trial" and not tutorial)
 
 # current option values for the pause / settings screens (no ghost toggle outside time trials)
 func _options(with_ghost: bool) -> Dictionary:
@@ -183,7 +231,7 @@ func _pause_action(what: String) -> void:
 			new_race()
 		"exit":
 			_set_paused(false)
-			_with_loading("", _to_menu)
+			_with_loading("", _to_menu)   # leaving the tutorial marks it done
 
 # Android back button / Esc: pause or resume a race, step back through the menus
 func _go_back() -> void:
@@ -202,6 +250,8 @@ func _go_back() -> void:
 		get_tree().quit()
 
 func _start_event(ev: Dictionary) -> void:
+	tutorial = false
+	tut = null
 	track_idx = ev["track"]
 	variant = ev["variant"]
 	mode = ev["mode"]
@@ -217,24 +267,36 @@ func new_race(built: TrackData = null) -> void:
 	if built:
 		track = built   # already built by the loading screen
 	else:
-		track = TrackData.new(Defs.TRACKS[track_idx], variant)
+		track = _make_track()
 		view.build(track)
 	view.visible = true
 	race = Race.new(track, mode, humans)
 	themes_before = Themes.ORDER.filter(func(t): return Campaign.theme_unlocked(t))
-	ghost = Records.get_ghost(rec_key()) if mode == "trial" else []
-	view.setup_cars(race, mode == "trial")
+	ghost = Records.get_ghost(rec_key()) if mode == "trial" and not tutorial else []
+	view.setup_cars(race, mode == "trial" and not tutorial)
 	new_record = false
-	start_tier = Medals.trial_tier(Defs.TRACKS[track_idx]["name"], variant, Records.get_best(rec_key()))
+	start_tier = Medals.trial_tier(cur_def()["name"], variant, Records.get_best(rec_key()))
 	countdown = 3.2
 	last_beep = 4
 	end_timer = 0.0
 	flash_t = 0.0
 	phase = "count"
 	touch_owner.clear()
-	medal_targets = Medals.targets(Defs.TRACKS[track_idx]["name"], variant) if mode == "trial" else []
-	ui.build_hud(race, track.tokens.size(), medal_targets.any(func(t): return t > 0.0))
-	_update_hud()   # zeroes on screen from the countdown on
+	ui.set_big("")
+	tut = null
+	if tutorial:
+		# no countdown: the tutorial's first card waits for a tap, then the car rolls
+		tut = Tutorial.new(race)
+		phase = "race"
+		medal_targets = []
+		ui.build_hud(race, 0, false, true)
+		ui.set_hud("rec", tut.target_text())
+		_update_hud()
+		_sync_tutorial()
+	else:
+		medal_targets = Medals.targets(Defs.TRACKS[track_idx]["name"], variant) if mode == "trial" else []
+		ui.build_hud(race, track.tokens.size(), medal_targets.any(func(t): return t > 0.0))
+		_update_hud()   # zeroes on screen from the countdown on
 	ui.minimap.race = race
 	ui.minimap.set_track(track)
 	view.update_camera(race, "count", 0.0, true)
@@ -253,6 +315,12 @@ func _input(e: InputEvent) -> void:
 				return
 			if ui.pause_btn.is_visible_in_tree() and ui.pause_btn.get_global_rect().grow(8).has_point(e.position):
 				return   # the pause button, not a hook
+			if ui.skip_btn and is_instance_valid(ui.skip_btn) and ui.skip_btn.is_visible_in_tree() and ui.skip_btn.get_global_rect().grow(8).has_point(e.position):
+				return
+			if tut and tut.wants_tap():
+				tut.tap()   # "tap to continue": not a hook
+				_sync_tutorial()
+				return
 			var w := get_viewport().get_visible_rect().size.x
 			var p := 1 if (race.humans > 1 and e.position.x > w / 2.0) else 0
 			touch_owner[e.index] = p
@@ -269,7 +337,10 @@ func _input(e: InputEvent) -> void:
 			KEY_ENTER, KEY_KP_ENTER, KEY_M: p = 1
 		if p < 0 or p >= race.humans:
 			return
-		if e.pressed and phase == "race":
+		if e.pressed and phase == "race" and tut and tut.wants_tap():
+			tut.tap()
+			_sync_tutorial()
+		elif e.pressed and phase == "race":
 			race.press(p)
 		elif not e.pressed:
 			race.release(p)
@@ -314,11 +385,18 @@ func _process(delta: float) -> void:
 			if countdown <= 0.2:
 				phase = "race"
 		"race", "done":
-			race.update(dt)
+			var gdt := dt
+			if tut:
+				gdt = dt * tut.update(dt)
+			race.update(gdt)
 			_handle_events()
-			if race.clock > 0.7 and flash_t <= 0.0 and phase == "race":
+			if tut:
+				_sync_tutorial()
+				if tut.complete:
+					_show_tutorial_end()
+			elif race.clock > 0.7 and flash_t <= 0.0 and phase == "race":
 				ui.set_big("")
-			if flash_t > 0.0:
+			if flash_t > 0.0 and not tut:
 				flash_t -= dt
 				if flash_t <= 0.0 and phase == "race":
 					ui.set_big("")
@@ -336,7 +414,8 @@ func _process(delta: float) -> void:
 					ui.set_big("")
 				if race.cars.all(func(c): return c.finished) or end_timer > 6.0:
 					_show_results()
-			_update_hud()
+			if phase != "results":
+				_update_hud()
 	var me = race.cars[0] if race and race.cars.size() else null
 	sfx.set_engine(me.vel.length() if me else 0.0, phase == "race")
 	if view.track and view.visible:
@@ -373,7 +452,9 @@ func _handle_events() -> void:
 			"blip":
 				sfx.blip(e["f"], e["d"], e["w"], e["v"], e["s"])
 			"lap":
-				if mode == "trial" and e["car"].human >= 0:
+				if tut and e["car"].human >= 0:
+					tut.on_lap(e["car"].lap - 1, e["lt"])
+				elif mode == "trial" and e["car"].human >= 0:
 					_trial_lap(e["car"], e["lt"], e["trace"])
 			"finish":
 				if mode == "trial" and e["car"].human >= 0 and track.tokens.size() > 0:
@@ -415,6 +496,11 @@ func _trial_run(c) -> void:
 		sfx.blip(1320, 0.25, "square", 0.06, 300)
 
 func _update_hud() -> void:
+	if tut:
+		var c0 = race.cars[0]
+		ui.set_hud("lap0", tut.lap_label())
+		ui.set_hud("time", UI.fmt_hud(race.clock - c0.lap_start if c0.lap >= 1 else 0.0))
+		return
 	var gems := track.tokens.size() > 0
 	if gems:
 		var tot := str(track.tokens.size())
@@ -512,6 +598,27 @@ func _show_results() -> void:
 			rnote = "%s medal!  " % Medals.NAMES[tier - 1] + rnote
 	ui.show_results(title, rows2, _unlock_note() + rnote, not ui.menu.next_event().is_empty())
 
+# mirror the tutorial's card and big word onto the UI when they change
+func _sync_tutorial() -> void:
+	if tut == null or not tut.dirty:
+		return
+	tut.dirty = false
+	ui.show_coach(tut.card)
+	# the word floats above the car rather than on it
+	ui.set_big(tut.hint + "\n\n" if tut.hint != "" else "", 64 if tut.hint.length() > 4 else 80)
+
+func _show_tutorial_end() -> void:
+	phase = "results"
+	Settings.set_opt("tutorial_done", true)
+	var rows: Array = []
+	for r in tut.summary:
+		rows.append({ "cells": r })
+	var bt := tut.best
+	var note := "You're ready. The Campaign starts in the snow world. Replay this tutorial any time from Settings."
+	if bt > 0.0:
+		note = "Best lap on your own: %s (target %s). " % [UI.fmt2(bt), tut.target_text()] + note
+	ui.show_results("TUTORIAL DONE", rows, note, false, 2)
+
 # a campaign world just finished: say which theme it opened
 func _unlock_note() -> String:
 	for t in Themes.ORDER:
@@ -571,6 +678,47 @@ func _run_demo(arg: String) -> void:
 			shot += 1
 			await RenderingServer.frame_post_draw
 			get_viewport().get_texture().get_image().save_png(out.path_join("race_%d.png" % shot))
+	get_tree().quit()
+
+# Tutorial screenshots: play the tutorial with a scripted thumb and save a frame every
+# time a new card comes up (SHOT_DIR), then the end panel.
+func _run_tutorial_demo() -> void:
+	var out := OS.get_environment("SHOT_DIR")
+	if out == "":
+		out = "user://"
+	await get_tree().process_frame
+	start_tutorial()
+	while tut == null:
+		await get_tree().process_frame
+	var seen := {}
+	var n := 0
+	var t := 0.0
+	while t < 240.0 and phase != "results":
+		await get_tree().process_frame
+		t += get_process_delta_time()
+		if tut == null:
+			break
+		var title: String = tut.card.get("title", "")
+		if title != "" and not seen.has(title):
+			seen[title] = true
+			await get_tree().create_timer(0.35).timeout
+			await RenderingServer.frame_post_draw
+			n += 1
+			get_viewport().get_texture().get_image().save_png(out.path_join("tut_%02d.png" % n))
+		match tut.wait:
+			"tap":
+				tut.tap()
+				_sync_tutorial()
+			"hold":
+				race.press(0)
+			"release":
+				race.release(0)
+			_:
+				if tut.hooks >= 1 and phase == "race":
+					_autopilot()
+	await get_tree().create_timer(0.5).timeout
+	await RenderingServer.frame_post_draw
+	get_viewport().get_texture().get_image().save_png(out.path_join("tut_end.png"))
 	get_tree().quit()
 
 # the AI drives the human cars, so a recording shows a clean lap with the player's camera

@@ -44,6 +44,12 @@ const TRACKS := [
 		"turns": [[1900,900,1],[2900,1600,-1],[1900,900,-1,750],[900,1600,1]] },
 ]
 
+# The first-launch tutorial's own track (scripts/tutorial.gd): five roomy bends, one of them
+# turning the other way, no crossings or jumps. Not listed in the menus. "laps" is a cap:
+# the tutorial decides when the run ends.
+const TUTORIAL := { "name": "Training Loop", "theme": "snow", "note": "Learn to hook and let go", "laps": 99,
+	"turns": [[700,900,1],[2300,700,1],[3100,1500,1],[2000,1500,-1],[900,1900,1]] }
+
 const VARIANTS := [
 	["standard", "Standard", "the plain layout"],
 	["reverse", "Reverse", "same track, other way round"],

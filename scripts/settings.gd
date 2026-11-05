@@ -1,5 +1,5 @@
 # Player options kept between sessions in user://settings.cfg: music and sound volume
-# (0..100), ghost car, effects.
+# (0..100), ghost car, effects; whether the first-launch tutorial has been played.
 extends RefCounted
 
 const PATH := "user://settings.cfg"
@@ -11,7 +11,7 @@ static func _load() -> ConfigFile:
 		_cfg.load(PATH)
 	return _cfg
 
-const DEFAULTS := { "music_vol": 70, "sfx_vol": 100, "ghost": true, "effects": true }
+const DEFAULTS := { "music_vol": 70, "sfx_vol": 100, "ghost": true, "effects": true, "tutorial_done": false }
 
 static func get_opt(key: String, default = null):
 	var c := _load()

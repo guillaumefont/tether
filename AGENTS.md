@@ -25,6 +25,7 @@ godot --headless --path . --script tests/levels_test.gd  # bends stay level, med
 godot --headless --path . --script tests/hook_test.gd    # hooking picks the current bend's tower
 godot --headless --path . --script tests/swipe_test.gd   # menu lists scroll, event swipe flips, tap opens
 godot --headless --path . --script tests/wall_test.gd    # a car on the road edge always gets off it again
+godot --headless --path . --script tests/tutorial_test.gd  # the first-launch tutorial can be finished
 ```
 
 After changing a track layout, rerun `tools/gen_medals.gd` to refresh `scripts/medal_times.gd`.

@@ -53,6 +53,8 @@ func tap(pos: Vector2) -> void:
 
 func _init() -> void:
 	root.size = Vector2i(1280, 720)
+	# a fresh install would open on the tutorial: start on the menu (in memory, not saved)
+	preload("res://scripts/settings.gd")._load().set_value("options", "tutorial_done", true)
 	var main: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 	await frames(5)

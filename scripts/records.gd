@@ -54,3 +54,7 @@ static func award_medal(k: String, mode: String, tier: int) -> bool:
 	_load().set_value(k, "medal_" + mode, tier)
 	_cfg.save(PATH)
 	return true
+
+# anything saved at all: a player who already raced is not a first-time player
+static func any() -> bool:
+	return _load().get_sections().size() > 0
