@@ -28,6 +28,7 @@ var race: Race = null
 var phase := "menu"
 var countdown := 0.0
 var start_tier := 0  # trial medal held when the run started
+var medal_targets: Array = []   # trial medal target times, bronze..pivot
 var last_beep := 4
 var end_timer := 0.0
 var flash_t := 0.0
@@ -287,11 +288,15 @@ func new_race(built: TrackData = null) -> void:
 		# no countdown: the tutorial's first card waits for a tap, then the car rolls
 		tut = Tutorial.new(race)
 		phase = "race"
-		ui.build_hud(race, false, true)
+		medal_targets = []
+		ui.build_hud(race, 0, false, true)
 		ui.set_hud("rec", tut.target_text())
+		_update_hud()
 		_sync_tutorial()
 	else:
-		ui.build_hud(race, track.tokens.size() > 0)
+		medal_targets = Medals.targets(Defs.TRACKS[track_idx]["name"], variant) if mode == "trial" else []
+		ui.build_hud(race, track.tokens.size(), medal_targets.any(func(t): return t > 0.0))
+		_update_hud()   # zeroes on screen from the countdown on
 	ui.minimap.race = race
 	ui.minimap.set_track(track)
 	view.update_camera(race, "count", 0.0, true)
@@ -494,24 +499,47 @@ func _update_hud() -> void:
 	if tut:
 		var c0 = race.cars[0]
 		ui.set_hud("lap0", tut.lap_label())
-		ui.set_hud("time", UI.fmt2(race.clock - c0.lap_start if c0.lap >= 1 else 0.0))
+		ui.set_hud("time", UI.fmt_hud(race.clock - c0.lap_start if c0.lap >= 1 else 0.0))
 		return
 	var gems := track.tokens.size() > 0
 	if gems:
-		ui.set_hud("gems", "%d/%d" % [race.cars[0].gems, track.tokens.size()])
+		var tot := str(track.tokens.size())
+		ui.set_hud("gems", "%s/%s" % [str(race.cars[0].gems).lpad(tot.length(), "0"), tot])
 	if mode == "trial":
 		var c = race.cars[0]
 		var rec := Records.get_best(rec_key())
+		var lap_t: float = race.clock if gems else (race.clock - c.lap_start if c.lap >= 1 and not c.finished else 0.0)
 		ui.set_hud("lap0", "%d/%d" % [clampi(c.lap, 1, race.laps_total), race.laps_total])
-		ui.set_hud("time", UI.fmt2(race.clock if gems else (race.clock - c.lap_start if c.lap >= 1 and not c.finished else 0.0)))
-		ui.set_hud("rec", UI.fmt2(rec) if rec > 0.0 else "--")
+		ui.set_hud("time", UI.fmt_hud(lap_t))
+		ui.set_hud("rec", UI.fmt_hud(rec) if rec > 0.0 else "--:--.--")
+		# best medal still in reach: its target drops to the next medal once the clock passes it
+		var pace: float = lap_t + (c.hits if gems else c.lap_hits) * Race.OBS_PEN
+		if c.finished:
+			pace = c.finish_time if gems else c.best_lap
+		var tier := -1
+		for i in medal_targets.size():
+			if medal_targets[i] > 0.0 and pace < medal_targets[i]:
+				tier = i
+		if tier >= 0:
+			ui.set_hud_tag("target", Medals.NAMES[tier], Medals.COLORS[tier])
+			ui.set_hud("target", UI.fmt_hud(medal_targets[tier]))
+		else:
+			ui.set_hud_tag("target", "Target", UI.C_MUTED)
+			ui.set_hud("target", "--:--.--")
 		return
 	var st := race.standings()
 	for c in race.cars:
 		if c.human >= 0:
 			ui.set_hud("lap%d" % c.human, "%d/%d" % [clampi(c.lap, 1, race.laps_total), race.laps_total])
 			ui.set_hud("pos%d" % c.human, _ordinal(st.find(c) + 1))
-	ui.set_hud("time", UI.fmt(race.clock))
+	ui.set_hud("time", UI.fmt_hud(race.clock))
+	if race.humans == 1:
+		var me = race.cars.filter(func(c): return c.human >= 0)[0]
+		var t := Medals.race_tier(st.find(me) + 1, 0.0)
+		var col: Color = Medals.COLORS[t - 1] if t > 0 else UI.C_MUTED
+		ui.set_hud_tag("target", "Medal", col)
+		ui.set_hud("target", Medals.NAMES[t - 1].to_upper() if t > 0 else "NONE")
+		ui.set_hud_color("target", col)
 
 static func _ordinal(n: int) -> String:
 	var suf := ["th", "st", "nd", "rd"]

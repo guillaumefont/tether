@@ -1290,36 +1290,22 @@ func _make_car(col: Color, ghost := false) -> Node3D:
 	root.set_meta("chassis", chassis)
 	return root
 
-# Snow: short skis in front, a crawler track on each side at the back, a roof light bar.
-# The running gear sits on the chassis between the road (y 0) and the body's belly, in
-# the same spots as the other kits' wheels, so nothing reaches below the road surface.
+# Snow: a short ski on each front corner and a crawler track on each back corner, in the
+# spots where the other kits put their wheels, between the road (y 0) and the belly.
 func _car_kit_snow(chassis: Node3D, parts_list: Array, top: Material, dark: Material) -> void:
 	var ski := paint(Color("#e9eef2"), 0.4)
-	var tread := paint(Color("#16181c"), 0.85)
+	var tread := paint(Color("#22262c"), 0.85)
 	var lug := paint(Color("#59636e"), 0.7)
 	for side: float in [1.0, -1.0]:
 		var z := 33.0 * side
-		# front: a short ski with an up-turned tip, on a strut up to the body
 		chassis.add_child(pbox(Vector3(38, 3, 13), ski, Vector3(44, 1.5, z)))
-		var tip := pbox(Vector3(14, 3, 13), ski, Vector3(66, 5.0, z))
+		var tip := pbox(Vector3(14, 3, 13), ski, Vector3(66, 5.0, z))   # up-turned tip
 		tip.rotation.z = 0.6
 		chassis.add_child(tip)
 		chassis.add_child(pbox(Vector3(8, 12, 6), dark, Vector3(42, 9, z * 0.85)))
-		# back: a crawler track, rounded off front and rear with angled lugs
-		chassis.add_child(pbox(Vector3(50, 20, 16), tread, Vector3(-34, 10, z)))
-		for e: float in [1.0, -1.0]:
-			var nub := pbox(Vector3(12, 12, 16), tread, Vector3(-34 + 26 * e, 10, z))
-			nub.rotation.z = PI / 4
-			chassis.add_child(nub)
-		for k in 6:
+		chassis.add_child(pbox(Vector3(52, 20, 16), tread, Vector3(-34, 10, z)))
+		for k in 6:   # tread stripes
 			chassis.add_child(pbox(Vector3(3, 21, 17), lug, Vector3(-56 + k * 9.0, 10, z)))
-		chassis.add_child(pbox(Vector3(14, 8, 17), top, Vector3(-34, 10, z)))   # hub plate
-	# roof light bar and a snow load on the bonnet
-	var lamp := mat(Color("#fff4c8"), true)
-	parts_list.append(pbox(Vector3(6, 4, 40), dark, Vector3(-6, 56, 0)))
-	for lz in [-12.0, 0.0, 12.0]:
-		parts_list.append(pbox(Vector3(2, 3, 8), lamp, Vector3(-2.5, 56, lz)))
-	parts_list.append(pbox(Vector3(22, 3, 40), paint(Color("#eef3f7"), 0.6), Vector3(48, 30.5, 0)))
 
 # a wheel on the chassis: tyre plus a painted hub on the outer face
 func _wheel(chassis: Node3D, x: float, z: float, r: float, w: float, tyre: Material, hub: Material) -> void:

@@ -9,6 +9,7 @@ const Medals = preload("res://scripts/medals.gd")
 const Defs = preload("res://scripts/track_defs.gd")
 const Art = preload("res://scripts/menu_art.gd")
 const Campaign = preload("res://scripts/campaign.gd")
+const MonoLabel = preload("res://scripts/mono_label.gd")
 
 const TIPS := [
 	"Hook the tower as you enter the bend, let go when your nose points down the exit.",
@@ -51,6 +52,7 @@ var res_title: Label
 var res_table: GridContainer
 var res_note: Label
 var hud_vals := {}
+var hud_tags := {}   # key -> [tag Label, chip StyleBoxFlat]
 var next_btn: Button
 var res_again: Button
 var results_panel: PanelContainer
@@ -714,7 +716,7 @@ func show_menu() -> void:
 	big.text = ""
 
 # ---------------------------------------------------------------- HUD
-func _chip(label: String, key: String, col: Color) -> void:
+func _chip(label: String, key: String, col: Color, tpl: Array = ["00:00.00"], tags: Array = []) -> void:
 	var narrow := is_portrait()
 	var pc := PanelContainer.new()
 	var s := StyleBoxFlat.new()
@@ -733,13 +735,16 @@ func _chip(label: String, key: String, col: Color) -> void:
 	var l := _label(label.to_upper(), 10 if narrow else 11, C_MUTED, f_bold)
 	l.autowrap_mode = TextServer.AUTOWRAP_OFF
 	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	for t in tags:   # a tag that changes (medal names) keeps the width of the longest
+		l.custom_minimum_size.x = maxf(l.custom_minimum_size.x, f_bold.get_string_size(String(t).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 10 if narrow else 11).x)
 	hb.add_child(l)
-	var v := _label("", 17 if narrow else 20, C_FG, f_bold)
-	v.autowrap_mode = TextServer.AUTOWRAP_OFF
+	var v := MonoLabel.new()
+	v.setup(f_bold, 17 if narrow else 20, C_FG, tpl)
 	hb.add_child(v)
 	pc.add_child(hb)
 	hud.add_child(pc)
 	hud_vals[key] = v
+	hud_tags[key] = [l, s]
 
 func _spacer() -> void:
 	var c := Control.new()
@@ -747,20 +752,23 @@ func _spacer() -> void:
 	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.add_child(c)
 
-func build_hud(race, gems: bool, tutorial := false) -> void:
+func build_hud(race, gems_total: int, medals: bool, tutorial := false) -> void:
+	var gems := gems_total > 0
 	if pause_btn.get_parent():
 		pause_btn.get_parent().remove_child(pause_btn)
 	for ch in hud.get_children():
 		ch.queue_free()
 	hud_vals.clear()
+	hud_tags.clear()
 	hide_coach()
+	var laps := "%d/%d" % [race.laps_total, race.laps_total]
+	var n_gems := "%d/%d" % [gems_total, gems_total]
+	var places := ["1st", "2nd", "3rd", "4th", "5th", "6th"]
 	if tutorial:
-		_chip("Lap", "lap0", C_POST)
+		_chip("Lap", "lap0", C_POST, ["3/3"])
 		_chip("Time" if is_portrait() else "Lap time", "time", C_POST)
-		if gems:
-			_chip("Gems", "gems", Color("#7fe3d0"))
 		_spacer()
-		_chip("Target", "rec", C_POST)
+		_chip("Target", "rec", C_POST, ["00.0 s"])
 		# icon only in portrait, where the chips leave no room for the word
 		skip_btn = icon_button("next", "" if is_portrait() else "SKIP", "card", false, 44)
 		skip_btn.focus_mode = Control.FOCUS_NONE
@@ -768,25 +776,29 @@ func build_hud(race, gems: bool, tutorial := false) -> void:
 		skip_btn.pressed.connect(func(): skip_pressed.emit())
 		hud.add_child(skip_btn)
 	elif race.mode == "trial":
-		_chip("Lap", "lap0", C_POST)
+		_chip("Lap", "lap0", C_POST, [laps])
 		_chip("Lap time", "time", C_POST)
 		if gems:
-			_chip("Gems", "gems", Color("#7fe3d0"))
+			_chip("Gems", "gems", Color("#7fe3d0"), [n_gems])
 		_spacer()
+		if medals:   # target time of the best medal still in reach this lap
+			_chip("Target", "target", C_MUTED, ["00:00.00"], ["Target"] + Medals.NAMES)
 		_chip("Record", "rec", C_POST)
 	else:
 		var hs: Array = race.cars.filter(func(c): return c.human >= 0)
-		_chip("P1" if race.humans > 1 else "Lap", "lap0", hs[0].color)
-		_chip("Pos", "pos0", hs[0].color)
+		_chip("P1" if race.humans > 1 else "Lap", "lap0", hs[0].color, [laps])
+		_chip("Pos", "pos0", hs[0].color, places)
 		_spacer()
 		if race.humans == 1 or not is_portrait():  # no room for it between two players in portrait
 			_chip("Time", "time", C_POST)
+		if race.humans == 1:   # the medal the current place would earn
+			_chip("Medal", "target", C_MUTED, ["BRONZE", "SILVER", "GOLD", "PIVOT", "NONE"])
 		if gems:
-			_chip("Gems", "gems", Color("#7fe3d0"))
+			_chip("Gems", "gems", Color("#7fe3d0"), [n_gems])
 		if race.humans > 1:
 			_spacer()
-			_chip("P2", "lap1", hs[1].color)
-			_chip("Pos", "pos1", hs[1].color)
+			_chip("P2", "lap1", hs[1].color, [laps])
+			_chip("Pos", "pos1", hs[1].color, places)
 	hud.add_child(pause_btn)
 	hud.visible = true
 	minimap.visible = true
@@ -796,6 +808,18 @@ func build_hud(race, gems: bool, tutorial := false) -> void:
 func set_hud(key: String, text: String) -> void:
 	if hud_vals.has(key):
 		hud_vals[key].text = text
+
+func set_hud_color(key: String, col: Color) -> void:
+	if hud_vals.has(key) and hud_vals[key].color != col:
+		hud_vals[key].color = col
+		hud_vals[key].queue_redraw()
+
+# a chip's label and accent colour, e.g. the medal a target time stands for
+func set_hud_tag(key: String, label: String, col: Color) -> void:
+	if hud_tags.has(key):
+		hud_tags[key][0].text = label.to_upper()
+		hud_tags[key][0].add_theme_color_override("font_color", col)
+		hud_tags[key][1].border_color = col
 
 func set_big(bb: String, size := 120) -> void:
 	# shrink long words (FINISH, 2nd...) to fit a narrow portrait screen
@@ -924,6 +948,12 @@ static func fmt(t: float) -> String:
 	var m := int(t / 60.0)
 	var s := t - m * 60.0
 	return "%d:%s%.1f" % [m, "0" if s < 9.995 else "", s]
+
+# fixed-width HUD clock, 00:00.00 from the start so the chips never change size
+static func fmt_hud(t: float) -> String:
+	t = clampf(snappedf(t, 0.01), 0.0, 5999.99)
+	var m := int(t / 60.0)
+	return "%02d:%05.2f" % [m, t - m * 60.0]
 
 static func fmt2(t: float) -> String:
 	t = snappedf(t, 0.01)
