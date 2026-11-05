@@ -1,5 +1,5 @@
 # Synthesised sounds, matching the prototype's WebAudio blips: short oscillator
-# notes with an exponential pitch slide and fade, plus a low sawtooth engine hum.
+# notes with an exponential pitch slide and fade, plus a mid-sized engine.
 # Also owns the background music. Effects and music play on their own buses
 # ("SFX", "Music"), each with its own volume.
 extends Node
@@ -13,11 +13,13 @@ var _cache := {}
 var _pool: Array[AudioStreamPlayer] = []
 var _next := 0
 var _engine: AudioStreamPlayer
-var _freq := 40.0
-var _freq_target := 40.0
+var _freq := RUMBLE_IDLE
+var _freq_target := RUMBLE_IDLE
 var _gain := 0.0
 var _gain_target := 0.0
-const HUM_BASE := 110.0  # the hum loop is one low-passed sawtooth at this pitch
+const RUMBLE_BASE := 80.0  # firing rate (Hz) the engine loop is rendered at
+const RUMBLE_IDLE := 60.0  # firing rate at standstill; revs up with speed
+const RUMBLE_LOOP := 2.0   # seconds; a whole number of firings so it loops seamlessly
 
 func _ready() -> void:
 	_bus("SFX")
@@ -29,31 +31,79 @@ func _ready() -> void:
 		p.bus = "SFX"
 		add_child(p)
 		_pool.append(p)
-	# engine: a looping low-passed sawtooth, re-pitched with the car's speed
+	# engine: a looping mid-sized engine, re-pitched with the car's speed
 	# (a sample loop rather than a generator, so it also plays on the web build)
-	var n := int(RATE / HUM_BASE) * 20
-	var data := PackedByteArray()
-	data.resize(n * 2)
-	var a := 1.0 - exp(-TAU * 520.0 * (HUM_BASE / 60.0) / RATE)
-	var lp := 0.0
-	for pass_i in 2:  # second pass so the filter state wraps cleanly
-		for i in n:
-			var ph := fposmod(i * HUM_BASE / RATE, 1.0)
-			lp += (2.0 * ph - 1.0 - lp) * a
-			if pass_i == 1:
-				data.encode_s16(i * 2, int(clampf(lp * 0.9, -1.0, 1.0) * 32000.0))
 	var w := AudioStreamWAV.new()
 	w.format = AudioStreamWAV.FORMAT_16_BITS
 	w.mix_rate = RATE
-	w.data = data
+	w.data = _rumble()
 	w.loop_mode = AudioStreamWAV.LOOP_FORWARD
 	w.loop_begin = 0
-	w.loop_end = n
+	w.loop_end = w.data.size() / 2
 	_engine = AudioStreamPlayer.new()
 	_engine.bus = "SFX"
 	_engine.stream = w
 	_engine.volume_db = -80.0
 	add_child(_engine)
+
+# One loop of a mid-sized engine: each firing is a short pop (a fast-damped
+# 400-550 Hz ring plus a puff of noise) with small random changes in strength and
+# pitch (every other firing a touch weaker), over a light tone at the firing rate
+# and its second harmonic. Band-limited (~110 Hz-2.2 kHz) so there is neither a
+# bass boom nor a nasal buzz. Seeded, so it's the same every run.
+static func _rumble() -> PackedByteArray:
+	var n := int(RUMBLE_LOOP * RATE)
+	var fires := int(RUMBLE_LOOP * RUMBLE_BASE)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var buf := PackedFloat32Array()
+	buf.resize(n)
+	var ring := int(0.01 * RATE)  # each pop has died away within 10 ms
+	for k in fires:
+		var start := int((k + rng.randf_range(-0.05, 0.05)) * RATE / RUMBLE_BASE)
+		var amp := rng.randf_range(0.8, 1.0) * (1.0 if k % 2 == 0 else 0.9)
+		var res := rng.randf_range(400.0, 550.0)
+		var nz := 0.0
+		for j in ring:
+			var t := float(j) / RATE
+			nz += (rng.randf_range(-1.0, 1.0) - nz) * 0.35
+			var v := (sin(TAU * res * t) + nz * 0.8) * exp(-t * 380.0) * amp
+			var i := posmod(start + j, n)
+			buf[i] += v
+	for i in n:
+		var t := float(i) / RATE
+		buf[i] += 0.3 * sin(TAU * RUMBLE_BASE * t) + 0.2 * sin(TAU * RUMBLE_BASE * 2.0 * t)
+	# high-pass ~110 Hz then two low-passes ~2.2 kHz; second pass over the loop so
+	# the filter state wraps cleanly
+	var hp_a := exp(-TAU * 110.0 / RATE)
+	var lp_a := 1.0 - exp(-TAU * 2200.0 / RATE)
+	var hp := 0.0
+	var prev := 0.0
+	var l1 := 0.0
+	var l2 := 0.0
+	var out := PackedFloat32Array()
+	out.resize(n)
+	for pass_i in 2:
+		for i in n:
+			hp = hp_a * (hp + buf[i] - prev)
+			prev = buf[i]
+			l1 += (hp - l1) * lp_a
+			l2 += (l1 - l2) * lp_a
+			out[i] = l2
+	var peak := 0.0
+	for i in n:
+		peak = maxf(peak, absf(out[i]))
+	# gentle soft-clip for a little rasp
+	for i in n:
+		out[i] = tanh(out[i] / peak * 1.6)
+	peak = 0.0
+	for i in n:
+		peak = maxf(peak, absf(out[i]))
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	for i in n:
+		data.encode_s16(i * 2, int(out[i] / peak * 0.9 * 32000.0))
+	return data
 
 # index of a bus; the "SFX" and "Music" buses come from default_bus_layout.tres.
 # They must exist at startup: buses added at runtime are wired into a loop on the
@@ -126,7 +176,7 @@ func blip(f: float, d: float, kind := "square", v := 0.08, slide := 0.0) -> void
 	p.play()
 
 func set_engine(speed: float, on: bool) -> void:
-	_freq_target = 40.0 + speed * 0.17
+	_freq_target = RUMBLE_IDLE + speed * 0.09  # ~60 Hz idle, ~140 Hz cruising, ~160 Hz at full swing
 	_gain_target = 0.035 if (on and enabled) else 0.0
 
 func _process(dt: float) -> void:
@@ -138,5 +188,5 @@ func _process(dt: float) -> void:
 		return
 	if not _engine.playing:
 		_engine.play()
-	_engine.pitch_scale = clampf(_freq / HUM_BASE, 0.1, 4.0)
-	_engine.volume_db = linear_to_db(_gain * 3.0)
+	_engine.pitch_scale = clampf(_freq / RUMBLE_BASE, 0.5, 3.0)
+	_engine.volume_db = linear_to_db(_gain * 7.0)
