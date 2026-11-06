@@ -8,6 +8,10 @@ const Themes = preload("res://scripts/themes.gd")
 const Race = preload("res://scripts/race.gd")
 
 const U := 0.01
+# Model detail. 1 = the game (light enough for phones). 2 = artwork renders
+# (tools/gen_loading_art.gd): rounded, bevelled car and tower parts and twice the facets
+# on every round shape, same shapes and sizes.
+static var detail := 1
 const HW := TrackData.HW
 const GAP := TrackData.GAP
 const ROAD_Y := 1.0          # road surface lift above ground, world units
@@ -130,6 +134,10 @@ static func mat(c: Color, unshaded := false, emission := 0.0) -> StandardMateria
 
 static func box(size: Vector3, c: Color, pos := Vector3.ZERO) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
+	if detail > 1:
+		mi.mesh = bevel_box(size, mat(c))
+		mi.position = pos * U
+		return mi
 	var bm := BoxMesh.new()
 	bm.size = size * U
 	bm.material = mat(c)
@@ -143,7 +151,7 @@ static func cyl(r: float, h: float, c: Color, pos := Vector3.ZERO, r_bottom := -
 	cm.top_radius = r * U
 	cm.bottom_radius = (r if r_bottom < 0.0 else r_bottom) * U
 	cm.height = h * U
-	cm.radial_segments = segs
+	cm.radial_segments = segs * 3 if detail > 1 and segs != 4 else segs
 	cm.rings = 1
 	cm.material = mat(c)
 	mi.mesh = cm
@@ -584,6 +592,8 @@ const COL_ROCK := Color("#7d8791")
 
 # one flat-shaded cone frustum band, `sides` faces
 static func _band(st: SurfaceTool, y0: float, y1: float, r0: float, r1: float, sides: int, col: Color, rot := 0.0, off := Vector3.ZERO) -> void:
+	if detail > 1 and sides >= 5:
+		sides *= 2
 	for k in sides:
 		var a0 := rot + TAU * k / sides
 		var a1 := rot + TAU * (k + 1) / sides
@@ -1108,7 +1118,7 @@ func _build_towers() -> void:
 				arm.add_child(box(Vector3(reach - dr + 4.0, 5, 5), COL_WOOD.darkened(0.15), Vector3((reach + dr) * 0.5, 16, 0)))
 				var tip := box(Vector3(11, 10, 11) if k == 0 else Vector3(8, 8, 8), COL_POST if k == 0 else th["hub"], Vector3(reach, 16, 0))
 				if k == 0:
-					tip.mesh.material = mat(COL_POST, false, 0.6)
+					tip.set_surface_override_material(0, mat(COL_POST, false, 0.6))
 				arm.add_child(tip)
 				spinner.add_child(arm)
 			spinner.add_child(cyl(dr * 0.4, 4, th["hub"], Vector3(0, 22.5, 0), dr * 0.62, 10))
@@ -1218,12 +1228,69 @@ static func paint(c: Color, rough := 0.32) -> StandardMaterial3D:
 
 static func pbox(size: Vector3, m: Material, pos: Vector3) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
+	if detail > 1:
+		mi.mesh = bevel_box(size, m)
+		mi.position = pos * U
+		return mi
 	var bm := BoxMesh.new()
 	bm.size = size * U
 	bm.material = m
 	mi.mesh = bm
 	mi.position = pos * U
 	return mi
+
+# A box with chamfered edges and corners (detail 2): six inset faces, twelve edge strips,
+# eight corner triangles. `size` in world units like pbox.
+static func bevel_box(size: Vector3, m: Material) -> ArrayMesh:
+	var h := size * 0.5
+	var e := minf(minf(minf(h.x, h.y), h.z) * 0.4, 4.0)
+	# the point of corner (sx, sy, sz) that lies on the face across `axis`
+	var pt := func(sg: Vector3, axis: int) -> Vector3:
+		var v := Vector3()
+		for i in 3:
+			v[i] = sg[i] * (h[i] if i == axis else h[i] - e)
+		return v * U
+	var faces: Array = []
+	var signs: Array = []
+	for sx: float in [-1.0, 1.0]:
+		for sy: float in [-1.0, 1.0]:
+			for sz: float in [-1.0, 1.0]:
+				signs.append(Vector3(sx, sy, sz))
+	for i in 3:
+		var j := (i + 1) % 3
+		var k := (i + 2) % 3
+		for si: float in [-1.0, 1.0]:
+			# main face across axis i
+			var q: Array = []
+			for c: Vector2 in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
+				var sg := Vector3()
+				sg[i] = si; sg[j] = c.x; sg[k] = c.y
+				q.append(pt.call(sg, i))
+			faces.append(q)
+			# edge strips between face i and face j
+			for sj: float in [-1.0, 1.0]:
+				var a := Vector3(); a[i] = si; a[j] = sj; a[k] = 1.0
+				var b := Vector3(); b[i] = si; b[j] = sj; b[k] = -1.0
+				faces.append([pt.call(a, i), pt.call(a, j), pt.call(b, j), pt.call(b, i)])
+	for sg: Vector3 in signs:
+		faces.append([pt.call(sg, 0), pt.call(sg, 1), pt.call(sg, 2)])
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for f: Array in faces:
+		var ctr := Vector3()
+		for v: Vector3 in f:
+			ctr += v
+		ctr /= f.size()
+		var nrm: Vector3 = (f[1] - f[0]).cross(f[2] - f[0]).normalized()
+		if nrm.dot(ctr) > 0.0:
+			f.reverse()
+			nrm = -nrm
+		st.set_normal(-nrm)
+		for t in range(1, f.size() - 1):
+			for v in [f[0], f[t], f[t + 1]]:
+				st.add_vertex(v)
+	st.set_material(m)
+	return st.commit()
 
 var _blob_tex: Texture2D
 
@@ -1330,7 +1397,7 @@ func _wheel(chassis: Node3D, x: float, z: float, r: float, w: float, tyre: Mater
 		var rr := r if layer == 0 else r * 0.5
 		cm.top_radius = rr * U; cm.bottom_radius = rr * U
 		cm.height = (w if layer == 0 else w + 2.0) * U
-		cm.radial_segments = 14; cm.rings = 1
+		cm.radial_segments = 14 if detail == 1 else 40; cm.rings = 1
 		cm.material = tyre if layer == 0 else hub
 		mi.mesh = cm
 		mi.position = Vector3(x, r, z) * U
@@ -1349,7 +1416,7 @@ func _car_kit_forest(chassis: Node3D, parts_list: Array, top: Material, dark: Ma
 		var lg := MeshInstance3D.new()
 		var cm := CylinderMesh.new()
 		cm.top_radius = 7.0 * U; cm.bottom_radius = 7.0 * U; cm.height = 70.0 * U
-		cm.radial_segments = 8; cm.rings = 1
+		cm.radial_segments = 8 if detail == 1 else 24; cm.rings = 1
 		cm.material = bark
 		lg.mesh = cm
 		lg.position = Vector3(-10, 61, lz) * U
@@ -1417,7 +1484,7 @@ func setup_cars(race: Race, has_ghost: bool) -> void:
 		var marker: MeshInstance3D = null
 		if c.human >= 0:
 			marker = cyl(16, 26, c.color, Vector3(0, 120, 0), 0.0, 3)
-			marker.mesh.material = mat(c.color, true)
+			marker.set_surface_override_material(0, mat(c.color, true))
 			marker.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			root.add_child(marker)
 		car_nodes.append({ "root": root, "body": root.get_meta("body"), "chassis": root.get_meta("chassis"), "tether": tether, "marker": marker,
@@ -1457,7 +1524,7 @@ func sync(race: Race, phase: String, ghost_sample, aims: Dictionary, dt: float) 
 			var ring: MeshInstance3D = tower_nodes[idx]["rings"][m]
 			ring.visible = true
 			if ring.get_meta("col", Color.BLACK) != cols[m]:
-				ring.mesh.material = mat(cols[m], true)
+				ring.set_surface_override_material(0, mat(cols[m], true))
 				ring.set_meta("col", cols[m])
 	# posts
 	for k in post_nodes.size():

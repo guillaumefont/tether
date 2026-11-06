@@ -1,8 +1,10 @@
 extends SceneTree
 # Renders the loading-screen artwork with the game's own 3D world: AI cars swinging round
-# a tower on a snowy track at dusk. One landscape and one portrait image; needs a display:
-#   ART_THEME=snow ART_OUT=res://art/loading_snow_land.jpg xvfb-run godot --path . --rendering-method gl_compatibility --resolution 1920x1080 --script tools/gen_loading_art.gd
-#   ART_THEME=snow ART_OUT=res://art/loading_snow_port.jpg ART_DIST=1900 ART_AIM_UP=60 xvfb-run godot --path . --rendering-method gl_compatibility --resolution 1080x1920 --script tools/gen_loading_art.gd
+# a tower on a snowy track at dusk. One landscape and one portrait image; needs a display.
+# Render at twice the wanted size and set ART_SIZE: the frame is scaled down (supersampled)
+# for clean edges. Loading art is 2560x1440 / 1440x2560:
+#   ART_THEME=snow ART_OUT=res://art/loading_snow_land.jpg ART_SIZE=2560x1440 xvfb-run -s "-screen 0 5120x2880x24" godot --path . --rendering-method gl_compatibility --resolution 5120x2880 --script tools/gen_loading_art.gd
+#   ART_THEME=snow ART_OUT=res://art/loading_snow_port.jpg ART_SIZE=1440x2560 ART_DIST=1900 ART_AIM_UP=60 xvfb-run -s "-screen 0 2880x5120x24" godot --path . --rendering-method gl_compatibility --resolution 2880x5120 --script tools/gen_loading_art.gd
 # ART_SCENERY=1 renders the land beside the track, looking away from it (world cards).
 # Optional env: ART_THEME (snow, forest, rock, sand), ART_TRACK (index), ART_SECS (sim time), ART_PITCH, ART_YAW (degrees), ART_DIST (world units), ART_OUT
 const TrackData = preload("res://scripts/track.gd")
@@ -16,6 +18,9 @@ func _env(k: String, d: float) -> float:
 
 func _initialize() -> void:
 	seed(4242)
+	root.msaa_3d = Viewport.MSAA_4X
+	RenderingServer.directional_shadow_atlas_set_size(8192, true)
+	WorldView.detail = int(_env("ART_DETAIL", 2))   # artwork uses the high-detail models
 	var view := WorldView.new()
 	root.add_child(view)
 	await process_frame
@@ -26,7 +31,7 @@ func _initialize() -> void:
 	var race := Race.new(tr, "race", 0)
 	view.setup_cars(race, false)
 	var dt := 1.0 / 60.0
-	var secs := _env("ART_SECS", 18.0)
+	var secs := _env("ART_SECS", 8.0)
 	var hooked_t := 0.0
 	while race.clock < secs or hooked_t < 0.35:
 		race.update(dt)
@@ -89,6 +94,9 @@ func _initialize() -> void:
 		await process_frame
 	await RenderingServer.frame_post_draw
 	var img := root.get_texture().get_image()
+	var want := OS.get_environment("ART_SIZE").split("x")
+	if want.size() == 2:
+		img.resize(int(want[0]), int(want[1]), Image.INTERPOLATE_LANCZOS)
 	var out := OS.get_environment("ART_OUT")
 	if out == "":
 		out = "res://art/loading_bg.jpg"
