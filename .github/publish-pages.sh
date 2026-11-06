@@ -6,7 +6,7 @@
 set -euo pipefail
 SRC="$1"; DEST="$2"; MSG="$3"
 REPO="${PAGES_REPO:-https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git}"
-for attempt in 1 2 3 4 5; do
+for attempt in $(seq 1 10); do
   WORK="$(mktemp -d)"
   if git clone -q --depth 1 --branch gh-pages "$REPO" "$WORK" 2>/dev/null; then :; else
     git -C "$WORK" init -q -b gh-pages && git -C "$WORK" remote add origin "$REPO"
