@@ -14,9 +14,10 @@ const THEMES := {
 		# road surface: base colour, patches (glossy ice here), edge creep
 		"road": Color("#353e49"), "patch": Color("#7a99b3"), "patch_amt": 0.5, "patch_rough": 0.25,
 		"streak": Color("#bfd6eb"), "edge": Color("#dbe8f2"), "road_rough": 0.8,
-		# edge: a verge strip, then a bank (inner face, crest, outer slope)
-		"verge": Color("#9fb4c6"), "bank_face": Color("#b7c8d6"), "bank_top": Color("#eef3f7"),
-		"bank_slope": Color("#dfe8ef"), "bank_h": 30.0, "bank_jag": 0.0,
+		# edge: a verge strip, then a bank whose inner face has its own colour (its crest
+		# and outer slope wear the ground, so the landscape runs seamlessly into it)
+		"verge": Color("#9fb4c6"), "bank_face": Color("#b7c8d6"),
+		"bank_h": 30.0, "bank_jag": 0.0,
 		"rail_top": Color("#eef3f7"),
 		# towers: column, cap, the drift round the foot, hanging icicles
 		"column": Color("#3f4c5c"), "cap": Color("#eef3f7"), "foot": Color("#eef3f7"),
@@ -36,8 +37,8 @@ const THEMES := {
 		"ambient": Color("#b4cc9c"), "sun": Color("#fff0d2"),
 		"road": Color("#5b4734"), "patch": Color("#3a2e24"), "patch_amt": 0.55, "patch_rough": 0.35,
 		"streak": Color("#6b5a48"), "edge": Color("#8a6a34"), "road_rough": 0.95,
-		"verge": Color("#4a6a30"), "bank_face": Color("#6b4f34"), "bank_top": Color("#5c8a3a"),
-		"bank_slope": Color("#3f6530"), "bank_h": 26.0, "bank_jag": 0.0,
+		"verge": Color("#4a6a30"), "bank_face": Color("#6b4f34"),
+		"bank_h": 26.0, "bank_jag": 0.0,
 		"rail_top": Color("#5c8a3a"),
 		"column": Color("#5d6656"), "cap": Color("#5c8a3a"), "foot": Color("#4f7d33"),
 		"icicles": false, "hub": Color("#5c8a3a"),
@@ -54,8 +55,8 @@ const THEMES := {
 		"ambient": Color("#b8bec4"), "sun": Color("#fff1de"),
 		"road": Color("#45403c"), "patch": Color("#6c635b"), "patch_amt": 0.45, "patch_rough": 0.95,
 		"streak": Color("#7d746b"), "edge": Color("#9a9c96"), "road_rough": 0.9,
-		"verge": Color("#6c6e69"), "bank_face": Color("#64666a"), "bank_top": Color("#8e9090"),
-		"bank_slope": Color("#696d67"), "bank_h": 36.0, "bank_jag": 1.0,
+		"verge": Color("#6c6e69"), "bank_face": Color("#64666a"),
+		"bank_h": 36.0, "bank_jag": 1.0,
 		"rail_top": Color("#918a83"),
 		"column": Color("#5d5f63"), "cap": Color("#8e9090"), "foot": Color("#6c6e69"),
 		"icicles": false, "hub": Color("#8e9090"),
@@ -72,8 +73,8 @@ const THEMES := {
 		"ambient": Color("#e6d2b2"), "sun": Color("#fff0d0"),
 		"road": Color("#584638"), "patch": Color("#c9a46c"), "patch_amt": 0.4, "patch_rough": 1.0,
 		"streak": Color("#d8b884"), "edge": Color("#e3c48d"), "road_rough": 0.9,
-		"verge": Color("#c79c5e"), "bank_face": Color("#c99e64"), "bank_top": Color("#efd59f"),
-		"bank_slope": Color("#c9a066"), "bank_h": 28.0, "bank_jag": 0.0,
+		"verge": Color("#c79c5e"), "bank_face": Color("#c99e64"),
+		"bank_h": 28.0, "bank_jag": 0.0,
 		"rail_top": Color("#efd59f"),
 		"column": Color("#b0744a"), "cap": Color("#dcae78"), "foot": Color("#e6c891"),
 		"icicles": false, "hub": Color("#dcae78"),
