@@ -1225,6 +1225,19 @@ static func pbox(size: Vector3, m: Material, pos: Vector3) -> MeshInstance3D:
 	mi.position = pos * U
 	return mi
 
+# a polygon with each corner cut to a curve of about radius r
+static func rounded(poly: PackedVector2Array, r: float, segs := 4) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var n := poly.size()
+	for i in n:
+		var p := poly[i]
+		var a := p + (poly[(i + n - 1) % n] - p).normalized() * r
+		var b := p + (poly[(i + 1) % n] - p).normalized() * r
+		for k in segs + 1:   # quadratic curve a -> p -> b
+			var t := float(k) / segs
+			out.append(a.lerp(p, t).lerp(p.lerp(b, t), t))
+	return out
+
 # a prism: a side profile (x, y) extruded across the car (z), centred on z = 0
 static func pprism(profile: PackedVector2Array, depth: float, m: Material) -> MeshInstance3D:
 	var st := SurfaceTool.new()
@@ -1303,7 +1316,9 @@ func _make_car(col: Color, ghost := false) -> Node3D:
 		var dark := paint(Color("#1d2229"), 0.6)
 		parts_list.append(pbox(Vector3(104, 10, 54), low, Vector3(-6, 17, 0)))     # belly
 		parts_list.append(pbox(Vector3(92, 14, 60), top, Vector3(-12, 29, 0)))     # body
-		parts_list.append(pbox(Vector3(34, 9, 54), top, Vector3(50, 24.5, 0)))     # nose
+		# nose: the bonnet slopes down from the windscreen to the lamps
+		parts_list.append(pprism(PackedVector2Array([Vector2(30, 20), Vector2(67, 20),
+				Vector2(67, 28), Vector2(30, 36)]), 54.0, top))
 		# one tinted glasshouse: the windscreen is its sloped front face
 		parts_list.append(pprism(PackedVector2Array([Vector2(-26, 35), Vector2(30, 35),
 				Vector2(12, 51), Vector2(-26, 51)]), 50.0, glass))
@@ -1343,18 +1358,11 @@ func _car_kit_snow(chassis: Node3D, parts_list: Array, top: Material, dark: Mate
 		tip.rotation.z = 0.6
 		chassis.add_child(tip)
 		chassis.add_child(pbox(Vector3(8, 12, 6), dark, Vector3(42, 9, z * 0.85)))
-		# crawler track with rounded front and back ends
-		chassis.add_child(pbox(Vector3(32, 20, 16), tread, Vector3(-34, 10, z)))
-		for ex in [-50.0, -18.0]:
-			var end := MeshInstance3D.new()
-			var cm := CylinderMesh.new()
-			cm.top_radius = 10.0 * U; cm.bottom_radius = 10.0 * U; cm.height = 16.0 * U
-			cm.radial_segments = 16; cm.rings = 1
-			cm.material = tread
-			end.mesh = cm
-			end.position = Vector3(ex, 10, z) * U
-			end.rotation.x = PI / 2
-			chassis.add_child(end)
+		# crawler track: a trapezoid side (long top, short bottom) with rounded corners
+		var trk := pprism(rounded(PackedVector2Array([Vector2(-50, 0), Vector2(-18, 0),
+				Vector2(-8, 20), Vector2(-60, 20)]), 5.0), 16.0, tread)
+		trk.position.z = z * U
+		chassis.add_child(trk)
 		for k in 4:   # tread stripes
 			chassis.add_child(pbox(Vector3(3, 21, 17), lug, Vector3(-46 + k * 8.0, 10, z)))
 
@@ -1425,7 +1433,9 @@ func _car_kit_sand(chassis: Node3D, parts_list: Array, top: Material, dark: Mate
 	parts_list.append(pbox(Vector3(5, 5, 57), dark, Vector3(-30, 62, 0)))
 	parts_list.append(pbox(Vector3(2, 70, 2), dark, Vector3(-52, 72, -24)))  # whip
 	parts_list.append(pbox(Vector3(18, 12, 1.5), top, Vector3(-43, 100, -24)))  # flag
-	parts_list.append(pbox(Vector3(22, 3, 40), paint(Color("#e6c891"), 0.95), Vector3(40, 30.5, 4)))  # sand on the bonnet
+	var sand := pbox(Vector3(22, 3, 40), paint(Color("#e6c891"), 0.95), Vector3(46, 32.5, 4))  # sand on the bonnet
+	sand.rotation.z = -0.21   # follows the bonnet slope
+	parts_list.append(sand)
 
 func setup_cars(race: Race, has_ghost: bool) -> void:
 	for cn in car_nodes:
