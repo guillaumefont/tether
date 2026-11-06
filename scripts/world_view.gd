@@ -1330,6 +1330,154 @@ static func pprism(profile: PackedVector2Array, depth: float, m: Material) -> Me
 	mi.material_override = m
 	return mi
 
+# A side profile (x, y) extruded across the car (z) with its long edges rounded off
+# (radius r), smooth shaded: the artwork's car panels (detail 2).
+static func soft_prism(profile: PackedVector2Array, depth: float, r: float, m: Material, segs := 3, smooth := true) -> MeshInstance3D:
+	var P := profile.duplicate()
+	var n := P.size()
+	var area := 0.0
+	for i in n:
+		area += P[i].cross(P[(i + 1) % n])
+	if area < 0.0:
+		P.reverse()
+	var nrm := PackedVector2Array()
+	var ctr2 := Vector2()
+	for i in n:
+		var e1 := P[i] - P[(i + n - 1) % n]
+		var e2 := P[(i + 1) % n] - P[i]
+		nrm.append((Vector2(e1.y, -e1.x).normalized() + Vector2(e2.y, -e2.x).normalized()).normalized())
+		ctr2 += P[i] / n
+	var hz := depth * 0.5
+	var rr := minf(r, hz * 0.9)
+	var rings: Array = []
+	var ring_at := func(side: float, th: float) -> Array:
+		var inset := rr * (1.0 - cos(th))
+		var z := side * ((hz - rr) + rr * sin(th))
+		var ring: Array = []
+		for i in n:
+			var q := P[i] - nrm[i] * inset
+			ring.append(Vector3(q.x, q.y, z))
+		return ring
+	for k in range(segs, -1, -1):
+		rings.append(ring_at.call(-1.0, PI * 0.5 * k / segs))
+	for k in range(0, segs + 1):
+		rings.append(ring_at.call(1.0, PI * 0.5 * k / segs))
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	if not smooth:
+		st.set_smooth_group(-1)
+	var tri := func(a: Vector3, b: Vector3, c: Vector3, out: Vector3) -> void:
+		if (b - a).cross(c - a).dot(out) > 0.0:
+			var t := b; b = c; c = t
+		for v: Vector3 in [a, b, c]:
+			st.add_vertex(v * U)
+	var ctr := Vector3(ctr2.x, ctr2.y, 0.0)
+	for j in rings.size() - 1:
+		var r0: Array = rings[j]
+		var r1: Array = rings[j + 1]
+		for i in n:
+			var a: Vector3 = r0[i]; var b: Vector3 = r0[(i + 1) % n]
+			var c: Vector3 = r1[(i + 1) % n]; var d: Vector3 = r1[i]
+			var mid := (a + c) * 0.5
+			var o := Vector3(mid.x - ctr.x, mid.y - ctr.y, 0.0).normalized() + Vector3(0, 0, mid.z / maxf(hz, 0.01)) * 0.5
+			tri.call(a, b, c, o)
+			tri.call(a, c, d, o)
+	# caps: triangulate the profile itself (the inset ring can pinch at tight corners,
+	# which makes triangulate_polygon give up) and reuse the indices on the ring
+	var idx := Geometry2D.triangulate_polygon(P)
+	for cap in [rings[0], rings[rings.size() - 1]]:
+		var zc: float = cap[0].z
+		for t in range(0, idx.size(), 3):
+			tri.call(cap[idx[t]], cap[idx[t + 1]], cap[idx[t + 2]], Vector3(0, 0, signf(zc)))
+	if smooth:
+		st.index()
+	st.generate_normals()
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	mi.material_override = m
+	return mi
+
+# a short cylinder along the car's x (lamps) or z (wheel parts) axis
+static func pcyl(r: float, h: float, m: Material, pos: Vector3, axis := "z", segs := 32) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = r * U; cm.bottom_radius = r * U; cm.height = h * U
+	cm.radial_segments = segs; cm.rings = 1
+	cm.material = m
+	mi.mesh = cm
+	mi.position = pos * U
+	if axis == "z":
+		mi.rotation.x = PI / 2
+	else:
+		mi.rotation.z = PI / 2
+	return mi
+
+# The artwork car (detail 2): the game car's exact silhouette (one shell with the sloped
+# bonnet, one tinted glasshouse, roof, spoiler) as rounded smooth panels, with panel
+# lines, door handles, mirrors, a grille, lamp lenses, exhausts and seats seen through
+# the glass.
+func _car_body_hd(parts_list: Array, col: Color, top: Material, low: Material) -> void:
+	var dark := paint(Color("#15191f"), 0.5)
+	var chrome := paint(Color("#c9ced4"), 0.18)
+	chrome.metallic = 0.85
+	parts_list.append(soft_prism(rounded(PackedVector2Array([Vector2(-58, 12), Vector2(46, 12),
+			Vector2(46, 22), Vector2(-58, 22)]), 4.0), 54.0, 4.0, low))   # belly
+	parts_list.append(soft_prism(rounded(PackedVector2Array([Vector2(-58, 21), Vector2(67, 21),
+			Vector2(67, 28), Vector2(30, 36), Vector2(-58, 36)]), 3.0), 60.0, 5.0, top))   # shell, bonnet flush
+	var glass := paint(Color(0.07, 0.10, 0.14, 0.88), 0.2)
+	glass.metallic = 0.0
+	glass.metallic_specular = 0.35
+	glass.rim_enabled = false
+	glass.clearcoat_enabled = false
+	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	parts_list.append(soft_prism(rounded(PackedVector2Array([Vector2(-26, 35), Vector2(30, 35),
+			Vector2(12, 51), Vector2(-26, 51)]), 2.5), 50.0, 4.0, glass))   # glasshouse
+	parts_list.append(soft_prism(rounded(PackedVector2Array([Vector2(-27, 50.5), Vector2(11, 50.5),
+			Vector2(11, 53.5), Vector2(-27, 53.5)]), 1.2), 52.0, 1.5, top))   # roof
+	# inside: two seats, dashboard, steering wheel
+	var seat := paint(Color("#2b3038"), 0.8)
+	for sz in [-11.0, 11.0]:
+		parts_list.append(pbox(Vector3(5, 13, 15), seat, Vector3(-16, 43, sz)))
+		parts_list.append(pbox(Vector3(14, 4, 15), seat, Vector3(-9, 37.5, sz)))
+	parts_list.append(pbox(Vector3(8, 4, 44), dark, Vector3(19, 38, 0)))
+	var sw := MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = 3.6 * U; tm.outer_radius = 5.0 * U; tm.rings = 24; tm.ring_segments = 8
+	tm.material = dark
+	sw.mesh = tm
+	sw.position = Vector3(13, 42, 11) * U
+	sw.rotation.z = PI / 2 - 0.5
+	parts_list.append(sw)
+	# panel lines, door handles, a lighter side stripe, mirrors
+	var seam := paint(col.darkened(0.55), 0.6)
+	var stripe := paint(col.lightened(0.45), 0.3)
+	for side: float in [1.0, -1.0]:
+		var zs := 30.15 * side
+		for sx in [-22.0, 24.0]:
+			parts_list.append(pbox(Vector3(0.8, 12, 0.6), seam, Vector3(sx, 28.5, zs)))
+		parts_list.append(pbox(Vector3(6, 1.4, 0.9), chrome, Vector3(-12, 33, zs)))
+		parts_list.append(pbox(Vector3(108, 2.2, 0.5), stripe, Vector3(4, 25.5, 30.05 * side)))
+		parts_list.append(pbox(Vector3(4, 3.5, 6), top, Vector3(25, 40, 27.5 * side)))
+		parts_list.append(pbox(Vector3(0.6, 2.6, 4.5), chrome, Vector3(22.8, 40, 27.5 * side)))
+	# rear wing on two struts
+	parts_list.append(soft_prism(PackedVector2Array([Vector2(-63, 40), Vector2(-49, 40.5),
+			Vector2(-49, 43), Vector2(-63, 45)]), 66.0, 1.2, low))
+	for sz in [-22.0, 22.0]:
+		parts_list.append(pbox(Vector3(5, 6, 4), low, Vector3(-56, 37, sz)))
+	# front: grille, lamp lenses in chrome bezels; back: tail lamps and exhausts
+	parts_list.append(pbox(Vector3(1.6, 5.5, 20), dark, Vector3(67.2, 24.5, 0)))
+	for gy in [23.0, 25.0, 27.0]:
+		parts_list.append(pbox(Vector3(0.6, 0.6, 18), chrome, Vector3(68.0, gy, 0)))
+	var lamp := mat(Color("#fff4c8"), true)
+	for lz in [-18.0, 18.0]:
+		parts_list.append(pcyl(4.6, 1.6, chrome, Vector3(67.0, 24.8, lz), "x"))
+		parts_list.append(pcyl(3.6, 1.8, lamp, Vector3(67.4, 24.8, lz), "x"))
+	var tail := mat(Color("#ff4a3a"), false, 1.2)
+	for lz in [-21.0, 21.0]:
+		parts_list.append(pbox(Vector3(1.6, 4.5, 13), tail, Vector3(-58.6, 29, lz)))
+	for lz in [-10.0, -5.0]:
+		parts_list.append(pcyl(2.0, 6.0, chrome, Vector3(-59, 16, lz), "x", 16))
+
 var _blob_tex: Texture2D
 
 func _blob_shadow() -> MeshInstance3D:
@@ -1380,24 +1528,27 @@ func _make_car(col: Color, ghost := false) -> Node3D:
 		glass.metallic = 0.4
 		# a low painted racer body with a bubble cab; the theme kit adds the rest
 		var dark := paint(Color("#1d2229"), 0.6)
-		parts_list.append(pbox(Vector3(104, 10, 54), low, Vector3(-6, 17, 0)))     # belly
-		parts_list.append(pbox(Vector3(88, 14, 60), top, Vector3(-14, 29, 0)))     # body
-		# nose: the bonnet slopes down from the windscreen to the lamps
-		parts_list.append(pprism(PackedVector2Array([Vector2(30, 20), Vector2(67, 20),
-				Vector2(67, 28), Vector2(30, 36)]), 60.0, top))   # flush with the body
-		# one tinted glasshouse: the windscreen is its sloped front face
-		parts_list.append(pprism(PackedVector2Array([Vector2(-26, 35), Vector2(30, 35),
-				Vector2(12, 51), Vector2(-26, 51)]), 50.0, glass))
-		parts_list.append(pbox(Vector3(36, 3, 50), top, Vector3(-8, 52, 0)))      # roof
-		parts_list.append(pbox(Vector3(14, 5, 66), low, Vector3(-56, 41, 0)))     # rear spoiler
-		parts_list.append(pbox(Vector3(5, 6, 5), low, Vector3(-56, 36, 22)))
-		parts_list.append(pbox(Vector3(5, 6, 5), low, Vector3(-56, 36, -22)))
-		var lamp := mat(Color("#fff4c8"), true)
-		for lz in [-17.0, 17.0]:
-			parts_list.append(pbox(Vector3(3, 5, 12), lamp, Vector3(67.5, 25, lz)))
-		var tail := mat(Color("#ff4a3a"), false, 1.2)
-		parts_list.append(pbox(Vector3(3, 5, 12), tail, Vector3(-59, 28, 22)))
-		parts_list.append(pbox(Vector3(3, 5, 12), tail, Vector3(-59, 28, -22)))
+		if detail > 1:
+			_car_body_hd(parts_list, col, top, low)
+		else:
+			parts_list.append(pbox(Vector3(104, 10, 54), low, Vector3(-6, 17, 0)))     # belly
+			parts_list.append(pbox(Vector3(88, 14, 60), top, Vector3(-14, 29, 0)))     # body
+			# nose: the bonnet slopes down from the windscreen to the lamps
+			parts_list.append(pprism(PackedVector2Array([Vector2(30, 20), Vector2(67, 20),
+					Vector2(67, 28), Vector2(30, 36)]), 60.0, top))   # flush with the body
+			# one tinted glasshouse: the windscreen is its sloped front face
+			parts_list.append(pprism(PackedVector2Array([Vector2(-26, 35), Vector2(30, 35),
+					Vector2(12, 51), Vector2(-26, 51)]), 50.0, glass))
+			parts_list.append(pbox(Vector3(36, 3, 50), top, Vector3(-8, 52, 0)))      # roof
+			parts_list.append(pbox(Vector3(14, 5, 66), low, Vector3(-56, 41, 0)))     # rear spoiler
+			parts_list.append(pbox(Vector3(5, 6, 5), low, Vector3(-56, 36, 22)))
+			parts_list.append(pbox(Vector3(5, 6, 5), low, Vector3(-56, 36, -22)))
+			var lamp := mat(Color("#fff4c8"), true)
+			for lz in [-17.0, 17.0]:
+				parts_list.append(pbox(Vector3(3, 5, 12), lamp, Vector3(67.5, 25, lz)))
+			var tail := mat(Color("#ff4a3a"), false, 1.2)
+			parts_list.append(pbox(Vector3(3, 5, 12), tail, Vector3(-59, 28, 22)))
+			parts_list.append(pbox(Vector3(3, 5, 12), tail, Vector3(-59, 28, -22)))
 		match String(th["kit"]):
 			"forest": _car_kit_forest(chassis, parts_list, top, dark)
 			"rock": _car_kit_rock(chassis, parts_list, top, dark)
@@ -1417,6 +1568,9 @@ func _car_kit_snow(chassis: Node3D, parts_list: Array, top: Material, dark: Mate
 	var ski := paint(Color("#e9eef2"), 0.4)
 	var tread := paint(Color("#22262c"), 0.85)
 	var lug := paint(Color("#59636e"), 0.7)
+	if detail > 1:
+		_car_kit_snow_hd(chassis, ski, tread, lug, dark)
+		return
 	for side: float in [1.0, -1.0]:
 		var z := 33.0 * side
 		chassis.add_child(pbox(Vector3(38, 3, 13), ski, Vector3(44, 1.5, z)))
@@ -1434,8 +1588,74 @@ func _car_kit_snow(chassis: Node3D, parts_list: Array, top: Material, dark: Mate
 			var y0 := maxf(0.0, maxf(-44.0 - lx, lx + 24.0)) + 0.5
 			chassis.add_child(pbox(Vector3(3, 20.5 - y0 + 0.5, 17), lug, Vector3(lx, (y0 + 20.5) * 0.5, z)))
 
+# artwork snow kit (detail 2): same skis and 45° crawler tracks, as rounded panels with
+# lugs (the side stays the plain trapezoid)
+func _car_kit_snow_hd(chassis: Node3D, ski: Material, tread: Material, lug: Material, dark: Material) -> void:
+	var steel := paint(Color("#9aa3ad"), 0.3)
+	steel.metallic = 0.6
+	for side: float in [1.0, -1.0]:
+		var z := 33.0 * side
+		# ski: flat run with an up-curved tip, one piece
+		var prof := PackedVector2Array([Vector2(25, 0), Vector2(56, 0)])
+		for k in range(1, 7):
+			var an := PI * 0.5 * k / 6.0
+			prof.append(Vector2(56, 9) + Vector2(sin(an), -cos(an)) * 9.0)
+		for k in range(6, 0, -1):
+			var an := PI * 0.5 * k / 6.0
+			prof.append(Vector2(56, 9) + Vector2(sin(an), -cos(an)) * 6.0)
+		prof.append(Vector2(25, 3))
+		var sk := soft_prism(prof, 13.0, 1.2, ski, 2, false)
+		sk.position.z = z * U
+		chassis.add_child(sk)
+		chassis.add_child(pbox(Vector3(8, 12, 6), dark, Vector3(42, 9, z * 0.85)))
+		chassis.add_child(pbox(Vector3(14, 1.2, 10), steel, Vector3(42, 3.4, z)))
+		# crawler track
+		var trk := soft_prism(rounded(PackedVector2Array([Vector2(-44, 0), Vector2(-24, 0),
+				Vector2(-4, 20), Vector2(-64, 20)]), 5.0, 6), 16.0, 2.5, tread, 3, false)
+		trk.position.z = z * U
+		chassis.add_child(trk)
+		for k in 6:
+			var lx := -54.0 + k * 8.0
+			var y0 := maxf(0.0, maxf(-44.0 - lx, lx + 24.0)) + 0.5
+			chassis.add_child(pbox(Vector3(3, 20.5 - y0 + 0.5, 17), lug, Vector3(lx, (y0 + 20.5) * 0.5, z)))
+
+# artwork wheel (detail 2): a tyre with rounded shoulders and tread blocks, a dished
+# rim with five spokes and a hub cap on the outer face
+func _wheel_hd(chassis: Node3D, x: float, z: float, r: float, w: float, tyre: Material, hub: Material) -> void:
+	var c := Vector3(x, r, z)
+	var out := signf(z) if z != 0.0 else 1.0
+	var sh := minf(3.5, w * 0.2)
+	chassis.add_child(pcyl(r, w - sh * 2.0, tyre, c, "z", 48))
+	for s: float in [-1.0, 1.0]:
+		var mi := MeshInstance3D.new()
+		var tm := TorusMesh.new()
+		tm.inner_radius = (r - sh * 2.0) * U; tm.outer_radius = r * U
+		tm.rings = 48; tm.ring_segments = 12
+		tm.material = tyre
+		mi.mesh = tm
+		mi.position = (c + Vector3(0, 0, s * (w * 0.5 - sh))) * U
+		mi.rotation.x = PI / 2
+		chassis.add_child(mi)
+	for k in 16:   # tread blocks round the tyre
+		var an := TAU * k / 16.0
+		var blk := pbox(Vector3(r * 0.22, 1.6, w - sh * 2.0 - 1.0), tyre, c + Vector3(cos(an), sin(an), 0) * (r + 0.3))
+		blk.rotation.z = an + PI / 2
+		chassis.add_child(blk)
+	var face := c + Vector3(0, 0, out * (w * 0.5 - 0.6))
+	chassis.add_child(pcyl(r * 0.64, 1.6, hub, face, "z", 40))
+	chassis.add_child(pcyl(r * 0.5, 1.8, paint(Color("#15191f"), 0.6), face + Vector3(0, 0, out * 0.2), "z", 40))
+	for k in 5:
+		var an := TAU * k / 5.0
+		var sp := pbox(Vector3(r * 0.46, 2.2, 1.6), hub, face + Vector3(cos(an), sin(an), 0) * r * 0.25 + Vector3(0, 0, out * 0.5))
+		sp.rotation.z = an
+		chassis.add_child(sp)
+	chassis.add_child(pcyl(r * 0.16, 2.6, hub, face + Vector3(0, 0, out * 0.8), "z", 24))
+
 # a wheel on the chassis: tyre plus a painted hub on the outer face
 func _wheel(chassis: Node3D, x: float, z: float, r: float, w: float, tyre: Material, hub: Material) -> void:
+	if detail > 1:
+		_wheel_hd(chassis, x, z, r, w, tyre, hub)
+		return
 	for layer in 2:
 		var mi := MeshInstance3D.new()
 		var cm := CylinderMesh.new()
