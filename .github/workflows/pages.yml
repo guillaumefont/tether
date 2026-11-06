@@ -1,0 +1,37 @@
+name: Deploy Pages
+
+# Deploys the whole gh-pages branch (main build + every pr/N preview) to GitHub Pages.
+# The Builds workflow only pushes to gh-pages and then starts this workflow, so all
+# deployments go through this one queue instead of racing each other.
+# Needs Settings > Pages > Source = "GitHub Actions".
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, never cancelled half-way. While one deploys, only the newest
+# request waits (GitHub drops older pending runs). That loses nothing: every run deploys
+# gh-pages as it is when it starts, so the waiting run includes all the earlier pushes.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4
