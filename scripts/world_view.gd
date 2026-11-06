@@ -789,7 +789,7 @@ func _build_scenery() -> void:
 		mark.call(track.point_at(s)["pos"], clear_r, 1)
 		s += 30.0
 	for a in track.anchors:
-		mark.call(a.pos, TrackData.TURN_R + 10.0, 1)   # keep the infield under the tethers clear
+		mark.call(a.pos, TrackData.TURN_R + TrackData.WIDEN + 10.0, 1)   # keep the infield under the tethers clear
 	var q0 := track.point_at(track.start_s)
 	mark.call(q0["pos"], 320.0, 1)
 

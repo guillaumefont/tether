@@ -103,10 +103,21 @@ func _init(tr: TrackData, mode_name: String, n_humans: int) -> void:
 	else:
 		field = Defs.ROSTER.slice(0, humans) + Defs.ROSTER.slice(2)
 		field = field.slice(0, 4)
+	# the players (first in the field) start on the front row, inside of the first bend: the shorter line
+	var p0 := track.point_at(track.start_s)
+	var inner := 1.0
+	var bi := -1
+	var ba := track.n + 1
+	for idx in track.anchors.size():
+		var ah := posmod(track.anchors[idx].entry - int(p0["i"]), track.n)
+		if ah < ba:
+			ba = ah; bi = idx
+	if bi >= 0 and (track.anchors[bi].pos - p0["pos"]).dot(TrackData.perp(p0["dir"])) < 0.0:
+		inner = -1.0
 	for k in field.size():
 		var r: Dictionary = field[k]
 		var row := k / 2
-		var col := 1.0 if k % 2 else -1.0
+		var col := -inner if k % 2 else inner
 		var back: float = TrackData.GRID_ROWS[row] if row < TrackData.GRID_ROWS.size() else 90.0 + row * 150.0
 		var p := track.point_at(track.start_s - back)
 		var nrm := TrackData.perp(p["dir"])

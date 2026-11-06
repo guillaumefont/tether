@@ -9,7 +9,7 @@ extends RefCounted
 
 const TRACKS := [
 	{ "name": "Lasso", "theme": "forest", "note": "A big loop with a knot at the end", "laps": 5, "jumps": [{ "k": 0, "f": 0.5 }],
-		"turns": [[700,1050,1],[1600,750,1],[3400,1050,-1],[1600,1350,1]] },
+		"turns": [[700,1050,1],[1600,750,1],[3500,1050,-1],[1600,1350,1]] },
 	{ "name": "Diamond Eight", "theme": "sand", "note": "Two diamonds joined by a bridge", "laps": 3,
 		"turns": [[700,1300,1],[1500,700,1],[2300,1300,-1],[3100,1900,-1],[3900,1300,-1],[3100,700,-1],[2300,1300,1],[1500,1900,1]] },
 	{ "name": "Sidestep", "theme": "sand", "note": "S-bends both ways", "laps": 3,
@@ -37,7 +37,7 @@ const TRACKS := [
 	{ "name": "Coil", "theme": "forest", "note": "A long S over two bridges", "laps": 4,
 		"turns": [[2000,1200,1],[3700,700,-1],[2000,1200,1,750],[300,1700,-1]] },
 	{ "name": "Halo", "theme": "snow", "note": "A ring round the middle tower", "laps": 2,
-		"turns": [[1625,679,1],[2619,1453,1],[1625,679,1,750],[1156,1536,1,750]] },
+		"turns": [[1625,679,1],[2619,1453,1],[1625,679,1,750],[1156,1600,1,750]] },
 	{ "name": "Arch", "theme": "rock", "note": "A summit between two loops", "laps": 4,
 		"turns": [[1800,900,1],[3500,1800,-1],[1800,900,1,750],[100,1800,-1]] },
 	{ "name": "Twin Bend", "theme": "forest", "note": "Two hairpins round one tower", "laps": 4,

@@ -3,9 +3,11 @@
 # y "south". The 3D view maps (x, y) to (x, height, y) / 100.
 extends RefCounted
 
-const HW := 150.0          # track half width
+const SPREAD := 1.2        # tower positions in track_defs are spread by this much (roads widened 20% in 2026-11)
+const HW := 180.0          # track half width (lane 360: car = 20% of the lane)
+const WIDEN := HW - 150.0  # layouts were drawn for HW 150: radii grow by this so the inner kerb stays put
 const CR := 36.0           # car collision radius
-const TURN_R := 350.0      # centreline radius: inner kerb 200, outer kerb 500
+const TURN_R := 350.0      # default centreline radius in layout units (+ WIDEN = 380: inner kerb 200, outer 560)
 const GAP := 170.0         # length of the gap a jump clears
 const GRID_ROWS := [90.0, 240.0]
 const BRIDGE_H := 160.0    # visual deck height of a bridge (world units)
@@ -63,8 +65,18 @@ func _init(d: Dictionary, var_name: String = "standard") -> void:
 func _build() -> void:
 	var rev := variant == "reverse"
 	var tl: Array = []
+	# the tightest curve on each tower keeps its inner kerb (radius + WIDEN); a second, outer
+	# curve on the same tower keeps its spread-out gap to it so the two roads stay apart
+	var r_min := {}
 	for t in def["turns"]:
-		tl.append({ "p": Vector2(t[0], t[1]), "s": float(t[2]), "r": float(t[3]) if t.size() > 3 else TURN_R })
+		var key := Vector2(t[0], t[1])
+		var r0: float = float(t[3]) if t.size() > 3 else TURN_R
+		r_min[key] = minf(r_min.get(key, INF), r0)
+	for t in def["turns"]:
+		var key := Vector2(t[0], t[1])
+		var r0: float = float(t[3]) if t.size() > 3 else TURN_R
+		var rw: float = r_min[key] + WIDEN + (r0 - r_min[key]) * SPREAD
+		tl.append({ "p": key * SPREAD, "s": float(t[2]), "r": rw })
 	if rev:
 		tl.reverse()
 		for t in tl:
