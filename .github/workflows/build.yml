@@ -5,6 +5,8 @@ name: Builds
 #   pull request N -> https://<owner>.github.io/<repo>/pr/N/         (+ tether-racing.apk)
 # Each open PR keeps its own preview, linked in a comment on the PR; it is removed when
 # the PR is closed. The APK is also attached to each run as an artifact.
+# Builds only push to the gh-pages branch; the site itself is deployed by pages.yml, which
+# runs one deployment at a time so builds landing together don't cancel each other.
 on:
   push:
     branches: [main]
@@ -15,6 +17,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write # start the Deploy Pages workflow
 
 # one build per branch/PR at a time (a newer push cancels the older build)
 concurrency:
@@ -111,6 +114,11 @@ jobs:
           cp "$OUT/android/tether-racing.apk" "$OUT/stage/"
           bash .github/publish-pages.sh "$OUT/stage" "$DEST" "Build of ${GITHUB_SHA::7} for $DEST"
 
+      - name: Deploy the site
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref "${{ github.event.repository.default_branch }}" || echo "::warning::Could not start Deploy Pages"
+
       - name: Link the preview on the PR
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
@@ -136,3 +144,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash .github/publish-pages.sh "" "pr/${{ github.event.pull_request.number }}" "Remove preview of PR ${{ github.event.pull_request.number }}"
+
+      - name: Deploy the site
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref "${{ github.event.repository.default_branch }}" || echo "::warning::Could not start Deploy Pages"
