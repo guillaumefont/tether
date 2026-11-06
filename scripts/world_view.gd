@@ -1358,13 +1358,15 @@ func _car_kit_snow(chassis: Node3D, parts_list: Array, top: Material, dark: Mate
 		tip.rotation.z = 0.6
 		chassis.add_child(tip)
 		chassis.add_child(pbox(Vector3(8, 12, 6), dark, Vector3(42, 9, z * 0.85)))
-		# crawler track: a trapezoid side (long top, short bottom) with rounded corners
-		var trk := pprism(rounded(PackedVector2Array([Vector2(-50, 0), Vector2(-18, 0),
-				Vector2(-8, 20), Vector2(-60, 20)]), 5.0), 16.0, tread)
+		# crawler track: a trapezoid side (long top, short bottom, ends at 45°), rounded corners
+		var trk := pprism(rounded(PackedVector2Array([Vector2(-44, 0), Vector2(-24, 0),
+				Vector2(-4, 20), Vector2(-64, 20)]), 5.0), 16.0, tread)
 		trk.position.z = z * U
 		chassis.add_child(trk)
-		for k in 4:   # tread stripes
-			chassis.add_child(pbox(Vector3(3, 21, 17), lug, Vector3(-46 + k * 8.0, 10, z)))
+		for k in 6:   # tread stripes, trimmed to the sloped ends
+			var lx := -54.0 + k * 8.0
+			var y0 := maxf(0.0, maxf(-44.0 - lx, lx + 24.0)) + 0.5
+			chassis.add_child(pbox(Vector3(3, 20.5 - y0 + 0.5, 17), lug, Vector3(lx, (y0 + 20.5) * 0.5, z)))
 
 # a wheel on the chassis: tyre plus a painted hub on the outer face
 func _wheel(chassis: Node3D, x: float, z: float, r: float, w: float, tyre: Material, hub: Material) -> void:
