@@ -400,6 +400,10 @@ func _build_road() -> void:
 func _build_drifts() -> void:
 	var meshes := _drift_meshes()
 	var lots: Array = [[], []]
+	# a heap never rises above the bank behind it: whatever reaches past the inner
+	# face stays buried in the bank instead of drawing a line along its crest
+	var cap: float = th["bank_h"] * 0.8
+	var tops := [(meshes[0] as Mesh).get_aabb().end.y / U, (meshes[1] as Mesh).get_aabb().end.y / U]
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(String(track.def.get("name", ""))) + 7
 	var s := 0.0
@@ -417,8 +421,10 @@ func _build_drifts() -> void:
 			var p: Vector2 = q["pos"] + n * off * side + t * (rng.randf() - 0.5) * 6.0
 			var yaw := -t.angle() + (rng.randf() - 0.5) * 0.5
 			var sc := Vector3(1.7 + rng.randf() * 1.0, 1.2 + rng.randf() * 0.8, 1.25 + rng.randf() * 0.4)
+			var which := 0 if rng.randf() < 0.65 else 1
+			sc.y = minf(sc.y, cap / maxf(tops[which], 1.0))
 			var xf := Transform3D(Basis(Vector3.UP, yaw).scaled(sc), w3(p, h))
-			lots[0 if rng.randf() < 0.65 else 1].append(xf)
+			lots[which].append(xf)
 	_multi(meshes[0], lots[0])
 	_multi(meshes[1], lots[1])
 
