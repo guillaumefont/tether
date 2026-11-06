@@ -1315,10 +1315,10 @@ func _make_car(col: Color, ghost := false) -> Node3D:
 		# a low painted racer body with a bubble cab; the theme kit adds the rest
 		var dark := paint(Color("#1d2229"), 0.6)
 		parts_list.append(pbox(Vector3(104, 10, 54), low, Vector3(-6, 17, 0)))     # belly
-		parts_list.append(pbox(Vector3(92, 14, 60), top, Vector3(-12, 29, 0)))     # body
+		parts_list.append(pbox(Vector3(88, 14, 60), top, Vector3(-14, 29, 0)))     # body
 		# nose: the bonnet slopes down from the windscreen to the lamps
 		parts_list.append(pprism(PackedVector2Array([Vector2(30, 20), Vector2(67, 20),
-				Vector2(67, 28), Vector2(30, 36)]), 54.0, top))
+				Vector2(67, 28), Vector2(30, 36)]), 60.0, top))   # flush with the body
 		# one tinted glasshouse: the windscreen is its sloped front face
 		parts_list.append(pprism(PackedVector2Array([Vector2(-26, 35), Vector2(30, 35),
 				Vector2(12, 51), Vector2(-26, 51)]), 50.0, glass))
