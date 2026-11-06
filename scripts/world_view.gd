@@ -1291,6 +1291,44 @@ static func bevel_box(size: Vector3, m: Material) -> ArrayMesh:
 				st.add_vertex(v)
 	st.set_material(m)
 	return st.commit()
+# a polygon with each corner cut to a curve of about radius r
+static func rounded(poly: PackedVector2Array, r: float, segs := 4) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var n := poly.size()
+	for i in n:
+		var p := poly[i]
+		var a := p + (poly[(i + n - 1) % n] - p).normalized() * r
+		var b := p + (poly[(i + 1) % n] - p).normalized() * r
+		for k in segs + 1:   # quadratic curve a -> p -> b
+			var t := float(k) / segs
+			out.append(a.lerp(p, t).lerp(p.lerp(b, t), t))
+	return out
+
+# a prism: a side profile (x, y) extruded across the car (z), centred on z = 0
+static func pprism(profile: PackedVector2Array, depth: float, m: Material) -> MeshInstance3D:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(-1)   # flat faces
+	var hz := depth * 0.5
+	var n := profile.size()
+	for side: float in [1.0, -1.0]:   # the two flat sides
+		for i in range(1, n - 1):
+			var tri := [profile[0], profile[i], profile[i + 1]]
+			if side > 0.0:
+				tri.reverse()
+			for v: Vector2 in tri:
+				st.add_vertex(Vector3(v.x, v.y, hz * side) * U)
+	for i in n:   # the faces around the profile
+		var a := profile[i]
+		var b := profile[(i + 1) % n]
+		for v: Vector3 in [Vector3(a.x, a.y, -hz), Vector3(b.x, b.y, hz), Vector3(b.x, b.y, -hz),
+				Vector3(a.x, a.y, -hz), Vector3(a.x, a.y, hz), Vector3(b.x, b.y, hz)]:
+			st.add_vertex(v * U)
+	st.generate_normals()
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	mi.material_override = m
+	return mi
 
 var _blob_tex: Texture2D
 
@@ -1343,12 +1381,13 @@ func _make_car(col: Color, ghost := false) -> Node3D:
 		# a low painted racer body with a bubble cab; the theme kit adds the rest
 		var dark := paint(Color("#1d2229"), 0.6)
 		parts_list.append(pbox(Vector3(104, 10, 54), low, Vector3(-6, 17, 0)))     # belly
-		parts_list.append(pbox(Vector3(92, 14, 60), top, Vector3(-12, 29, 0)))     # body
-		parts_list.append(pbox(Vector3(34, 9, 54), top, Vector3(50, 24.5, 0)))     # nose
-		var screen := pbox(Vector3(4, 18, 46), glass, Vector3(22, 42, 0))
-		screen.rotation.z = 0.55
-		parts_list.append(screen)
-		parts_list.append(pbox(Vector3(40, 16, 50), glass, Vector3(-6, 43, 0)))   # cab
+		parts_list.append(pbox(Vector3(88, 14, 60), top, Vector3(-14, 29, 0)))     # body
+		# nose: the bonnet slopes down from the windscreen to the lamps
+		parts_list.append(pprism(PackedVector2Array([Vector2(30, 20), Vector2(67, 20),
+				Vector2(67, 28), Vector2(30, 36)]), 60.0, top))   # flush with the body
+		# one tinted glasshouse: the windscreen is its sloped front face
+		parts_list.append(pprism(PackedVector2Array([Vector2(-26, 35), Vector2(30, 35),
+				Vector2(12, 51), Vector2(-26, 51)]), 50.0, glass))
 		parts_list.append(pbox(Vector3(36, 3, 50), top, Vector3(-8, 52, 0)))      # roof
 		parts_list.append(pbox(Vector3(14, 5, 66), low, Vector3(-56, 41, 0)))     # rear spoiler
 		parts_list.append(pbox(Vector3(5, 6, 5), low, Vector3(-56, 36, 22)))
@@ -1385,9 +1424,15 @@ func _car_kit_snow(chassis: Node3D, parts_list: Array, top: Material, dark: Mate
 		tip.rotation.z = 0.6
 		chassis.add_child(tip)
 		chassis.add_child(pbox(Vector3(8, 12, 6), dark, Vector3(42, 9, z * 0.85)))
-		chassis.add_child(pbox(Vector3(52, 20, 16), tread, Vector3(-34, 10, z)))
-		for k in 6:   # tread stripes
-			chassis.add_child(pbox(Vector3(3, 21, 17), lug, Vector3(-56 + k * 9.0, 10, z)))
+		# crawler track: a trapezoid side (long top, short bottom, ends at 45°), rounded corners
+		var trk := pprism(rounded(PackedVector2Array([Vector2(-44, 0), Vector2(-24, 0),
+				Vector2(-4, 20), Vector2(-64, 20)]), 5.0), 16.0, tread)
+		trk.position.z = z * U
+		chassis.add_child(trk)
+		for k in 6:   # tread stripes, trimmed to the sloped ends
+			var lx := -54.0 + k * 8.0
+			var y0 := maxf(0.0, maxf(-44.0 - lx, lx + 24.0)) + 0.5
+			chassis.add_child(pbox(Vector3(3, 20.5 - y0 + 0.5, 17), lug, Vector3(lx, (y0 + 20.5) * 0.5, z)))
 
 # a wheel on the chassis: tyre plus a painted hub on the outer face
 func _wheel(chassis: Node3D, x: float, z: float, r: float, w: float, tyre: Material, hub: Material) -> void:
@@ -1456,7 +1501,9 @@ func _car_kit_sand(chassis: Node3D, parts_list: Array, top: Material, dark: Mate
 	parts_list.append(pbox(Vector3(5, 5, 57), dark, Vector3(-30, 62, 0)))
 	parts_list.append(pbox(Vector3(2, 70, 2), dark, Vector3(-52, 72, -24)))  # whip
 	parts_list.append(pbox(Vector3(18, 12, 1.5), top, Vector3(-43, 100, -24)))  # flag
-	parts_list.append(pbox(Vector3(22, 3, 40), paint(Color("#e6c891"), 0.95), Vector3(40, 30.5, 4)))  # sand on the bonnet
+	var sand := pbox(Vector3(22, 3, 40), paint(Color("#e6c891"), 0.95), Vector3(46, 32.5, 4))  # sand on the bonnet
+	sand.rotation.z = -0.21   # follows the bonnet slope
+	parts_list.append(sand)
 
 func setup_cars(race: Race, has_ghost: bool) -> void:
 	for cn in car_nodes:
