@@ -197,7 +197,11 @@ func _set_paused(on: bool) -> void:
 		if tut:
 			ui.show_pause("Tutorial  ·  lap %s" % tut.lap_label().replace("/", " / "), _pause_opts())
 		else:
-			ui.show_pause("%s  ·  %s  ·  lap %d / %d" % [d["name"], what, clampi(c0.lap, 1, race.laps_total), race.laps_total], _pause_opts())
+			var sub := "%s  ·  %s  ·  lap %d / %d" % [d["name"], what, clampi(c0.lap, 1, race.laps_total), race.laps_total]
+			var rec := Records.get_best(rec_key()) if mode == "trial" else 0.0
+			if rec > 0.0:   # the record left the race HUD to keep it small
+				sub += "  ·  record %s" % UI.fmt2(rec)
+			ui.show_pause(sub, _pause_opts())
 	else:
 		ui.hide_pause()
 
@@ -507,25 +511,10 @@ func _update_hud() -> void:
 		ui.set_hud("gems", "%s/%s" % [str(race.cars[0].gems).lpad(tot.length(), "0"), tot])
 	if mode == "trial":
 		var c = race.cars[0]
-		var rec := Records.get_best(rec_key())
 		var lap_t: float = race.clock if gems else (race.clock - c.lap_start if c.lap >= 1 and not c.finished else 0.0)
 		ui.set_hud("lap0", "%d/%d" % [clampi(c.lap, 1, race.laps_total), race.laps_total])
 		ui.set_hud("time", UI.fmt_hud(lap_t))
-		ui.set_hud("rec", UI.fmt_hud(rec) if rec > 0.0 else "--:--.--")
-		# best medal still in reach: its target drops to the next medal once the clock passes it
-		var pace: float = lap_t + (c.hits if gems else c.lap_hits) * Race.OBS_PEN
-		if c.finished:
-			pace = c.finish_time if gems else c.best_lap
-		var tier := -1
-		for i in medal_targets.size():
-			if medal_targets[i] > 0.0 and pace < medal_targets[i]:
-				tier = i
-		if tier >= 0:
-			ui.set_hud_tag("target", Medals.NAMES[tier], Medals.COLORS[tier])
-			ui.set_hud("target", UI.fmt_hud(medal_targets[tier]))
-		else:
-			ui.set_hud_tag("target", "Target", UI.C_MUTED)
-			ui.set_hud("target", "--:--.--")
+		_update_gap(c, lap_t, gems)
 		return
 	var st := race.standings()
 	for c in race.cars:
@@ -540,6 +529,44 @@ func _update_hud() -> void:
 		ui.set_hud_tag("target", "Medal", col)
 		ui.set_hud("target", Medals.NAMES[t - 1].to_upper() if t > 0 else "NONE")
 		ui.set_hud_color("target", col)
+
+# Gap to medal pace beside the clock: the best medal whose pace the player is ahead of
+# (green, minus), or the bronze pace they are behind (red, plus). Medal pace is the target
+# time spread evenly along the lap (or the whole race when gems are scored over the race),
+# so it is an estimate between lines and exact at the finish line.
+func _update_gap(c, lap_t: float, gems: bool) -> void:
+	if medal_targets.is_empty():
+		return
+	var pace: float = lap_t + (c.hits if gems else c.lap_hits) * Race.OBS_PEN
+	var frac := 1.0
+	if c.finished:
+		pace = c.finish_time if gems else c.best_lap
+	elif c.lap < 1:   # before the line on the first lap
+		ui.set_hud_tag("gap", "Target", UI.C_MUTED)
+		ui.set_hud("gap", "--.--")
+		ui.set_hud_color("gap", UI.C_MUTED)
+		return
+	elif gems:
+		frac = ((c.lap - 1) * track.L + c.prog) / (race.laps_total * track.L)
+	else:
+		frac = c.prog / track.L
+	frac = clampf(frac, 0.0, 1.0)
+	var tier := -1
+	var lowest := -1
+	for i in medal_targets.size():
+		if medal_targets[i] <= 0.0:
+			continue
+		if lowest < 0:
+			lowest = i
+		if pace - medal_targets[i] * frac <= 0.0:
+			tier = i
+	if lowest < 0:
+		return
+	var shown := tier if tier >= 0 else lowest
+	var gap: float = pace - medal_targets[shown] * frac
+	ui.set_hud_tag("gap", Medals.NAMES[shown], Medals.COLORS[shown])
+	ui.set_hud("gap", "%s%.2f" % ["-" if gap <= 0.0 else "+", minf(absf(gap), 99.99)])
+	ui.set_hud_color("gap", Color("#7be38b") if gap <= 0.0 else Color("#e2574c"))
 
 static func _ordinal(n: int) -> String:
 	var suf := ["th", "st", "nd", "rd"]

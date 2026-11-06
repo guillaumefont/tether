@@ -44,7 +44,10 @@ var f_med: Font = preload("res://fonts/ChakraPetch-Medium.ttf")
 
 var root: Control
 var menu: MenuScreens
-var hud: HBoxContainer
+var hud: Control           # top band: corners + centre timer
+var hud_left: HBoxContainer
+var hud_right: HBoxContainer
+var hud_mid: VBoxContainer
 var big: RichTextLabel
 var minimap: TrackMap
 var results: Control
@@ -98,13 +101,28 @@ func _ready() -> void:
 	root.theme = _make_theme()
 	add_child(root)
 
-	hud = HBoxContainer.new()
+	hud = Control.new()
 	hud.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	hud.offset_left = 16; hud.offset_right = -16; hud.offset_top = 10
-	hud.add_theme_constant_override("separation", 8)
 	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.visible = false
 	root.add_child(hud)
+	# corners hug the edges, the timer column stays centred on the screen whatever they hold
+	hud_left = HBoxContainer.new()
+	hud_left.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	hud_right = HBoxContainer.new()
+	hud_right.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	hud_right.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	hud_mid = VBoxContainer.new()
+	hud_mid.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	hud_mid.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	hud_mid.alignment = BoxContainer.ALIGNMENT_BEGIN
+	hud_mid.add_theme_constant_override("separation", 4)
+	hud_left.add_theme_constant_override("separation", 6)
+	hud_right.add_theme_constant_override("separation", 6)
+	for b in [hud_left, hud_right, hud_mid]:
+		b.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hud.add_child(b)
 
 	big = RichTextLabel.new()
 	big.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -716,90 +734,144 @@ func show_menu() -> void:
 	big.text = ""
 
 # ---------------------------------------------------------------- HUD
-func _chip(label: String, key: String, col: Color, tpl: Array = ["00:00.00"], tags: Array = []) -> void:
-	var narrow := is_portrait()
+func _panel(col := Color(0, 0, 0, 0), radius := 6) -> PanelContainer:
 	var pc := PanelContainer.new()
 	var s := StyleBoxFlat.new()
 	s.bg_color = C_PANEL
-	s.set_corner_radius_all(6)
-	s.border_width_left = 4
+	s.set_corner_radius_all(radius)
 	s.border_color = col
+	if col.a > 0.0:
+		s.border_width_left = 4
 	s.content_margin_left = 10; s.content_margin_right = 10; s.content_margin_top = 4; s.content_margin_bottom = 4
-	if narrow:
-		s.content_margin_left = 7; s.content_margin_right = 7
 	pc.add_theme_stylebox_override("panel", s)
 	pc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return pc
+
+# a labelled readout: small tag, fixed-width value
+func _chip(parent: Control, label: String, key: String, col: Color, tpl: Array = ["00:00.00"], tags: Array = [], size := 0) -> PanelContainer:
+	var narrow := is_portrait()
+	var pc := _panel(col)
+	var s: StyleBoxFlat = pc.get_theme_stylebox("panel")
+	if narrow:
+		s.content_margin_left = 7; s.content_margin_right = 7
 	var hb := HBoxContainer.new()
-	hb.add_theme_constant_override("separation", 6 if is_portrait() else 10)
+	hb.add_theme_constant_override("separation", 6)
 	hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var l := _label(label.to_upper(), 10 if narrow else 11, C_MUTED, f_bold)
+	var ts := 10 if narrow else 11
+	var l := _label(label.to_upper(), ts, C_MUTED, f_bold)
 	l.autowrap_mode = TextServer.AUTOWRAP_OFF
 	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	for t in tags:   # a tag that changes (medal names) keeps the width of the longest
-		l.custom_minimum_size.x = maxf(l.custom_minimum_size.x, f_bold.get_string_size(String(t).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 10 if narrow else 11).x)
+		l.custom_minimum_size.x = maxf(l.custom_minimum_size.x, f_bold.get_string_size(String(t).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, ts).x)
 	hb.add_child(l)
 	var v := MonoLabel.new()
-	v.setup(f_bold, 17 if narrow else 20, C_FG, tpl)
+	v.setup(f_bold, size if size > 0 else (17 if narrow else 20), C_FG, tpl)
 	hb.add_child(v)
 	pc.add_child(hb)
-	hud.add_child(pc)
+	parent.add_child(pc)
 	hud_vals[key] = v
 	hud_tags[key] = [l, s]
+	return pc
 
-func _spacer() -> void:
-	var c := Control.new()
-	c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hud.add_child(c)
+# the big centred clock
+func _timer(key: String) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 6)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var pc := _panel(Color(0, 0, 0, 0), 9)
+	var s: StyleBoxFlat = pc.get_theme_stylebox("panel")
+	s.content_margin_left = 14; s.content_margin_right = 14; s.content_margin_top = 1; s.content_margin_bottom = 2
+	var v := MonoLabel.new()
+	v.setup(f_bold, 26 if is_portrait() else 30, C_FG, ["00:00.00"])
+	pc.add_child(v)
+	row.add_child(pc)
+	hud_mid.add_child(row)
+	hud_vals[key] = v
+	return row
+
+# the small line under the clock: tag + value pairs in one slim panel
+func _subline(items: Array) -> void:
+	var pc := _panel(Color(0, 0, 0, 0))
+	var s: StyleBoxFlat = pc.get_theme_stylebox("panel")
+	s.content_margin_top = 2; s.content_margin_bottom = 2
+	pc.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 12)
+	hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for it in items:   # [tag, key, colour, templates]
+		var pair := HBoxContainer.new()
+		pair.add_theme_constant_override("separation", 5)
+		pair.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var l := _label(String(it[0]).to_upper(), 11, it[2], f_bold)
+		l.autowrap_mode = TextServer.AUTOWRAP_OFF
+		l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		pair.add_child(l)
+		var v := MonoLabel.new()
+		v.setup(f_bold, 15, C_FG, it[3])
+		pair.add_child(v)
+		hb.add_child(pair)
+		hud_vals[it[1]] = v
+	pc.add_child(hb)
+	hud_mid.add_child(pc)
 
 func build_hud(race, gems_total: int, medals: bool, tutorial := false) -> void:
 	var gems := gems_total > 0
 	if pause_btn.get_parent():
 		pause_btn.get_parent().remove_child(pause_btn)
-	for ch in hud.get_children():
-		ch.queue_free()
+	for box in [hud_left, hud_right, hud_mid]:
+		for ch in box.get_children():
+			ch.queue_free()
 	hud_vals.clear()
 	hud_tags.clear()
 	hide_coach()
 	var laps := "%d/%d" % [race.laps_total, race.laps_total]
 	var n_gems := "%d/%d" % [gems_total, gems_total]
 	var places := ["1st", "2nd", "3rd", "4th", "5th", "6th"]
+	var gem_col := Color("#7fe3d0")
 	if tutorial:
-		_chip("Lap", "lap0", C_POST, ["3/3"])
-		_chip("Time" if is_portrait() else "Lap time", "time", C_POST)
-		_spacer()
-		_chip("Target", "rec", C_POST, ["00.0 s"])
-		# icon only in portrait, where the chips leave no room for the word
+		_timer("time")   # alone: the corner holds SKIP and pause
+		_subline([["Lap", "lap0", C_MUTED, ["3/3"]], ["Target", "rec", C_POST, ["00.0 s"]]])
+		# icon only in portrait, where the corner has no room for the word
 		skip_btn = icon_button("next", "" if is_portrait() else "SKIP", "card", false, 44)
 		skip_btn.focus_mode = Control.FOCUS_NONE
 		skip_btn.tooltip_text = "Skip the tutorial"
 		skip_btn.pressed.connect(func(): skip_pressed.emit())
-		hud.add_child(skip_btn)
+		hud_right.add_child(skip_btn)
 	elif race.mode == "trial":
-		_chip("Lap", "lap0", C_POST, [laps])
-		_chip("Lap time", "time", C_POST)
+		var row := _timer("time")
+		if medals:   # ahead of (-) or behind (+) the pace of the best medal in reach
+			_chip(row, "Gold", "gap", Medals.COLORS[2], ["+00.00"], ["Target"] + Medals.NAMES, 15)
+		var sub := [["Lap", "lap0", C_MUTED, [laps]]]
 		if gems:
-			_chip("Gems", "gems", Color("#7fe3d0"), [n_gems])
-		_spacer()
-		if medals:   # target time of the best medal still in reach this lap
-			_chip("Target", "target", C_MUTED, ["00:00.00"], ["Target"] + Medals.NAMES)
-		_chip("Record", "rec", C_POST)
+			sub.append(["Gems", "gems", gem_col, [n_gems]])
+		_subline(sub)
 	else:
 		var hs: Array = race.cars.filter(func(c): return c.human >= 0)
-		_chip("P1" if race.humans > 1 else "Lap", "lap0", hs[0].color, [laps])
-		_chip("Pos", "pos0", hs[0].color, places)
-		_spacer()
-		if race.humans == 1 or not is_portrait():  # no room for it between two players in portrait
-			_chip("Time", "time", C_POST)
-		if race.humans == 1:   # the medal the current place would earn
-			_chip("Medal", "target", C_MUTED, ["BRONZE", "SILVER", "GOLD", "PIVOT", "NONE"])
-		if gems:
-			_chip("Gems", "gems", Color("#7fe3d0"), [n_gems])
 		if race.humans > 1:
-			_spacer()
-			_chip("P2", "lap1", hs[1].color, [laps])
-			_chip("Pos", "pos1", hs[1].color, places)
-	hud.add_child(pause_btn)
+			# one corner per player, the shared clock in the middle when there is room
+			for k in 2:
+				var col: VBoxContainer = VBoxContainer.new()
+				col.add_theme_constant_override("separation", 4)
+				col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				_chip(col, "P%d" % (k + 1), "lap%d" % k, hs[k].color, [laps])
+				_chip(col, "Pos", "pos%d" % k, hs[k].color, places)
+				(hud_left if k == 0 else hud_right).add_child(col)
+			if not is_portrait():
+				_timer("time")
+			if gems:
+				_subline([["Gems", "gems", gem_col, [n_gems]]])
+		else:
+			var row := _timer("time")
+			_chip(row, "Pos", "pos0", hs[0].color, places, [], 15)
+			var sub := [["Lap", "lap0", C_MUTED, [laps]], ["Medal", "target", C_MUTED, ["BRONZE", "SILVER", "GOLD", "PIVOT", "NONE"]]]
+			if gems:
+				sub.append(["Gems", "gems", gem_col, [n_gems]])
+			_subline(sub)
+	hud_right.add_child(pause_btn)
+	if hud_right.get_child_count() > 1:
+		hud_right.move_child(pause_btn, hud_right.get_child_count() - 1)
+	pause_btn.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	hud.visible = true
 	minimap.visible = true
 	menu.visible = false
