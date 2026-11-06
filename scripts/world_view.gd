@@ -24,6 +24,8 @@ const COL_INFIELD := Color("#c9d6e0")   # snow
 const COL_CHALK := Color("#ece6d8")
 const COL_KERB := Color("#d4452f")     # obstacle posts
 const BANK_OUT := 70.0    # the bank's outer slope, rolling down into the ground
+const BANK_RELIEF := 0.25 # how much the outer slope's tilt shows in its lighting
+const BANK_FACE_TOP := 0.3  # bank colour left at the top of the inner face (rest is ground)
 const COL_DECK := Color("#7a5a3a")
 const COL_DECK_LIGHT := Color("#a07a50")
 const COL_POST := Color("#f2b134")
@@ -337,17 +339,30 @@ func _build_road() -> void:
 				var ob := (HW + KERB_W + 5.0) * side
 				var oc := (HW + KERB_W + RAIL_W) * side
 				var oo := (HW + KERB_W + RAIL_W + BANK_OUT) * side
-				road.quad(P.call(ca, na, o1, ha), P.call(cb, nb, o1, hb), P.call(cb, nb, ob, hb + bh), P.call(ca, na, ob, ha + bh), th["bank_face"], -out_hint + up * 0.4)
-				road.quad(P.call(ca, na, ob, ha + bh), P.call(cb, nb, ob, hb + bh), P.call(cb, nb, oc, hb + bh), P.call(ca, na, oc, ha + bh), th["bank_top"], up)
-				# outer slope: an S-shaped roll from the crest down to the ground, smooth
-				# shaded, its colour fading into the ground's own so there is no seam
+				# The bank is the landscape itself rising up beside the road: crest and
+				# outer slope are drawn with the ground's own shading (vertex alpha 0),
+				# so there is no colour change at all between landscape and bank. Only
+				# the inner face keeps the theme's bank colour, fading into the ground
+				# towards the crest.
+				var face_lo: Color = th["bank_face"]
+				var face_hi := Color(face_lo, BANK_FACE_TOP)
+				var nf := (-out_hint + up * 0.4).normalized()
+				var nf_hi := (-out_hint * 0.5 + up).normalized()
+				road.quad_smooth([P.call(ca, na, o1, ha), P.call(cb, nb, o1, hb), P.call(cb, nb, ob, hb + bh), P.call(ca, na, ob, ha + bh)],
+					[face_lo, face_lo, face_hi, face_hi], [nf, nf, nf_hi, nf_hi])
+				var gnd := Color(face_lo, 0.0)
+				road.quad_smooth([P.call(ca, na, ob, ha + bh), P.call(cb, nb, ob, hb + bh), P.call(cb, nb, oc, hb + bh), P.call(ca, na, oc, ha + bh)],
+					[gnd, gnd, gnd, gnd], [up, up, up, up])
+				# outer slope: an S-shaped roll from the crest down to the ground. Its
+				# light only hints at the shape (BANK_RELIEF), so the sunny and shady
+				# sides never read as a band; at the foot it is level and lit exactly
+				# like the ground plane it meets.
 				var segs := 6
 				var wide := absf(oo - oc)
 				for m in segs:
 					var t0 := float(m) / segs
 					var t1 := float(m + 1) / segs
 					var vs: Array = []
-					var cs: Array = []
 					var ns: Array = []
 					for corner in [[ca, na, ha, t0], [cb, nb, hb, t0], [cb, nb, hb, t1], [ca, na, ha, t1]]:
 						var t: float = corner[3]
@@ -355,15 +370,9 @@ func _build_road() -> void:
 						var hh: float = bh * 0.5 * (1.0 + cos(PI * t))
 						var base: float = corner[2] * (1.0 - t)   # meets the ground (height 0) at the foot
 						vs.append(P.call(corner[0], nn, lerpf(oc, oo, t), base + hh))
-						var slope := bh * PI * 0.5 * sin(PI * t) / wide
-						# fades into the ground from just past the crest; the light flattens out
-						# with it so the slope never reads as a dark band
-						var fade := smoothstep(0.1, 0.75, t)
-						ns.append((Vector3(nn.x * side, 0, nn.y * side) * slope * (1.0 - fade) + up).normalized())
-						var col: Color = (th["bank_top"] as Color).lerp(th["bank_slope"], smoothstep(0.0, 0.4, t))
-						col.a = 1.0 - fade
-						cs.append(col)
-					road.quad_smooth(vs, cs, ns)
+						var slope := bh * PI * 0.5 * sin(PI * t) / wide * BANK_RELIEF
+						ns.append((Vector3(nn.x * side, 0, nn.y * side) * slope + up).normalized())
+					road.quad_smooth(vs, [gnd, gnd, gnd, gnd], ns)
 		if elevated:
 			# deck underside
 			var oo := HW + KERB_W + RAIL_W
@@ -391,6 +400,10 @@ func _build_road() -> void:
 func _build_drifts() -> void:
 	var meshes := _drift_meshes()
 	var lots: Array = [[], []]
+	# a heap never rises above the bank behind it: whatever reaches past the inner
+	# face stays buried in the bank instead of drawing a line along its crest
+	var cap: float = th["bank_h"] * 0.8
+	var tops := [(meshes[0] as Mesh).get_aabb().end.y / U, (meshes[1] as Mesh).get_aabb().end.y / U]
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(String(track.def.get("name", ""))) + 7
 	var s := 0.0
@@ -408,8 +421,10 @@ func _build_drifts() -> void:
 			var p: Vector2 = q["pos"] + n * off * side + t * (rng.randf() - 0.5) * 6.0
 			var yaw := -t.angle() + (rng.randf() - 0.5) * 0.5
 			var sc := Vector3(1.7 + rng.randf() * 1.0, 1.2 + rng.randf() * 0.8, 1.25 + rng.randf() * 0.4)
+			var which := 0 if rng.randf() < 0.65 else 1
+			sc.y = minf(sc.y, cap / maxf(tops[which], 1.0))
 			var xf := Transform3D(Basis(Vector3.UP, yaw).scaled(sc), w3(p, h))
-			lots[0 if rng.randf() < 0.65 else 1].append(xf)
+			lots[which].append(xf)
 	_multi(meshes[0], lots[0])
 	_multi(meshes[1], lots[1])
 
