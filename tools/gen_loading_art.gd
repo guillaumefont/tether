@@ -26,7 +26,7 @@ func _initialize() -> void:
 	var race := Race.new(tr, "race", 0)
 	view.setup_cars(race, false)
 	var dt := 1.0 / 60.0
-	var secs := _env("ART_SECS", 6.0)
+	var secs := _env("ART_SECS", 18.0)
 	var hooked_t := 0.0
 	while race.clock < secs or hooked_t < 0.35:
 		race.update(dt)
@@ -67,8 +67,8 @@ func _initialize() -> void:
 	var mid: Vector2 = (c.pos * 0.6 + a.pos * 0.4)
 	var focus := Vector3(mid.x, tr.height_at(c.s) + 20.0, mid.y) * WorldView.U
 	var pitch := deg_to_rad(_env("ART_PITCH", 14.0))
-	var yaw := deg_to_rad(_env("ART_YAW", 20.0))
-	var dist := _env("ART_DIST", 1250.0) * WorldView.U
+	var yaw := deg_to_rad(_env("ART_YAW", 10.0))
+	var dist := _env("ART_DIST", 1050.0) * WorldView.U
 	var off := Vector3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch)) * dist
 	view.camera.fov = 42.0
 	view.camera.position = focus + off
