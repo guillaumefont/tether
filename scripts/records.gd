@@ -9,6 +9,7 @@ static func _load() -> ConfigFile:
 	if _cfg == null:
 		_cfg = ConfigFile.new()
 		_cfg.load(PATH)
+		_move_ghosts()
 	return _cfg
 
 static func key(track_name: String, variant: String) -> String:
@@ -29,8 +30,41 @@ static func set_lap(k: String, v: float) -> void:
 	_load().set_value(k, "lap", v)
 	_cfg.save(PATH)
 
+# Ghosts live in their own small binary file per track + variant (user://ghosts/).
+# They used to sit in records.cfg as text, so every new lap record rewrote every
+# ghost of every track at the finish line: a visible hitch that grew with play.
+const GHOST_DIR := "user://ghosts"
+
+static func _ghost_path(k: String) -> String:
+	return "%s/%s.bin" % [GHOST_DIR, k.validate_filename()]
+
+# once, on first load: an older build kept the ghosts in records.cfg
+static func _move_ghosts() -> void:
+	var moved := false
+	for k in _cfg.get_sections():
+		if _cfg.has_section_key(k, "ghost"):
+			var flat: PackedFloat32Array = _cfg.get_value(k, "ghost")
+			if _write_ghost(k, flat):
+				_cfg.erase_section_key(k, "ghost")
+				moved = true
+	if moved:
+		_cfg.save(PATH)
+
+static func _write_ghost(k: String, flat: PackedFloat32Array) -> bool:
+	DirAccess.make_dir_recursive_absolute(GHOST_DIR)
+	var f := FileAccess.open(_ghost_path(k), FileAccess.WRITE)
+	if f == null:
+		return false
+	f.store_buffer(flat.to_byte_array())
+	f.close()
+	return true
+
 static func get_ghost(k: String) -> Array:
-	var flat: PackedFloat32Array = _load().get_value(k, "ghost", PackedFloat32Array())
+	_load()
+	var flat := PackedFloat32Array()
+	var f := FileAccess.open(_ghost_path(k), FileAccess.READ)
+	if f:
+		flat = f.get_buffer(f.get_length()).to_float32_array()
 	var out: Array = []
 	for i in range(0, flat.size() - 2, 3):
 		out.append(Vector3(flat[i], flat[i + 1], flat[i + 2]))
@@ -38,10 +72,11 @@ static func get_ghost(k: String) -> Array:
 
 static func set_ghost(k: String, trace: Array) -> void:
 	var flat := PackedFloat32Array()
-	for v in trace:
-		flat.append(v.x); flat.append(v.y); flat.append(v.z)
-	_load().set_value(k, "ghost", flat)
-	_cfg.save(PATH)
+	flat.resize(trace.size() * 3)
+	for i in trace.size():
+		var v: Vector3 = trace[i]
+		flat[i * 3] = v.x; flat[i * 3 + 1] = v.y; flat[i * 3 + 2] = v.z
+	_write_ghost(k, flat)
 
 # medals: best tier earned (0 none, 1 bronze .. 4 pivot) per track + variant, per mode
 static func get_medal(k: String, mode: String) -> int:

@@ -45,6 +45,7 @@ func _ready() -> void:
 	_engine.stream = w
 	_engine.volume_db = -80.0
 	add_child(_engine)
+	_warm()
 
 # One loop of a mid-sized engine: each firing is a short pop (a fast-damped
 # 400-550 Hz ring plus a puff of noise) with small random changes in strength and
@@ -143,20 +144,53 @@ static func _wave(kind: String, ph: float) -> float:
 		_:
 			return sin(TAU * x)
 
+# Every blip the game plays, made when the game starts. Synthesising one on the fly
+# took a long GDScript loop on the frame it first played (the lap / finish line), a
+# visible hitch on phones and the web. A blip missing from here is still made on demand.
+const WARM := [
+	[440.0, 0.15, "square", 0.07, 0.0], [880.0, 0.35, "square", 0.07, 0.0],  # countdown
+	[1320.0, 0.25, "square", 0.06, 300.0],                                     # new record
+	[1200.0, 0.05, "square", 0.06, 0.0], [260.0, 0.2, "triangle", 0.07, 420.0],
+	[70.0, 0.15, "sine", 0.15, 0.0], [90.0, 0.15, "sine", 0.15, 0.0],
+	[330.0, 0.2, "square", 0.05, -120.0], [330.0, 0.25, "triangle", 0.06, 300.0],
+	[220.0, 0.5, "sine", 0.1, -180.0], [1500.0, 0.07, "sine", 0.06, 500.0],
+	[660.0, 0.4, "square", 0.07, 400.0], [990.0, 0.08, "square", 0.05, 0.0],    # finish, lap
+	[140.0, 0.08, "square", 0.05, 0.0],
+]
+
+func _warm() -> void:
+	for a in WARM:
+		_stream(a[0], a[1], a[2], a[3], a[4])
+
+func _stream(f: float, d: float, kind: String, v: float, slide: float) -> AudioStreamWAV:
+	var key := "%s|%s|%s|%s|%s" % [f, d, kind, v, slide]
+	if not _cache.has(key):
+		var w := _make(f, d, kind, v, slide)
+		# web plays sounds as WebAudio samples: hand the data over now, not on first play
+		if OS.has_feature("web"):
+			AudioServer.register_stream_as_sample(w)
+		_cache[key] = w
+	return _cache[key]
+
+# exponential pitch slide and fade, stepped by a constant ratio per sample
 func _make(f: float, d: float, kind: String, v: float, slide: float) -> AudioStreamWAV:
 	var n := int((d + 0.02) * RATE)
+	var dn := d * RATE
 	var data := PackedByteArray()
 	data.resize(n * 2)
 	var f1 := maxf(30.0, f + slide)
+	var fr := f
+	var g := v
+	var fr_step := pow(f1 / f, 1.0 / dn) if slide != 0.0 else 1.0
+	var g_step := pow(0.0001 / v, 1.0 / dn)
 	var ph := 0.0
 	for i in n:
-		var t := float(i) / RATE
-		var u := minf(1.0, t / d)
-		var fr := f * pow(f1 / f, u) if slide != 0.0 else f
 		ph += fr / RATE
-		var g := v * pow(0.0001 / v, u)
 		var s := clampf(_wave(kind, ph) * g * 2.2, -1.0, 1.0)
 		data.encode_s16(i * 2, int(s * 32000.0))
+		if i < dn:
+			fr *= fr_step
+			g *= g_step
 	var w := AudioStreamWAV.new()
 	w.format = AudioStreamWAV.FORMAT_16_BITS
 	w.mix_rate = RATE
@@ -167,12 +201,9 @@ func _make(f: float, d: float, kind: String, v: float, slide: float) -> AudioStr
 func blip(f: float, d: float, kind := "square", v := 0.08, slide := 0.0) -> void:
 	if not enabled:
 		return
-	var key := "%s|%s|%s|%s|%s" % [f, d, kind, v, slide]
-	if not _cache.has(key):
-		_cache[key] = _make(f, d, kind, v, slide)
 	var p := _pool[_next]
 	_next = (_next + 1) % _pool.size()
-	p.stream = _cache[key]
+	p.stream = _stream(f, d, kind, v, slide)
 	p.play()
 
 func set_engine(speed: float, on: bool) -> void:
