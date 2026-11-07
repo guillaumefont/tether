@@ -9,19 +9,42 @@ const Defs = preload("res://scripts/track_defs.gd")
 const Records = preload("res://scripts/records.gd")
 const Medals = preload("res://scripts/medals.gd")
 
+# Twelve events per world, easiest first. Every event is a different track + variant + mode,
+# so each one is its own medal. Rock is the hardest world: the long, twisting tracks.
 const CHAPTERS := [
 	{ "name": "First pivots", "theme": "snow", "events": [
 		["Lasso", "standard", "trial"], ["Twin Bend", "standard", "race"], ["Big Top", "standard", "trial"],
-		["Coil", "standard", "race"], ["Arch", "obstacles", "trial"], ["Lasso", "reverse", "race"]] },
+		["Coil", "standard", "race"], ["Arch", "standard", "trial"], ["Lasso", "standard", "race"],
+		["Arch", "obstacles", "trial"], ["Twin Bend", "reverse", "trial"], ["Coil", "reverse", "trial"],
+		["Lasso", "reverse", "race"], ["Big Top", "obstacles", "race"], ["Arch", "reverse", "race"]] },
 	{ "name": "Over and under", "theme": "forest", "events": [
-		["Diamond Eight", "standard", "trial"], ["Pretzel", "standard", "race"], ["Three Fingers", "collect", "trial"],
-		["Halo", "standard", "trial"], ["Sidestep", "reverse", "race"], ["Trefoil", "obstacles", "trial"]] },
+		["Diamond Eight", "standard", "trial"], ["Trefoil", "standard", "race"], ["Pretzel", "standard", "race"],
+		["Three Fingers", "standard", "race"], ["Three Fingers", "collect", "trial"], ["Halo", "standard", "trial"],
+		["Coil", "collect", "trial"], ["Sidestep", "standard", "trial"], ["Sidestep", "reverse", "race"],
+		["Diamond Eight", "reverse", "trial"], ["Trefoil", "obstacles", "trial"], ["Pretzel", "obstacles", "race"]] },
 	{ "name": "Tight knots", "theme": "sand", "events": [
-		["Triskel", "standard", "race"], ["Fishhook", "standard", "trial"], ["Knot", "collect", "trial"],
-		["Squall", "standard", "race"], ["Big Top", "collect", "trial"], ["Twin Bend", "obstacles", "race"]] },
+		["Triskel", "standard", "race"], ["Knot", "standard", "race"], ["Fishhook", "standard", "trial"],
+		["Big Top", "collect", "trial"], ["Three Fingers", "reverse", "race"], ["Knot", "collect", "trial"],
+		["Sidestep", "obstacles", "trial"], ["Squall", "standard", "race"], ["Triskel", "reverse", "trial"],
+		["Diamond Eight", "collect", "trial"], ["Twin Bend", "obstacles", "race"], ["Pretzel", "reverse", "race"]] },
 	{ "name": "Master line", "theme": "rock", "events": [
 		["Knucklebone", "standard", "trial"], ["Starfish", "standard", "race"], ["Halo", "reverse", "race"],
-		["Fishhook", "obstacles", "trial"], ["Squall", "collect", "trial"], ["Starfish", "reverse", "trial"]] },
+		["Squall", "reverse", "trial"], ["Fishhook", "obstacles", "trial"], ["Knot", "obstacles", "race"],
+		["Knucklebone", "reverse", "race"], ["Squall", "collect", "trial"], ["Fishhook", "reverse", "race"],
+		["Starfish", "reverse", "trial"], ["Starfish", "collect", "trial"], ["Knucklebone", "collect", "trial"]] },
+]
+
+# The six-event worlds of earlier builds. A player who finished one of them keeps that
+# world finished (and the next one open) after the worlds grew.
+const LEGACY := [
+	[["Lasso", "standard", "trial"], ["Twin Bend", "standard", "race"], ["Big Top", "standard", "trial"],
+		["Coil", "standard", "race"], ["Arch", "obstacles", "trial"], ["Lasso", "reverse", "race"]],
+	[["Diamond Eight", "standard", "trial"], ["Pretzel", "standard", "race"], ["Three Fingers", "collect", "trial"],
+		["Halo", "standard", "trial"], ["Sidestep", "reverse", "race"], ["Trefoil", "obstacles", "trial"]],
+	[["Triskel", "standard", "race"], ["Fishhook", "standard", "trial"], ["Knot", "collect", "trial"],
+		["Squall", "standard", "race"], ["Big Top", "collect", "trial"], ["Twin Bend", "obstacles", "race"]],
+	[["Knucklebone", "standard", "trial"], ["Starfish", "standard", "race"], ["Halo", "reverse", "race"],
+		["Fishhook", "obstacles", "trial"], ["Squall", "collect", "trial"], ["Starfish", "reverse", "trial"]],
 ]
 
 static func count() -> int:
@@ -57,8 +80,13 @@ static func event_medal(i: int) -> int:
 	var e := event(i)
 	return medal(e["name"], e["variant"], e["mode"])
 
+# the first event of an open world, the event after a medal, or one already medalled
+# (worlds grew between builds: a medal earned before stays playable)
 static func unlocked(i: int) -> bool:
-	return i == 0 or event_medal(i - 1) > 0
+	var c := chapter_of(i)
+	if i == chapter_start(c):
+		return chapter_open(c)
+	return event_medal(i - 1) > 0 or event_medal(i) > 0
 
 static func total_medals() -> int:
 	var n := 0
@@ -89,8 +117,18 @@ static func chapter_medals(c: int) -> int:
 			n += 1
 	return n
 
+# a medal in every event, now or in an earlier build's shorter world. Saved once reached,
+# so a world stays finished (and its theme unlocked) if events are added later.
 static func chapter_done(c: int) -> bool:
-	return chapter_medals(c) == chapter_size(c)
+	var k := "done_" + String(CHAPTERS[c]["theme"])
+	if Records.get_flag("campaign", k):
+		return true
+	var done := chapter_medals(c) == chapter_size(c)
+	if not done and c < LEGACY.size():
+		done = LEGACY[c].all(func(e): return medal(e[0], e[1], e[2]) > 0)
+	if done:
+		Records.set_flag("campaign", k)
+	return done
 
 static func chapter_open(c: int) -> bool:
 	return c == 0 or chapter_done(c - 1)

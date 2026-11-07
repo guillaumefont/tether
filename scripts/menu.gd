@@ -455,8 +455,10 @@ func _world_card(c: int) -> Button:
 	var line2 := ""
 	if not open:
 		line2 = "Locked: finish %s" % Themes.get_theme(Campaign.CHAPTERS[c - 1]["theme"])["name"]
-	elif Campaign.chapter_done(c):
+	elif Campaign.chapter_medals(c) == Campaign.chapter_size(c):
 		line2 = "%s  ·  done, theme unlocked" % ch["name"]
+	elif Campaign.chapter_done(c):   # finished in an earlier, shorter version of the world
+		line2 = "%s  ·  %d / %d medals  ·  theme unlocked" % [ch["name"], Campaign.chapter_medals(c), Campaign.chapter_size(c)]
 	else:
 		line2 = "%s  ·  %d / %d medals" % [ch["name"], Campaign.chapter_medals(c), Campaign.chapter_size(c)]
 	var b := Button.new()
