@@ -3,7 +3,8 @@ name: Deploy Pages
 # Deploys the whole gh-pages branch (main build + every pr/N preview) to GitHub Pages.
 # The Builds workflow only pushes to gh-pages and then starts this workflow, so all
 # deployments go through this one queue instead of racing each other.
-# Needs Settings > Pages > Source = "GitHub Actions".
+# Needs Settings > Pages > Source = "GitHub Actions", and the github-pages environment
+# (Settings > Environments) must allow deployments from main.
 on:
   workflow_dispatch:
 
@@ -20,7 +21,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # While Pages still deploys from the gh-pages branch, GitHub's own run publishes it and
+  # this workflow has nothing to do (and isn't allowed to), so it skips instead of failing.
+  source:
+    runs-on: ubuntu-latest
+    outputs:
+      build_type: ${{ steps.pages.outputs.build_type }}
+    steps:
+      - id: pages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          t=$(gh api "repos/$GITHUB_REPOSITORY/pages" --jq .build_type || echo unknown)
+          echo "Pages source: $t"
+          echo "build_type=$t" >> "$GITHUB_OUTPUT"
+          if [ "$t" != workflow ]; then
+            echo "::notice::Pages deploys from a branch; skipping. Switch Settings > Pages > Source to GitHub Actions to use this workflow."
+          fi
+
   deploy:
+    needs: source
+    if: needs.source.outputs.build_type == 'workflow'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
