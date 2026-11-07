@@ -5,6 +5,7 @@ extends RefCounted
 
 const TrackData = preload("res://scripts/track.gd")
 const Defs = preload("res://scripts/track_defs.gd")
+const Rivals = preload("res://scripts/rivals.gd")
 
 # ---------- tuning (same numbers as the prototype) ----------
 const HW := TrackData.HW
@@ -29,12 +30,22 @@ const SCRAPE_DRAG := 0.8    # 1/s speed decay while rubbing the edge (no throttl
 const PEEL := 0.12          # rad: after a wall contact the car points this far back into the road
 const GAP := TrackData.GAP
 const SUBSTEPS := 4
+# AI rivals: light catch-up (campaign races) and racecraft
+const CATCH_RANGE := 1600.0  # track distance to the player at which catch-up is at full strength
+const CATCH_AHEAD := 0.05    # a rival that far ahead eases off by up to 5%
+const CATCH_BEHIND := 0.03   # ...and one that far behind pushes up to 3% harder
+const LANE_LIM := HW - CR - 50.0  # rivals never pick a line closer than this to the edge
 
 class Car:
 	var name: String
 	var color: Color
 	var human := -1
 	var skill := 1.0
+	var aim := 1.0       # AI: scales the hook timing error
+	var blunder := 0.0   # AI: chance per bend of hooking far too late
+	var block := 0.0     # AI: how hard it covers a player right behind it
+	var pace := 1.0      # catch-up multiplier on the speed cap (1 = none)
+	var lane_t := 0.0    # AI: seconds left straightening up after a sidestep
 	var pos := Vector2.ZERO
 	var vel := Vector2.ZERO
 	var h := 0.0
@@ -91,6 +102,8 @@ var clock := 0.0
 # a tether lost to a wall or a jump needs a fresh press.
 var inputs := [{ "held": false, "press_t": -9.0, "armed": false }, { "held": false, "press_t": -9.0, "armed": false }]
 var events: Array = []
+var catchup := false  # campaign races: rivals ease off ahead of the player, push behind
+var focus := -1       # the car rivals measure catch-up and blocking against (first player)
 
 func _init(tr: TrackData, mode_name: String, n_humans: int) -> void:
 	track = tr
@@ -131,6 +144,15 @@ func _init(tr: TrackData, mode_name: String, n_humans: int) -> void:
 		c.seg = nr["i"]; c.seg_t = nr["t"]; c.prog = progress_of(c.last_s)
 		c.s = track.s_of(c.seg, c.seg_t)
 		cars.append(c)
+	focus = 0 if humans > 0 else -1
+	set_rivals(Rivals.ATTRACT_TIER if humans == 0 else Rivals.VERSUS_TIER)
+
+# rivals' difficulty tier (Rivals.TIERS) and whether they rubber-band to the player
+func set_rivals(tier: int, catch_up: bool = false) -> void:
+	catchup = catch_up and focus >= 0
+	for c in cars:
+		if c.human < 0:
+			Rivals.apply(c, tier)
 
 func progress_of(sv: float) -> float:
 	return fposmod(sv - track.start_s, track.L)
@@ -216,11 +238,11 @@ func step_car(c: Car, dt: float) -> void:
 	if c.wall_t > 0.0: c.wall_t -= dt
 	if c.scrape > 0.0: c.scrape -= dt
 	if c.ice > 0.0: c.ice -= dt
-	var cap := MAX * c.skill
+	var cap := MAX * c.skill * c.pace
 	var sp := c.vel.length()
 	if c.hook >= 0:
 		var a: TrackData.Anchor = track.anchors[c.hook]
-		if sp > 1.0 and sp < MAX * c.skill * SWING_CAP:
+		if sp > 1.0 and sp < cap * SWING_CAP:
 			c.vel *= 1.0 + SWING_BOOST * dt / sp
 		c.pos += c.vel * dt
 		var rv := c.pos - a.pos
@@ -433,7 +455,7 @@ func path_blocked(c: Car, horizon: float) -> bool:
 			t += 0.04
 	return false
 
-func ai_think(c: Car) -> void:
+func ai_think(c: Car, dt: float = 1.0 / 60.0) -> void:
 	if c.air > 0.0 or c.fall > 0.0:
 		return
 	if c.hook >= 0:
@@ -448,6 +470,8 @@ func ai_think(c: Car) -> void:
 		if past_mid and hx > 0.975 and not (track.obstacles.size() > 0 and path_blocked(c, 0.9)):
 			detach(c, true)
 		return
+	if c.human < 0:
+		_ai_line(c, dt)
 	if c.cooldown > 0.0 or c.vel.length() < 150.0:
 		return
 	# next anchor whose bend we are entering
@@ -470,8 +494,79 @@ func ai_think(c: Car) -> void:
 		var along := (a.pos - c.pos).dot(c.vel) / sp
 		if along <= c.jitter:
 			attach(c, idx)
-			c.jitter = (randf() - 0.5) * 900.0 * (1.02 - c.skill)
+			c.jitter = (randf() - 0.5) * 900.0 * (1.02 - c.skill) * c.aim
+			if c.blunder > 0.0 and randf() < c.blunder:
+				c.jitter = -200.0 - randf() * 120.0  # next bend: hooks well past the tower
 			return
+
+# signed distance of p from the centre line of segment i (+ = left of the racing direction)
+func _lateral(p: Vector2, i: int) -> float:
+	return (p - track.P[i]).dot(TrackData.perp(track.seg_dir[i]))
+
+# signed track distance from car a to car b (+ = b is ahead), within half a lap
+func _gap(a: Car, b: Car) -> float:
+	return wrapf(b.s - a.s, -track.L * 0.5, track.L * 0.5)
+
+# Racecraft on the links between bends: a faster rival pulls out to pass the car in front,
+# and a rival with the player right on its tail drifts across to cover their line. Both are
+# gentle (a few degrees of steering) and stop well before the next bend so the hook is clean.
+func _ai_line(c: Car, dt: float) -> void:
+	if c.wall_t > 0.0 or c.finished:
+		c.lane_t = 0.0
+		return
+	# only on a link, with room before the next bend
+	var room := INF
+	for a in track.anchors:
+		if _ahead(a.entry, c.seg) <= _ahead(a.entry, a.exit):
+			return  # in a bend
+		room = minf(room, fposmod(track.seg_s0[a.entry] - c.s, track.L))
+	if room < 320.0:
+		c.lane_t = 0.0
+		return
+	var lat := _lateral(c.pos, c.seg)
+	var sp := c.vel.length()
+	var lvl := on_bridge(c.seg)
+	var target := INF
+	var strength := 0.0
+	for o in cars:
+		if o == c or o.air > 0.0 or o.fall > 0.0 or on_bridge(o.seg) != lvl:
+			continue
+		var ds := _gap(c, o)
+		var olat := _lateral(o.pos, o.seg)
+		if ds > CR and ds < 320.0 and sp > o.vel.length() + 30.0 and absf(olat - lat) < CR * 2.4:
+			# passing: take the side of the car ahead with more road
+			var side := -1.0 if olat > 0.0 else 1.0
+			target = clampf(olat + side * CR * 2.6, -LANE_LIM, LANE_LIM)
+			strength = 1.0
+			break
+		if c.block > 0.0 and o.human >= 0 and ds < -CR and ds > -380.0 and o.vel.length() > sp - 40.0:
+			target = clampf(olat, -LANE_LIM, LANE_LIM)
+			strength = c.block
+	if target == INF:
+		if c.lane_t <= 0.0:
+			return
+		c.lane_t -= dt
+		target = lat  # straighten up on the line it moved to
+		strength = 1.0
+	else:
+		c.lane_t = 0.5
+	var dir: Vector2 = track.seg_dir[(c.seg + 2) % track.n]
+	var lim := 0.05 + 0.07 * minf(1.0, strength)
+	var want := dir.angle() + clampf((target - lat) * 0.003, -lim, lim)
+	_turn_toward(c, want, (0.4 + 0.6 * minf(1.0, strength)) * dt)
+
+# campaign races: rivals well ahead of the player ease off a touch, rivals well behind push
+# a touch harder, so the pack stays in reach without anyone being handed the race
+func _catch_up(dt: float) -> void:
+	var f: Car = cars[focus] if catchup and focus >= 0 and focus < cars.size() else null
+	for c in cars:
+		if c.human >= 0 or c == f:
+			continue
+		var want := 1.0
+		if f != null and not f.finished and not c.finished:
+			var g := clampf(((c.lap - f.lap) * track.L + c.prog - f.prog) / CATCH_RANGE, -1.0, 1.0)
+			want = 1.0 - CATCH_AHEAD * g if g > 0.0 else 1.0 - CATCH_BEHIND * g
+		c.pace += (want - c.pace) * minf(1.0, dt * 0.8)
 
 func collide_cars() -> void:
 	for i in cars.size():
@@ -525,7 +620,8 @@ func update(dt: float) -> void:
 			if not inp["held"] and c.hook >= 0:
 				detach(c, true)
 		else:
-			ai_think(c)
+			ai_think(c, dt)
+	_catch_up(dt)
 	var hstep := dt / SUBSTEPS
 	for k in SUBSTEPS:
 		for c in cars:

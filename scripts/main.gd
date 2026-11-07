@@ -12,6 +12,7 @@ const UI = preload("res://scripts/ui.gd")
 const Sfx = preload("res://scripts/sfx.gd")
 const Settings = preload("res://scripts/settings.gd")
 const Campaign = preload("res://scripts/campaign.gd")
+const Rivals = preload("res://scripts/rivals.gd")
 const Themes = preload("res://scripts/themes.gd")
 const Tutorial = preload("res://scripts/tutorial.gd")
 
@@ -23,6 +24,8 @@ var track_idx := 0
 var variant := "standard"
 var mode := "trial"          # single player Time Trial is the default
 var humans := 1
+var rival_tier := Rivals.VERSUS_TIER  # campaign races: the tier of the event's world
+var catch_up := false                 # campaign races only
 var track: TrackData
 var race: Race = null
 var phase := "menu"
@@ -260,6 +263,9 @@ func _start_event(ev: Dictionary) -> void:
 	variant = ev["variant"]
 	mode = ev["mode"]
 	humans = ev["humans"]
+	var camp: bool = ev.get("kind", "") == "campaign"
+	rival_tier = Rivals.campaign_tier(Campaign.chapter_of(ev["idx"])) if camp else Rivals.VERSUS_TIER
+	catch_up = camp
 	view.theme_override = String(ev.get("theme", ""))
 	_load_race()
 
@@ -275,6 +281,7 @@ func new_race(built: TrackData = null) -> void:
 		view.build(track)
 	view.visible = true
 	race = Race.new(track, mode, humans)
+	race.set_rivals(rival_tier, catch_up)
 	themes_before = Themes.ORDER.filter(func(t): return Campaign.theme_unlocked(t))
 	ghost = Records.get_ghost(rec_key()) if mode == "trial" and not tutorial else []
 	view.setup_cars(race, mode == "trial" and not tutorial)

@@ -13,6 +13,7 @@ const Themes = preload("res://scripts/themes.gd")
 const Records = preload("res://scripts/records.gd")
 const Medals = preload("res://scripts/medals.gd")
 const Campaign = preload("res://scripts/campaign.gd")
+const Rivals = preload("res://scripts/rivals.gd")
 const Art = preload("res://scripts/menu_art.gd")
 # world card pictures: the land of each theme, no track (tools/gen_loading_art.gd ART_SCENERY=1)
 const WORLD_ART := {
@@ -565,6 +566,8 @@ func show_event() -> void:
 		"campaign":
 			var c := Campaign.chapter_of(ev["idx"])
 			sub = "%s  ·  event %d of %d  ·  %s" % [Themes.get_theme(Campaign.CHAPTERS[c]["theme"])["name"], ev["idx"] - Campaign.chapter_start(c) + 1, Campaign.chapter_size(c), _tag(ev["variant"], ev["mode"])]
+			if ev["mode"] == "race":
+				sub += "  ·  %s rivals" % Rivals.tier_name(Rivals.campaign_tier(c))
 		"attack": sub = "Time attack  ·  %d laps" % int(d.get("laps", 3))
 		"versus": sub = "2-player race  ·  %d laps" % int(d.get("laps", 3))
 	_header(vb, d["name"], sub, func(): go_back())
