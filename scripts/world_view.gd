@@ -1979,6 +1979,15 @@ func _car_kit_snow(chassis: Node3D, parts_list: Array, top: Material, dark: Mate
 			_pod_lugs(chassis, prof, px, lug, z)
 			chassis.add_child(pbox(Vector3(9, 9, 2), dark, Vector3(px, 13, z + (POD_W * 0.5 + 1.0) * side)))   # hub
 			chassis.add_child(pbox(Vector3(8, 10, 8), dark, Vector3(px, 19, z - 9.0 * side)))   # mount up to the body
+	# under the nose, between the front pods: a dark lower front and a small steel plough
+	var steel := paint(Color("#9aa3ad"), 0.3)
+	steel.metallic = 0.6
+	parts_list.append(pbox(Vector3(24, 10, 50), dark, Vector3(56, 15, 0)))
+	var blade := pbox(Vector3(3, 13, 56), steel, Vector3(71, 9, 0))
+	blade.rotation.z = 0.35   # leans back, scoop forward
+	parts_list.append(blade)
+	for bz in [-16.0, 16.0]:   # arms from the blade to the frame
+		parts_list.append(pbox(Vector3(8, 3, 3), dark, Vector3(66, 12, bz)))
 
 # pod side: a triangle with a flat bottom and its peak over the axle, corners rounded
 static func _pod_side(px: float, segs: int) -> PackedVector2Array:
