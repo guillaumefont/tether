@@ -14,6 +14,7 @@ const Settings = preload("res://scripts/settings.gd")
 const Campaign = preload("res://scripts/campaign.gd")
 const Themes = preload("res://scripts/themes.gd")
 const Tutorial = preload("res://scripts/tutorial.gd")
+const Haptics = preload("res://scripts/haptics.gd")
 
 var view: WorldView
 var ui: UI
@@ -28,6 +29,7 @@ var race: Race = null
 var phase := "menu"
 var countdown := 0.0
 var start_tier := 0  # trial medal held when the run started
+var rec_before := 0.0  # trial record when the run started (for the results delta)
 var medal_targets: Array = []   # trial medal target times, bronze..pivot
 var last_beep := 4
 var end_timer := 0.0
@@ -54,8 +56,10 @@ func _ready() -> void:
 	ui = UI.new()
 	add_child(ui)
 	sfx.set_volumes(Settings.get_opt("music_vol"), Settings.get_opt("sfx_vol"))
-	view.set_effects(Settings.get_opt("effects"))
+	view.set_quality(Settings.get_opt("quality"))
+	sfx.prewarm(_streak_notes() + _reward_notes())
 	ui.option_changed.connect(_option_changed)
+	ui.reward_popped.connect(_reward_popped)
 	ui.menu.settings_pressed.connect(func(): ui.show_settings(_options(true)))
 	ui.pause_pressed.connect(_toggle_pause)
 	ui.pause_action.connect(_pause_action)
@@ -214,7 +218,8 @@ func _options(with_ghost: bool) -> Dictionary:
 		"music_vol": Settings.get_opt("music_vol"),
 		"sfx_vol": Settings.get_opt("sfx_vol"),
 		"ghost": Settings.get_opt("ghost") if with_ghost else null,
-		"effects": Settings.get_opt("effects"),
+		"haptics": Settings.get_opt("haptics") if Haptics.available() else null,
+		"quality": Settings.get_opt("quality"),
 	}
 
 # a slider moved or a toggle flipped, from the pause menu or the settings screen
@@ -223,8 +228,11 @@ func _option_changed(key: String, value) -> void:
 	match key:
 		"music_vol", "sfx_vol":
 			sfx.set_volumes(Settings.get_opt("music_vol"), Settings.get_opt("sfx_vol"))
-		"effects":
-			view.set_effects(value)
+		"quality":
+			view.set_quality(value)
+		"haptics":
+			if value:
+				Haptics.hook()   # a tick so you feel it is on
 
 func _pause_action(what: String) -> void:
 	match what:
@@ -279,7 +287,9 @@ func new_race(built: TrackData = null) -> void:
 	ghost = Records.get_ghost(rec_key()) if mode == "trial" and not tutorial else []
 	view.setup_cars(race, mode == "trial" and not tutorial)
 	new_record = false
-	start_tier = Medals.trial_tier(cur_def()["name"], variant, Records.get_best(rec_key()))
+	rec_before = Records.get_best(rec_key())
+	start_tier = Medals.trial_tier(cur_def()["name"], variant, rec_before)
+	ui.hide_streak()
 	countdown = 3.2
 	last_beep = 4
 	end_timer = 0.0
@@ -429,6 +439,16 @@ func _process(delta: float) -> void:
 		else:
 			view.sync(race, phase, _ghost_sample(), _aims(), dt)
 			view.update_camera(race if phase != "menu" else null, phase, dt)
+	_update_speed_lines(dt)
+
+# wind streaks out from the car for a moment after a release (not on Low graphics)
+func _update_speed_lines(dt: float) -> void:
+	var amt := view.speed_kick if view.quality > 0 and phase in ["race", "done"] and race != null else 0.0
+	var at := ui.speed_lines.size * 0.5
+	if amt > 0.04 and race.humans == 1:
+		var c = race.cars.filter(func(c): return c.human >= 0)[0]
+		at = view.camera.unproject_position(WorldView.w3(c.pos, view.track.height_at(c.s)))
+	ui.speed_lines.set_fx(amt, at, dt)
 
 func _aims() -> Dictionary:
 	var aims := {}
@@ -455,6 +475,20 @@ func _handle_events() -> void:
 		match e["t"]:
 			"blip":
 				sfx.blip(e["f"], e["d"], e["w"], e["v"], e["s"])
+			"hook":
+				Haptics.hook()
+			"release":
+				view.kick_release()
+			"knock":
+				Haptics.knock(e["v"])
+			"smash":
+				Haptics.post()
+			"clean":
+				# a run of bends without touching a rail or post: feedback only, no score
+				if e["n"] >= 2 and not tut and race.humans == 1:
+					ui.show_streak(e["n"])
+					var sp: Array = _streak_notes()[mini(e["n"], 9) - 2]
+					sfx.blip(sp[0], sp[1], sp[2], sp[3], sp[4])
 			"lap":
 				if tut and e["car"].human >= 0:
 					tut.on_lap(e["car"].lap - 1, e["lt"])
@@ -466,6 +500,31 @@ func _handle_events() -> void:
 			_:
 				view.handle_event(e)
 	race.events.clear()
+
+# rising little notes for a run of clean bends (2..9+)
+static func _streak_notes() -> Array:
+	var a: Array = []
+	for k in 8:
+		a.append([snappedf(660.0 * pow(1.0595, k * 2), 1.0), 0.09, "triangle", 0.05, 0.0])
+	return a
+
+# results badges popping in: a bright two-note chime (a step higher for each badge) and a buzz
+static func _reward_note(i: int, k: int) -> Array:
+	return [snappedf((988.0 if k == 0 else 1319.0) * pow(1.0595, mini(i, 2) * 3), 1.0), 0.12 if k == 0 else 0.22, "triangle", 0.07, 0.0]
+
+static func _reward_notes() -> Array:
+	var a: Array = []
+	for i in 3:
+		for k in 2:
+			a.append(_reward_note(i, k))
+	return a
+
+func _reward_popped(i: int) -> void:
+	var a := _reward_note(i, 0)
+	var b := _reward_note(i, 1)
+	sfx.blip(a[0], a[1], a[2], a[3], a[4])
+	get_tree().create_timer(0.09).timeout.connect(func(): sfx.blip(b[0], b[1], b[2], b[3], b[4]))
+	Haptics.reward()
 
 # lap records and ghosts come only from solo Time Trial
 func _trial_lap(c, lt: float, trace: Array) -> void:
@@ -479,6 +538,7 @@ func _trial_lap(c, lt: float, trace: Array) -> void:
 			Records.set_best(rec_key(), lt)
 			new_record = true
 			sfx.blip(1320, 0.25, "square", 0.06, 300)
+			Haptics.reward()
 		ghost = trace
 		Records.set_ghost(rec_key(), ghost)
 	var lines := "[font_size=54]%s[/font_size]" % UI.fmt2(lt)
@@ -498,6 +558,7 @@ func _trial_run(c) -> void:
 		Records.set_best(rec_key(), c.finish_time)
 		new_record = true
 		sfx.blip(1320, 0.25, "square", 0.06, 300)
+		Haptics.reward()
 
 func _update_hud() -> void:
 	if tut:
@@ -574,6 +635,7 @@ static func _ordinal(n: int) -> String:
 
 func _show_results() -> void:
 	phase = "results"
+	ui.hide_streak()
 	var name: String = Defs.TRACKS[track_idx]["name"]
 	if mode == "trial":
 		var c = race.cars[0]
@@ -594,13 +656,17 @@ func _show_results() -> void:
 			else:
 				note = "Record on %s: %s. Your best lap becomes the ghost you chase next time." % [name, UI.fmt2(rec)]
 		var tier := Medals.trial_tier(name, variant, rec)
+		var rewards: Array = []
+		if new_record:
+			var gain := rec_before - rec
+			rewards.append({ "text": "−%.2f S FASTER" % gain if rec_before > 0.0 and gain > 0.0 else "FIRST RECORD", "col": UI.C_GAIN })
 		if tier > start_tier:
-			note = "%s medal!  " % Medals.NAMES[tier - 1] + note
+			rewards.append({ "text": "%s MEDAL" % Medals.NAMES[tier - 1].to_upper(), "col": Medals.COLORS[tier - 1] })
 		elif tier < Medals.NAMES.size():
 			var tg: float = Medals.targets(name, variant)[tier]
 			if tg > 0.0:
 				note += " Next medal (%s): %s." % [Medals.NAMES[tier], UI.fmt2(tg)]
-		ui.show_results("New record" if new_record else "Time trial", rows, _unlock_note() + note, not ui.menu.next_event().is_empty())
+		ui.show_results("New record" if new_record else "Time trial", rows, _unlock_note() + note, not ui.menu.next_event().is_empty(), 3, rewards)
 		return
 	var st := race.standings()
 	var winner = st[0]
@@ -614,6 +680,7 @@ func _show_results() -> void:
 		var c = st[k]
 		rows2.append({ "cells": [str(k + 1), c.name, ("best " + UI.fmt(c.best_lap) + "   " if c.best_lap > 0.0 else "") + (UI.fmt(c.finish_time) if c.finished else "DNF")], "hl": c.human >= 0, "color": c.color })
 	var rnote := "Race times don't count for records. Lap records come from Time trial."
+	var rrewards: Array = []
 	if race.humans == 1:
 		var me = race.cars.filter(func(c): return c.human >= 0)[0]
 		var place: int = st.find(me) + 1
@@ -622,8 +689,8 @@ func _show_results() -> void:
 			lead = (st[1].finish_time - me.finish_time) if st.size() > 1 and st[1].finished else 99.0
 		var tier := Medals.race_tier(place, lead) if me.finished else 0
 		if Records.award_medal(rec_key(), "race", tier):
-			rnote = "%s medal!  " % Medals.NAMES[tier - 1] + rnote
-	ui.show_results(title, rows2, _unlock_note() + rnote, not ui.menu.next_event().is_empty())
+			rrewards.append({ "text": "%s MEDAL" % Medals.NAMES[tier - 1].to_upper(), "col": Medals.COLORS[tier - 1] })
+	ui.show_results(title, rows2, _unlock_note() + rnote, not ui.menu.next_event().is_empty(), 3, rrewards)
 
 # mirror the tutorial's card and big word onto the UI when they change
 func _sync_tutorial() -> void:
@@ -680,21 +747,33 @@ func _run_demo(arg: String) -> void:
 			ui.menu.kind = "attack" if mode == "trial" else "campaign"
 			ui.menu.ev = { "track": track_idx, "variant": variant, "mode": mode, "humans": humans, "kind": ui.menu.kind, "idx": 1, "theme": view.theme_override if view.theme_override != "" else "snow" }
 			ui.menu.show_event()],
-		["results", func():
+		["results_pop", func():
 			ui.menu.visible = false
-			ui.show_results("1st", [{ "cells": ["1", "You", "0:42.10"], "hl": true }, { "cells": ["2", "Rival", "0:43.05"] }], "Gold medal!", true)]]
+			ui.show_results("New record", [{ "cells": ["Lap 1", "", "0:42.10"], "hl": true }, { "cells": ["Lap 2", "", "0:43.05"] }], "Record on this track: 0:42.10.", true, 3,
+				[{ "text": "−0.84 S FASTER", "col": UI.C_GAIN }, { "text": "GOLD MEDAL", "col": Medals.COLORS[2] }])],
+		["results", func(): pass]]   # same panel once the badges have popped in
 	for sh in shots:
 		sh[1].call()
-		await get_tree().create_timer(0.3).timeout
+		await get_tree().create_timer(1.5 if sh[0] == "results" else 0.3).timeout
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png(out.path_join(sh[0] + ".png"))
 	new_race()
 	var t := 0.0
 	var shot := 0
+	var fx_shots := { "speed": false, "streak": false }
 	while t < secs:
 		await get_tree().process_frame
 		t += get_process_delta_time()
 		_autopilot()
+		# one frame of the release speed lines and one of the clean-bend streak
+		if not fx_shots["speed"] and view.speed_kick > 0.55 and phase == "race":
+			fx_shots["speed"] = true
+			await RenderingServer.frame_post_draw
+			get_viewport().get_texture().get_image().save_png(out.path_join("fx_speed.png"))
+		if not fx_shots["streak"] and ui.streak.modulate.a > 0.9 and ui.streak.text.ends_with("3"):
+			fx_shots["streak"] = true
+			await RenderingServer.frame_post_draw
+			get_viewport().get_texture().get_image().save_png(out.path_join("fx_streak.png"))
 		if OS.get_environment("SHOT_PAUSE") != "" and shot == 2 and not paused and phase == "race":
 			_set_paused(true)
 			await get_tree().create_timer(0.2).timeout

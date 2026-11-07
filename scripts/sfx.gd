@@ -198,6 +198,13 @@ func _make(f: float, d: float, kind: String, v: float, slide: float) -> AudioStr
 	w.data = data
 	return w
 
+# synthesise notes ahead of time so their first play does not hitch a frame
+func prewarm(specs: Array) -> void:
+	for sp in specs:
+		var key := "%s|%s|%s|%s|%s" % sp
+		if not _cache.has(key):
+			_cache[key] = _make(sp[0], sp[1], sp[2], sp[3], sp[4])
+
 func blip(f: float, d: float, kind := "square", v := 0.08, slide := 0.0) -> void:
 	if not enabled:
 		return
