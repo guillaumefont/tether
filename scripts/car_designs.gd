@@ -4,6 +4,26 @@ extends RefCounted
 # WorldView._make_car. Units are the game's (x forward, y up, z across), scaled by U.
 const WV = preload("res://scripts/world_view.gd")
 const U := 0.01
+static var toon := false   # black inverted-hull outlines, cel-shaded game look
+
+static func outline(mt: Material, width := 1.4) -> Material:
+	if not toon or not (mt is StandardMaterial3D):
+		return mt
+	var o := StandardMaterial3D.new()
+	o.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	o.albedo_color = Color("#101216")
+	o.cull_mode = BaseMaterial3D.CULL_FRONT
+	o.grow = true
+	o.grow_amount = width * U
+	(mt as StandardMaterial3D).next_pass = o
+	return mt
+
+static func glow(c: Color, e := 2.2) -> StandardMaterial3D:
+	var g := WV.mat(c, true)
+	g.emission_enabled = true
+	g.emission = c
+	g.emission_energy_multiplier = e
+	return g
 
 # ------------------------------------------------------------------ helpers
 static func sp(profile: PackedVector2Array, depth: float, r: float, m: Material, z := 0.0) -> MeshInstance3D:
@@ -88,13 +108,15 @@ static func mats(col: Color) -> Dictionary:
 	var lamp := WV.mat(Color("#fff4c8"), true)
 	var tail := WV.mat(Color("#ff4a3a"), false, 1.2)
 	var white := WV.paint(Color("#f2f0ea"), 0.35)
+	for mt in [top, low, white, dark, glass]:
+		outline(mt)
 	return {"top": top, "low": low, "dark": dark, "steel": steel, "glass": glass,
-		"lamp": lamp, "tail": tail, "white": white, "col": col}
+		"lamp": lamp, "tail": tail, "white": white, "col": col, "rim": top}
 
 # ------------------------------------------------------------------ wheels
 # style: road | knob | balloon | crawl
 static func wheel(parent: Node3D, x: float, z: float, r: float, w: float, style: String, rim: Material) -> void:
-	var tyre := WV.paint(Color("#1c1e21"), 0.88)
+	var tyre: Material = outline(WV.paint(Color("#1c1e21"), 0.88))
 	var c := Vector3(x, r, z)
 	var out := signf(z)
 	parent.add_child(WV.pcyl(r - 2.5, w, tyre, c, "z", 28))
@@ -121,7 +143,7 @@ static func wheel(parent: Node3D, x: float, z: float, r: float, w: float, style:
 
 # Snow: a triangular crawler pod where the wheel would be (flat on the snow, peak at the axle)
 static func pod(parent: Node3D, x: float, z: float, r: float, w: float, m: Dictionary) -> void:
-	var tread := WV.paint(Color("#22262c"), 0.85)
+	var tread: Material = outline(WV.paint(Color("#22262c"), 0.85))
 	var lug := WV.paint(Color("#6a7480"), 0.7)
 	var hl := r * 1.45
 	var h := r * 1.6
@@ -135,20 +157,32 @@ static func pod(parent: Node3D, x: float, z: float, r: float, w: float, m: Dicti
 	parent.add_child(WV.pcyl(5.0, w + 3.0, m["top"], Vector3(x, h * 0.55, z), "z", 16))   # hub
 
 # ------------------------------------------------------------------ theme kits
+# the running gear per world; wrs / wws give each axle its own radius / width
+static func gear(theme: String, chassis: Node3D, s: Dictionary, m: Dictionary) -> void:
+	var wz: float = s["wz"]
+	var wxs: Array = s["wx"]
+	for ai in wxs.size():
+		var wx: float = wxs[ai]
+		var r: float = s["wrs"][ai] if s.has("wrs") else s["wr"]
+		var w: float = s["wws"][ai] if s.has("wws") else s["ww"]
+		var zz: float = s["wzs"][ai] if s.has("wzs") else wz
+		for sd: float in [1.0, -1.0]:
+			match theme:
+				"snow": pod(chassis, wx, zz * sd, r, w + 1.0, m)
+				"forest": wheel(chassis, wx, zz * sd, r + 1.0, w + 1.0, "knob", m["rim"])
+				"sand": wheel(chassis, wx, (zz + 3.0) * sd, r, w + 9.0, "balloon", m["white"])
+				"rock": wheel(chassis, wx, (zz + 2.0) * sd, r + 5.0, w + 4.0, "crawl", m["dark"])
+
 # spec: wx (axles), wz, wr, ww, nose (x, y) front face, rack (x, y, z half width)
 # for roof gear, tail (x, y), lift (body height above the base)
 static func kit(theme: String, chassis: Node3D, parts: Array, s: Dictionary, m: Dictionary) -> void:
-	var r: float = s["wr"]
-	var w: float = s["ww"]
-	var wz: float = s["wz"]
+	if s.get("wheels", true):
+		gear(theme, chassis, s, m)
 	var nose: Vector2 = s["nose"]
 	var rack: Vector3 = s["rack"]
 	var tail: Vector2 = s["tail"]
 	match theme:
 		"snow":
-			for wx: float in s["wx"]:
-				for sd: float in [1.0, -1.0]:
-					pod(chassis, wx, wz * sd, r, w + 1.0, m)
 			# a curved steel plough low in front
 			var blade := sp(rnd([Vector2(0, 0), Vector2(6, 0), Vector2(10, 14), Vector2(5, 15), Vector2(2, 5)], 1.5), s["plough_w"], 1.0, m["steel"])
 			blade.position.x = (nose.x + 2.0) * U
@@ -156,9 +190,6 @@ static func kit(theme: String, chassis: Node3D, parts: Array, s: Dictionary, m: 
 			for bz in [-14.0, 14.0]:
 				parts.append(WV.pbox(Vector3(10, 3, 3), m["dark"], Vector3(nose.x - 2, 9, bz)))
 		"forest":
-			for wx: float in s["wx"]:
-				for sd: float in [1.0, -1.0]:
-					wheel(chassis, wx, wz * sd, r + 1.0, w + 1.0, "knob", m["top"])
 			var bark := WV.paint(Color("#6b4a2e"), 0.85)
 			var cut := WV.paint(Color("#e2bf84"), 0.7)
 			for lz in [-rack.z * 0.45, rack.z * 0.45]:
@@ -170,9 +201,6 @@ static func kit(theme: String, chassis: Node3D, parts: Array, s: Dictionary, m: 
 				parts.append(WV.pbox(Vector3(3, 3, rack.z * 2.0), m["dark"], Vector3(rack.x + rx, rack.y + 1.5, 0)))
 				parts.append(WV.pbox(Vector3(2.4, 2, rack.z * 1.6), WV.paint(Color("#d23b2a"), 0.6), Vector3(rack.x + rx, rack.y + 15.8, 0)))
 		"sand":
-			for wx: float in s["wx"]:
-				for sd: float in [1.0, -1.0]:
-					wheel(chassis, wx, (wz + 3.0) * sd, r, w + 9.0, "balloon", m["white"])
 			parts.append(tube(Vector3(tail.x + 4, tail.y, -rack.z * 0.7), Vector3(tail.x - 4, tail.y + 70, -rack.z * 0.7), 1.0, m["dark"], 6))
 			var flag := WV.pprism(pv([Vector2(0, 0), Vector2(18, 4), Vector2(0, 12)]), 1.2, m["top"])
 			flag.position = Vector3(tail.x - 3.5, tail.y + 56, -rack.z * 0.7) * U
@@ -180,9 +208,6 @@ static func kit(theme: String, chassis: Node3D, parts: Array, s: Dictionary, m: 
 			# a sand-coloured air filter by the driver
 			parts.append(WV.pcyl(5.0, 12.0, WV.paint(Color("#d9b77c"), 0.9), Vector3(rack.x, rack.y + 5.0, rack.z), "y", 14))
 		"rock":
-			for wx: float in s["wx"]:
-				for sd: float in [1.0, -1.0]:
-					wheel(chassis, wx, (wz + 2.0) * sd, r + 5.0, w + 4.0, "crawl", m["dark"])
 			for by in [nose.y - 4.0, nose.y + 6.0]:   # bull bar
 				parts.append(tube(Vector3(nose.x + 5, by, -24), Vector3(nose.x + 5, by, 24), 1.8, m["steel"]))
 			for bz in [-18.0, 18.0]:
@@ -203,12 +228,17 @@ static func build(style: String, theme: String, col: Color) -> Node3D:
 	var shell := Node3D.new()
 	body.add_child(shell)
 	var parts: Array = []
+	toon = style == "kart"
 	var m := mats(col)
+	m["theme"] = theme
 	var s: Dictionary
 	match style:
 		"pebble": s = _pebble(parts, m)
 		"arrow": s = _arrow(parts, m)
 		"buggy": s = _buggy(parts, m)
+		"kart": s = _kart(parts, m)
+		"neon": s = _neon(parts, m)
+		"hover": s = _hover(parts, m)
 	kit(theme, chassis, parts, s, m)
 	var lift: float = {"rock": 5.0, "forest": 1.0}.get(theme, 0.0)
 	shell.position.y = lift * U
@@ -328,3 +358,157 @@ static func _buggy(parts: Array, m: Dictionary) -> Dictionary:
 	parts.append(WV.pcyl(2.4, 8.0, m["steel"], Vector3(-64, 18, 12), "x", 10))   # exhaust
 	return {"wx": wx, "wz": 34.0, "wr": 17.0, "ww": 15.0, "nose": Vector2(70, 22), "rack": Vector3(-13, 62, 16),
 		"tail": Vector2(-58, 38), "log_len": 46.0, "plough_w": 52.0}
+
+
+# ================================================================== round 2: game culture
+# D: "Kart" a kart racer: a low open tray, fat rear wheels, side bumpers, the engine
+# and twin pipes behind the seat, and a big-headed driver in a helmet in the car's paint.
+static func _kart(parts: Array, m: Dictionary) -> Dictionary:
+	var suit := outline(WV.paint(Color("#f2f0ea"), 0.5))
+	parts.append(sp(rnd([Vector2(-54, 9), Vector2(62, 9), Vector2(62, 15), Vector2(-54, 15)], 2.5), 40.0, 3.0, m["dark"]))   # tray
+	# nose fairing with a big front bumper
+	parts.append(sp(rnd([Vector2(24, 12), Vector2(64, 12), Vector2(70, 18), Vector2(58, 28), Vector2(24, 31)], 5.0), 44.0, 8.0, m["top"]))
+	parts.append(sp(rnd([Vector2(66, 8), Vector2(76, 8), Vector2(76, 20), Vector2(66, 20)], 4.0), 56.0, 5.0, m["low"]))
+	parts.append(sp(rnd([Vector2(56, 26), Vector2(62, 26), Vector2(58, 30), Vector2(48, 31)], 1.0), 20.0, 1.0, m["white"]))   # number plate
+	for sd: float in [1.0, -1.0]:   # side pods between the wheels
+		parts.append(sp(rnd([Vector2(-22, 10), Vector2(28, 10), Vector2(30, 20), Vector2(-22, 24)], 4.0), 12.0, 5.0, m["top"], 28.0 * sd))
+	# steering column + wheel
+	parts.append(tube(Vector3(40, 16, 0), Vector3(14, 36, 0), 1.6, m["dark"], 8))
+	var sw := ring(7.0, 2.0, m["dark"], Vector3(13, 37, 0), false)
+	sw.rotation.z = PI / 2 - 0.6
+	sw.rotation.x = 0.0
+	sw.rotation = Vector3(0, 0, -0.95)
+	parts.append(sw)
+	# seat and driver
+	parts.append(sp(rnd([Vector2(-34, 14), Vector2(-14, 14), Vector2(-14, 20), Vector2(-26, 22), Vector2(-30, 44), Vector2(-38, 44)], 3.0), 26.0, 4.0, m["dark"]))
+	parts.append(sp(rnd([Vector2(-28, 18), Vector2(-8, 18), Vector2(-6, 36), Vector2(-26, 40)], 5.0), 22.0, 7.0, suit))   # torso
+	for sd: float in [1.0, -1.0]:
+		parts.append(tube(Vector3(-14, 34, 11 * sd), Vector3(10, 34, 6 * sd), 3.0, suit, 8))   # arms
+		parts.append(ball(3.6, m["dark"], Vector3(11, 35, 6 * sd)))   # gloves
+		parts.append(tube(Vector3(-6, 20, 7 * sd), Vector3(34, 18, 7 * sd), 3.2, suit, 8))   # legs
+	parts.append(ball(15.0, m["top"], Vector3(-14, 54, 0)))   # the big helmet
+	parts.append(ball(15.2, m["white"], Vector3(-14, 54, 0), Vector3(1.0, 0.3, 1.0)))   # white band
+	parts.append(sp(rnd([Vector2(-6, 47), Vector2(2, 50), Vector2(1, 60), Vector2(-6, 62)], 3.0), 22.0, 4.0, m["glass"]))   # visor
+	parts.append(sp(rnd([Vector2(-29, 60), Vector2(-20, 64), Vector2(-24, 70), Vector2(-31, 66)], 2.0), 3.0, 1.0, m["low"]))   # crest fin
+	hook(parts, -36.0, 46.0, m["steel"], m["dark"])
+	# engine and twin pipes
+	parts.append(sp(rnd([Vector2(-56, 12), Vector2(-36, 12), Vector2(-36, 30), Vector2(-56, 26)], 3.0), 24.0, 3.0, m["dark"]))
+	for pz in [-6.0, 6.0]:
+		parts.append(tube(Vector3(-48, 26, pz), Vector3(-66, 36, pz * 1.6), 3.0, m["steel"], 10))
+		parts.append(WV.pcyl(3.2, 1.0, m["dark"], Vector3(-66.5, 36.3, pz * 1.6), "x", 10))
+	parts.append(sp(rnd([Vector2(-68, 8), Vector2(-58, 8), Vector2(-58, 18), Vector2(-68, 18)], 4.0), 60.0, 4.0, m["low"]))   # rear bumper
+	for lz in [-14.0, 14.0]:
+		parts.append(WV.pcyl(3.2, 1.4, m["lamp"], Vector3(75.8, 15, lz), "x", 14))
+	return {"wx": [-40.0, 44.0], "wz": 35.0, "wr": 16.0, "ww": 16.0, "wrs": [18.0, 14.0], "wws": [20.0, 13.0],
+		"wzs": [37.0, 34.0], "nose": Vector2(76, 16), "rack": Vector3(-46, 30, 12), "tail": Vector2(-54, 28),
+		"log_len": 30.0, "plough_w": 60.0}
+
+# E: "Néon" an 80s arcade wedge: a flat faceted wedge, pop-up lamps, a low glass cab,
+# a full-width tail light bar, neon strips along the sills and a glow under the car.
+static func _neon(parts: Array, m: Dictionary) -> Dictionary:
+	var c: Color = m["col"]
+	var nc := Color("#30e6ff") if absf(c.h - 0.53) > 0.12 else Color("#ff3fb4")
+	var neon := glow(nc, 2.4)
+	parts.append(WV.pprism(pv([Vector2(-60, 12), Vector2(66, 12), Vector2(72, 18), Vector2(70, 21), Vector2(22, 31), Vector2(-40, 34), Vector2(-62, 34), Vector2(-64, 22)]), 62.0, m["top"]))
+	parts.append(WV.pprism(pv([Vector2(20, 31), Vector2(-4, 45), Vector2(-30, 46), Vector2(-44, 34)]), 48.0, m["glass"]))   # cab
+	parts.append(WV.pprism(pv([Vector2(-5, 45), Vector2(-30, 46), Vector2(-30, 47.5), Vector2(-4, 46.5)]), 44.0, m["top"]))   # roof
+	parts.append(WV.pbox(Vector3(44, 3, 64), m["dark"], Vector3(-6, 13.5, 0)))   # sill band
+	for sd: float in [1.0, -1.0]:
+		parts.append(WV.pbox(Vector3(118, 1.6, 0.8), neon, Vector3(2, 18, 31.3 * sd)))   # sill neon
+		parts.append(WV.pbox(Vector3(60, 1.0, 0.8), neon, Vector3(-30, 30, 31.3 * sd)))   # shoulder line
+		for k in 4:   # side intake slats
+			parts.append(WV.pbox(Vector3(14, 1.4, 0.8), m["dark"], Vector3(-42, 21 + k * 3.0, 31.2 * sd)))
+		# pop-up lamp pods on the bonnet
+		var pop := WV.pprism(pv([Vector2(38, 0), Vector2(52, 0), Vector2(52, 6), Vector2(40, 8)]), 14.0, m["top"])
+		pop.position = Vector3(0, 25.5, 19.0 * sd) * U
+		pop.rotation.z = -0.04
+		parts.append(pop)
+		parts.append(WV.pbox(Vector3(0.8, 5, 12), m["lamp"], Vector3(52.3, 28.5, 19.0 * sd)))
+	parts.append(WV.pbox(Vector3(1.2, 4, 56), glow(Color("#ff3048"), 2.6), Vector3(-63.6, 28, 0)))   # tail bar
+	parts.append(WV.pbox(Vector3(1.0, 2, 56), m["dark"], Vector3(-63.4, 24, 0)))
+	# a flat wing over the deck with neon tips
+	parts.append(WV.pprism(pv([Vector2(-70, 44), Vector2(-52, 45), Vector2(-52, 47), Vector2(-70, 48)]), 66.0, m["top"]))
+	for sd: float in [1.0, -1.0]:
+		parts.append(WV.pprism(pv([Vector2(-60, 34), Vector2(-52, 34), Vector2(-56, 45), Vector2(-64, 45)]), 3.0, m["low"]))
+		parts[parts.size() - 1].position.z = 24.0 * sd * U
+		parts.append(WV.pbox(Vector3(18, 1.0, 1.0), neon, Vector3(-61, 48.4, 32.5 * sd)))
+	# glow on the road under the car
+	var q := QuadMesh.new()
+	q.size = Vector2(150, 90) * U
+	q.orientation = PlaneMesh.FACE_Y
+	var gm := StandardMaterial3D.new()
+	gm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	gm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	gm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	var g := Gradient.new()
+	g.set_color(0, Color(nc, 0.75))
+	g.set_color(1, Color(nc, 0.0))
+	var gt := GradientTexture2D.new()
+	gt.gradient = g
+	gt.fill = GradientTexture2D.FILL_RADIAL
+	gt.fill_from = Vector2(0.5, 0.5)
+	gt.fill_to = Vector2(1.0, 0.5)
+	gm.albedo_texture = gt
+	q.material = gm
+	var under := MeshInstance3D.new()
+	under.mesh = q
+	under.position = Vector3(0, 1.6, 0) * U
+	under.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parts.append(under)
+	hook(parts, -17.0, 47.0, m["steel"], m["dark"])
+	m["rim"] = neon
+	return {"wx": [-40.0, 44.0], "wz": 30.0, "wr": 14.0, "ww": 15.0, "nose": Vector2(72, 18),
+		"rack": Vector3(-17, 47, 16), "tail": Vector2(-60, 34), "log_len": 40.0, "plough_w": 60.0}
+
+# F: "Antigrav" a hover racer: a needle body between two thruster pontoons, glowing
+# lift pads under them (the world's colour), fins, a long canopy. No wheels at all.
+const HOVER_GLOW := {"snow": "#5fe3ff", "forest": "#7dff6a", "sand": "#ffab3a", "rock": "#ff4fd0"}
+
+static func _hover(parts: Array, m: Dictionary) -> Dictionary:
+	var gc := Color(HOVER_GLOW.get(m["theme"], "#5fe3ff"))
+	var g := glow(gc, 2.6)
+	var body := sp(rnd([Vector2(-56, 20), Vector2(70, 18), Vector2(78, 22), Vector2(60, 30), Vector2(10, 40), Vector2(-30, 42), Vector2(-56, 36)], 6.0), 34.0, 7.0, m["top"])
+	parts.append(body)
+	parts.append(sp(rnd([Vector2(-34, 38), Vector2(30, 34), Vector2(6, 48), Vector2(-24, 49)], 8.0), 24.0, 8.0, m["glass"]))   # canopy
+	for sd: float in [1.0, -1.0]:
+		var z := 30.0 * sd
+		parts.append(sp(rnd([Vector2(-60, 12), Vector2(56, 13), Vector2(66, 18), Vector2(52, 27), Vector2(-56, 28)], 6.0), 18.0, 6.0, m["low"], z))   # pontoon
+		parts.append(sp(rnd([Vector2(-50, 26), Vector2(44, 25), Vector2(40, 29), Vector2(-50, 30)], 1.5), 18.4, 3.0, m["top"], z))   # colour cap
+		parts.append(WV.pbox(Vector3(40, 4, 16), m["low"], Vector3(-6, 23, 20.0 * sd)))   # wing joining body and pontoon
+		for px in [-34.0, 34.0]:   # lift pads
+			parts.append(WV.pbox(Vector3(26, 1.2, 12), g, Vector3(px, 11.6, z)))
+		parts.append(WV.pcyl(7.0, 6.0, m["dark"], Vector3(-61, 20, z), "x", 16))   # thruster
+		parts.append(WV.pcyl(5.0, 1.0, g, Vector3(-64.2, 20, z), "x", 16))
+		parts.append(sp(rnd([Vector2(-58, 27), Vector2(-40, 27), Vector2(-54, 44), Vector2(-62, 44)], 2.0), 2.5, 1.0, m["top"], z))   # fin
+		parts.append(WV.pbox(Vector3(10, 1.0, 1.0), g, Vector3(-56, 44.5, z)))
+	parts.append(WV.pbox(Vector3(1.0, 3, 16), glow(Color("#ff3048"), 2.4), Vector3(-56.5, 30, 0)))
+	parts.append(WV.pbox(Vector3(12, 1.0, 1.4), m["white"], Vector3(66, 22.8, 0)))
+	for lz in [-6.0, 6.0]:
+		parts.append(WV.pbox(Vector3(1.0, 2.5, 5), m["lamp"], Vector3(77.5, 21, lz)))
+	hook(parts, -26.0, 47.0, m["steel"], m["dark"])
+	# soft glow on the ground under each pontoon
+	for sd: float in [1.0, -1.0]:
+		var q := QuadMesh.new()
+		q.size = Vector2(130, 34) * U
+		q.orientation = PlaneMesh.FACE_Y
+		var gm := StandardMaterial3D.new()
+		gm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		gm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		gm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		var gr := Gradient.new()
+		gr.set_color(0, Color(gc, 0.6))
+		gr.set_color(1, Color(gc, 0.0))
+		var gt := GradientTexture2D.new()
+		gt.gradient = gr
+		gt.fill = GradientTexture2D.FILL_RADIAL
+		gt.fill_from = Vector2(0.5, 0.5)
+		gt.fill_to = Vector2(1.0, 0.5)
+		gm.albedo_texture = gt
+		q.material = gm
+		var mi := MeshInstance3D.new()
+		mi.mesh = q
+		mi.position = Vector3(0, 1.6, 30.0 * sd) * U
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		parts.append(mi)
+	return {"wheels": false, "wx": [], "wz": 30.0, "wr": 0.0, "ww": 0.0, "nose": Vector2(76, 18),
+		"rack": Vector3(-26, 47, 12), "tail": Vector2(-50, 30), "log_len": 34.0, "plough_w": 52.0}
