@@ -32,3 +32,5 @@ jobs:
         run: ./godot --headless --path . --script tests/tutorial_test.gd
       - name: Garage items are well formed and looks only
         run: ./godot --headless --path . --script tests/cosmetics_test.gd
+      - name: Rival tiers are balanced
+        run: ./godot --headless --path . --script tests/rivals_test.gd

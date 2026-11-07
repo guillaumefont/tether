@@ -90,6 +90,14 @@ static func award_medal(k: String, mode: String, tier: int) -> bool:
 	_cfg.save(PATH)
 	return true
 
+# progress flags (campaign worlds finished)
+static func get_flag(section: String, k: String) -> bool:
+	return bool(_load().get_value(section, k, false))
+
+static func set_flag(section: String, k: String) -> void:
+	_load().set_value(section, k, true)
+	_cfg.save(PATH)
+
 # anything saved at all: a player who already raced is not a first-time player
 static func any() -> bool:
 	return _load().get_sections().size() > 0

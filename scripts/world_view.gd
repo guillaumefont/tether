@@ -865,7 +865,11 @@ func _build_scenery() -> void:
 			if n > 0.05 and r < kit["density"] + n:
 				var sc := 0.75 + rng.randf() * 0.6
 				var xf := Transform3D(basis_for.call(rng.randf() * TAU, sc), w3(p))
-				(pines_a if rng.randf() < 0.6 else pines_b).append(xf)
+				var pick_a := rng.randf() < 0.6
+				# Low graphics: about half the trees (the same rng draws either way, so the
+				# woods keep their shape at every setting)
+				if quality > 0 or (int(p.x * 0.37) + int(p.y * 0.53)) % 2 == 0:
+					(pines_a if pick_a else pines_b).append(xf)
 				mark.call(p, 30.0 * sc, 2)
 			elif r < kit["rocks"]:
 				var rs := 0.6 + rng.randf() * 0.8
@@ -895,11 +899,30 @@ func _prop_kit() -> Dictionary:
 	return { "a": _pine_mesh(3, 150.0, 48.0), "b": _pine_mesh(4, 210.0, 56.0),
 		"hut": _shack_mesh(), "rock": _rock_mesh(), "density": 0.35, "rocks": 0.035 }
 
-# "Snow & shadows" option: off saves battery on slower phones
+# Graphics quality (Settings "quality"): 0 Low, 1 Medium, 2 High.
+#   Low:    3D drawn at 70% resolution, no shadows, glow, weather, MSAA or speed lines, half the trees
+#   Medium: 3D at 85% resolution, shadows, glow, weather, 2x MSAA
+#   High:   full resolution, everything on, softer shadows
+# The UI is always drawn at full resolution. Tree count changes on the next track load.
+var quality := 2
 var effects_on := true
-func set_effects(on: bool) -> void:
-	effects_on = on
-	light.shadow_enabled = on
+func set_quality(q: int) -> void:
+	quality = clampi(q, 0, 2)
+	effects_on = quality > 0
+	light.shadow_enabled = quality > 0
+	env.glow_enabled = quality > 0
+	var vp := get_viewport()
+	vp.scaling_3d_scale = [0.7, 0.85, 1.0][quality]
+	vp.msaa_3d = Viewport.MSAA_DISABLED if quality == 0 else Viewport.MSAA_2X
+	RenderingServer.directional_soft_shadow_filter_set_quality(
+		RenderingServer.SHADOW_QUALITY_SOFT_LOW if quality == 2 else RenderingServer.SHADOW_QUALITY_HARD)
+
+# Speed feel: letting go of the tether widens the view a touch for a moment
+# (and drives the UI's speed lines); see kick_release
+var _kick_t := 0.0     # target, jumps to 1 on release and decays
+var speed_kick := 0.0  # smoothed 0..1
+func kick_release() -> void:
+	_kick_t = 1.0
 
 # light weather round the camera focus, one CPU particle system of tiny quads:
 # snowfall, falling leaves, drifting dust or blowing sand
@@ -2299,6 +2322,11 @@ func update_camera(race: Race, phase: String, dt: float, snap := false) -> void:
 		snowfall.visible = snowfall.emitting
 		snowfall.position = focus + Vector3(0, 5.0 if th["weather"] in ["snow", "leaves"] else 1.2, 0)
 		snowfall.emission_box_extents = Vector3(cam_vis * U * 1.1, 0.2, cam_vis * U * 0.7)
+	_kick_t *= exp(-1.6 * dt)
+	speed_kick = lerpf(speed_kick, _kick_t, 1.0 - exp(-9.0 * dt))
+	if not phase in ["race", "count", "done"]:
+		_kick_t = 0.0
+	camera.fov = FOV + 3.0 * speed_kick
 	camera.position = focus + off + jitter
 	camera.look_at(focus + jitter, Vector3.UP)
 	light.directional_shadow_max_distance = clampf(dist * 2.2, 30.0, 200.0)

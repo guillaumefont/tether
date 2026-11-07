@@ -13,6 +13,7 @@ const Themes = preload("res://scripts/themes.gd")
 const Records = preload("res://scripts/records.gd")
 const Medals = preload("res://scripts/medals.gd")
 const Campaign = preload("res://scripts/campaign.gd")
+const Rivals = preload("res://scripts/rivals.gd")
 const Art = preload("res://scripts/menu_art.gd")
 const Garage = preload("res://scripts/garage.gd")
 const Cosmetics = preload("res://scripts/cosmetics.gd")
@@ -477,8 +478,10 @@ func _world_card(c: int) -> Button:
 	var line2 := ""
 	if not open:
 		line2 = "Locked: finish %s" % Themes.get_theme(Campaign.CHAPTERS[c - 1]["theme"])["name"]
-	elif Campaign.chapter_done(c):
+	elif Campaign.chapter_medals(c) == Campaign.chapter_size(c):
 		line2 = "%s  ·  done, theme unlocked" % ch["name"]
+	elif Campaign.chapter_done(c):   # finished in an earlier, shorter version of the world
+		line2 = "%s  ·  %d / %d medals  ·  theme unlocked" % [ch["name"], Campaign.chapter_medals(c), Campaign.chapter_size(c)]
 	else:
 		line2 = "%s  ·  %d / %d medals" % [ch["name"], Campaign.chapter_medals(c), Campaign.chapter_size(c)]
 	var b := Button.new()
@@ -587,6 +590,8 @@ func show_event() -> void:
 		"campaign":
 			var c := Campaign.chapter_of(ev["idx"])
 			sub = "%s  ·  event %d of %d  ·  %s" % [Themes.get_theme(Campaign.CHAPTERS[c]["theme"])["name"], ev["idx"] - Campaign.chapter_start(c) + 1, Campaign.chapter_size(c), _tag(ev["variant"], ev["mode"])]
+			if ev["mode"] == "race":
+				sub += "  ·  %s rivals" % Rivals.tier_name(Rivals.campaign_tier(c))
 		"attack": sub = "Time attack  ·  %d laps" % int(d.get("laps", 3))
 		"versus": sub = "2-player race  ·  %d laps" % int(d.get("laps", 3))
 	_header(vb, d["name"], sub, func(): go_back())

@@ -27,6 +27,7 @@ godot --headless --path . --script tests/swipe_test.gd   # menu lists scroll, ev
 godot --headless --path . --script tests/wall_test.gd    # a car on the road edge always gets off it again
 godot --headless --path . --script tests/tutorial_test.gd  # the first-launch tutorial can be finished
 godot --headless --path . --script tests/cosmetics_test.gd  # garage items: unlock rules, every look builds, looks only
+godot --headless --path . --script tests/rivals_test.gd    # rival tiers get harder, stay beatable (~4 min)
 ```
 
 After changing a track layout, rerun `tools/gen_medals.gd` to refresh `scripts/medal_times.gd`.
