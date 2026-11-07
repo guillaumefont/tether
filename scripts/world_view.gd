@@ -237,14 +237,15 @@ void fragment() {
 # The land around the track is not flat: gentle rolls everywhere, plus scattered
 # hollows and mounds, some shallow, some deep. Purely visual. Everything is derived
 # from the track data (road path, towers, start), so new layouts get their own relief:
-# the ground stays level (height 0) under the road, its banks, the tower infields and
-# the start area, then the relief grows in over TER_RAMP, so the banks' outer slope
-# still meets level ground exactly as before. Far out it levels off again.
+# the ground stays level (height 0) under the road and its banks and round each tower's
+# foot, then the relief grows in quickly over TER_RAMP, so the banks' outer slope still
+# meets level ground exactly as before. Extra hollows and mounds are scattered right
+# beside the road (between hairpins, inside loops). Far out it levels off again.
 const TER_MARGIN := 2400.0   # relief reaches this far past the track bounds
-const TER_FLAT := 20.0       # extra level ground past the scenery's clear zone
-const TER_RAMP := 400.0      # distance over which the relief grows to full height
+const TER_FLAT := 8.0        # extra level ground past the foot of the bank
+const TER_RAMP := 170.0      # distance over which the relief grows to full height
 const TER_EDGE := 500.0      # fade back to level ground at the outer border
-const TER_COARSE := 80.0     # cell of the distance-to-track field
+const TER_COARSE := 40.0     # cell of the distance-to-track field
 const TER_LIGHT := 1.7       # slope exaggeration in the lighting
 var _ter_org := Vector2.ZERO # prototype-space corner of the height grid
 var _ter_cell := 50.0
@@ -300,14 +301,13 @@ func _build_relief() -> void:
 				var d := sqrt(dx * dx + dy * dy) - r
 				if d < dist[row + gx]:
 					dist[row + gx] = d
-	var road_r := HW + KERB_W + RAIL_W + BANK_OUT + 10.0   # the scenery's clear zone
+	var road_r := HW + KERB_W + RAIL_W + BANK_OUT + 6.0   # the foot of the bank
 	var s := 0.0
 	while s < track.L:
 		stamp.call(track.point_at(s)["pos"], road_r)
 		s += 40.0
 	for a in track.anchors:
-		stamp.call(a.pos, TrackData.TURN_R + TrackData.WIDEN + 10.0)
-	stamp.call(track.point_at(track.start_s)["pos"], 320.0)
+		stamp.call(a.pos, 90.0)   # the tower's foot
 	# 2. the relief itself: rolling noise whose strength wanders, plus hollows and mounds
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(String(track.def.get("name", ""))) + 31
@@ -329,6 +329,7 @@ func _build_relief() -> void:
 			var amp := lerpf(15.0, 110.0, smoothstep(-0.35, 0.45, calm.get_noise_2d(x, y)))
 			_ter[gy * _ter_w + gx] = roll.get_noise_2d(x, y) * amp
 	# hollows (a bit more often) and mounds: mostly shallow, about a third deep
+	var blobs: Array = []   # [centre, radius, height, deep]
 	var n_blobs := int(R.get_area() / (650.0 * 650.0))
 	for k in n_blobs:
 		var c := Vector2(R.position.x + rng.randf() * R.size.x, R.position.y + rng.randf() * R.size.y)
@@ -337,6 +338,21 @@ func _build_relief() -> void:
 		var h := rng.randf_range(120.0, 260.0) if deep else rng.randf_range(25.0, 70.0)
 		if rng.randf() < 0.6:
 			h = -h
+		blobs.append([c, r, h, deep])
+	# more of them close to the road: beside every bend and between the hairpins
+	var n_near := int(track.L / 320.0)
+	for k in n_near:
+		var q := track.point_at(rng.randf() * track.L)
+		var side := 1.0 if rng.randf() < 0.5 else -1.0
+		var r := rng.randf_range(110.0, 300.0)
+		var c: Vector2 = q["pos"] + TrackData.perp(q["dir"]) * side * (road_r + rng.randf_range(0.4, 1.2) * r)
+		var deep := rng.randf() < 0.45
+		var h := rng.randf_range(70.0, 180.0) if deep else rng.randf_range(20.0, 60.0)
+		if rng.randf() < 0.55:
+			h = -h
+		blobs.append([c, r, h, deep])
+	for bl in blobs:
+		var c: Vector2 = bl[0]; var r: float = bl[1]; var h: float = bl[2]; var deep: bool = bl[3]
 		var x0 := maxi(0, floori((c.x - r - R.position.x) / _ter_cell))
 		var x1 := mini(_ter_w - 1, ceili((c.x + r - R.position.x) / _ter_cell))
 		var y0 := maxi(0, floori((c.y - r - R.position.y) / _ter_cell))
