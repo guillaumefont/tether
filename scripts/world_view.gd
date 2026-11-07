@@ -187,10 +187,7 @@ func _clear(tr: TrackData) -> void:
 	parts.clear()
 
 func _build_ground() -> void:
-	var b := track.bounds
-	var pm := PlaneMesh.new()
-	var margin := 9000.0
-	pm.size = Vector2(b.size.x + margin * 2, b.size.y + margin * 2) * U
+	_build_relief()
 	var sh := Shader.new()
 	sh.code = """
 shader_type spatial;
@@ -216,6 +213,9 @@ void fragment() {
 	vec3 grad = mix(far_col, near_col, v);
 	float vig = smoothstep(0.95, 0.25, length((uv - vec2(0.5, 0.62)) * vec2(1.0, 1.25)));
 	vec3 c = mix(base_col * 0.72, grad, 0.35 + 0.65 * vig);
+	// relief: hollows a little shaded, tops a touch brighter (level ground, height 0,
+	// stays exactly as the road shader's bank slope draws it)
+	c *= 1.0 + clamp(wp.y * 0.12, -0.26, 0.08);
 	ALBEDO = mix(c, c + (dot_col - base_col), d);
 	ROUGHNESS = 1.0;
 }
@@ -227,12 +227,196 @@ void fragment() {
 	sm.set_shader_parameter("dot_col", th["ground_dots"])
 	sm.set_shader_parameter("far_col", gc.darkened(0.25))
 	sm.set_shader_parameter("near_col", gc.lightened(0.12))
-	pm.material = sm
 	var mi := MeshInstance3D.new()
-	mi.mesh = pm
-	mi.position = w3(b.get_center(), 0.0)
+	mi.mesh = _relief_mesh()
+	mi.material_override = sm
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	static_root.add_child(mi)
+
+# ---------------------------------------------------------------- landscape relief
+# The land around the track is not flat: gentle rolls everywhere, plus scattered
+# hollows and mounds, some shallow, some deep. Purely visual. Everything is derived
+# from the track data (road path, towers, start), so new layouts get their own relief:
+# the ground stays level (height 0) under the road and its banks and round each tower's
+# foot, then the relief grows in quickly over TER_RAMP, so the banks' outer slope still
+# meets level ground exactly as before. Extra hollows and mounds are scattered right
+# beside the road (between hairpins, inside loops). Far out it levels off again.
+const TER_MARGIN := 2400.0   # relief reaches this far past the track bounds
+const TER_FLAT := 8.0        # extra level ground past the foot of the bank
+const TER_RAMP := 170.0      # distance over which the relief grows to full height
+const TER_EDGE := 500.0      # fade back to level ground at the outer border
+const TER_COARSE := 40.0     # cell of the distance-to-track field
+const TER_LIGHT := 1.7       # slope exaggeration in the lighting
+var _ter_org := Vector2.ZERO # prototype-space corner of the height grid
+var _ter_cell := 50.0
+var _ter_w := 0              # vertices per row
+var _ter_h := 0              # rows
+var _ter := PackedFloat32Array()   # height (world units) per grid vertex
+
+# Ground height at a prototype-space point (0 off the relief grid).
+func ground_h(p: Vector2) -> float:
+	if _ter_w < 2:
+		return 0.0
+	var fx := (p.x - _ter_org.x) / _ter_cell
+	var fy := (p.y - _ter_org.y) / _ter_cell
+	if fx < 0.0 or fy < 0.0 or fx >= _ter_w - 1 or fy >= _ter_h - 1:
+		return 0.0
+	var ix := int(fx); var iy := int(fy)
+	var tx := fx - ix; var ty := fy - iy
+	var k := iy * _ter_w + ix
+	return lerpf(lerpf(_ter[k], _ter[k + 1], tx), lerpf(_ter[k + _ter_w], _ter[k + _ter_w + 1], tx), ty)
+
+# Lowest ground under a square footprint (a hut sits into the slope, never floats).
+func ground_low(p: Vector2, r: float) -> float:
+	var h := ground_h(p)
+	for o in [Vector2(r, r), Vector2(-r, r), Vector2(r, -r), Vector2(-r, -r)]:
+		h = minf(h, ground_h(p + o))
+	return h
+
+func _build_relief() -> void:
+	var R := track.bounds.grow(TER_MARGIN)
+	# Low graphics: a coarser grid (about a fifth of the triangles)
+	_ter_cell = [100.0, 65.0, 50.0][quality]
+	_ter_org = R.position
+	_ter_w = ceili(R.size.x / _ter_cell) + 1
+	_ter_h = ceili(R.size.y / _ter_cell) + 1
+	# 1. how far each spot is past the zones that must stay level
+	var far := TER_FLAT + TER_RAMP
+	var cw := ceili(R.size.x / TER_COARSE) + 2
+	var ch := ceili(R.size.y / TER_COARSE) + 2
+	var dist := PackedFloat32Array()
+	dist.resize(cw * ch)
+	dist.fill(far)
+	var stamp := func(p: Vector2, r: float) -> void:
+		var reach := r + far
+		var x0 := maxi(0, floori((p.x - reach - R.position.x) / TER_COARSE))
+		var x1 := mini(cw - 1, ceili((p.x + reach - R.position.x) / TER_COARSE))
+		var y0 := maxi(0, floori((p.y - reach - R.position.y) / TER_COARSE))
+		var y1 := mini(ch - 1, ceili((p.y + reach - R.position.y) / TER_COARSE))
+		for gy in range(y0, y1 + 1):
+			var row := gy * cw
+			var dy := R.position.y + gy * TER_COARSE - p.y
+			for gx in range(x0, x1 + 1):
+				var dx := R.position.x + gx * TER_COARSE - p.x
+				var d := sqrt(dx * dx + dy * dy) - r
+				if d < dist[row + gx]:
+					dist[row + gx] = d
+	var road_r := HW + KERB_W + RAIL_W + BANK_OUT + 6.0   # the foot of the bank
+	var s := 0.0
+	while s < track.L:
+		stamp.call(track.point_at(s)["pos"], road_r)
+		s += 40.0
+	for a in track.anchors:
+		stamp.call(a.pos, 90.0)   # the tower's foot
+	# 2. the relief itself: rolling noise whose strength wanders, plus hollows and mounds
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(String(track.def.get("name", ""))) + 31
+	var roll := FastNoiseLite.new()
+	roll.seed = rng.randi()
+	roll.frequency = 1.0 / 1100.0
+	roll.fractal_octaves = 3
+	var calm := FastNoiseLite.new()
+	calm.seed = rng.randi()
+	calm.frequency = 1.0 / 2600.0
+	calm.fractal_type = FastNoiseLite.FRACTAL_NONE
+	var relief: float = th.get("relief", 1.0)
+	_ter = PackedFloat32Array()
+	_ter.resize(_ter_w * _ter_h)
+	for gy in _ter_h:
+		for gx in _ter_w:
+			var x := R.position.x + gx * _ter_cell
+			var y := R.position.y + gy * _ter_cell
+			var amp := lerpf(15.0, 110.0, smoothstep(-0.35, 0.45, calm.get_noise_2d(x, y)))
+			_ter[gy * _ter_w + gx] = roll.get_noise_2d(x, y) * amp
+	# hollows (a bit more often) and mounds: mostly shallow, about a third deep
+	var blobs: Array = []   # [centre, radius, height, deep]
+	var n_blobs := int(R.get_area() / (650.0 * 650.0))
+	for k in n_blobs:
+		var c := Vector2(R.position.x + rng.randf() * R.size.x, R.position.y + rng.randf() * R.size.y)
+		var deep := rng.randf() < 0.35
+		var r := rng.randf_range(260.0, 620.0) if deep else rng.randf_range(150.0, 420.0)
+		var h := rng.randf_range(120.0, 260.0) if deep else rng.randf_range(25.0, 70.0)
+		if rng.randf() < 0.6:
+			h = -h
+		blobs.append([c, r, h, deep])
+	# more of them close to the road: beside every bend and between the hairpins
+	var n_near := int(track.L / 320.0)
+	for k in n_near:
+		var q := track.point_at(rng.randf() * track.L)
+		var side := 1.0 if rng.randf() < 0.5 else -1.0
+		var r := rng.randf_range(110.0, 300.0)
+		var c: Vector2 = q["pos"] + TrackData.perp(q["dir"]) * side * (road_r + rng.randf_range(0.4, 1.2) * r)
+		var deep := rng.randf() < 0.45
+		var h := rng.randf_range(70.0, 180.0) if deep else rng.randf_range(20.0, 60.0)
+		if rng.randf() < 0.55:
+			h = -h
+		blobs.append([c, r, h, deep])
+	for bl in blobs:
+		var c: Vector2 = bl[0]; var r: float = bl[1]; var h: float = bl[2]; var deep: bool = bl[3]
+		var x0 := maxi(0, floori((c.x - r - R.position.x) / _ter_cell))
+		var x1 := mini(_ter_w - 1, ceili((c.x + r - R.position.x) / _ter_cell))
+		var y0 := maxi(0, floori((c.y - r - R.position.y) / _ter_cell))
+		var y1 := mini(_ter_h - 1, ceili((c.y + r - R.position.y) / _ter_cell))
+		for gy in range(y0, y1 + 1):
+			for gx in range(x0, x1 + 1):
+				var t := Vector2(R.position.x + gx * _ter_cell, R.position.y + gy * _ter_cell).distance_to(c) / r
+				if t < 1.0:
+					# deep ones are bowls with steeper sides, shallow ones soft swells
+					var f := smoothstep(1.0, 0.15, t) if deep else (1.0 - t * t) * (1.0 - t * t)
+					_ter[gy * _ter_w + gx] += h * f
+	# 3. level near the track and at the outer border
+	for gy in _ter_h:
+		var y := gy * _ter_cell
+		for gx in _ter_w:
+			var x := gx * _ter_cell
+			var fx := x / TER_COARSE; var fy := y / TER_COARSE
+			var ix := mini(int(fx), cw - 2); var iy := mini(int(fy), ch - 2)
+			var tx := fx - ix; var ty := fy - iy
+			var k := iy * cw + ix
+			var d := lerpf(lerpf(dist[k], dist[k + 1], tx), lerpf(dist[k + cw], dist[k + cw + 1], tx), ty)
+			var m := smoothstep(TER_FLAT, TER_FLAT + TER_RAMP, d)
+			var edge := minf(minf(x, R.size.x - x), minf(y, R.size.y - y))
+			m *= smoothstep(0.0, TER_EDGE, edge)
+			_ter[gy * _ter_w + gx] *= m * relief
+
+# The relief grid plus a level apron reaching far past it on every side.
+func _relief_mesh() -> ArrayMesh:
+	var verts := PackedVector3Array()
+	var nrms := PackedVector3Array()
+	var idx := PackedInt32Array()
+	verts.resize(_ter_w * _ter_h)
+	nrms.resize(_ter_w * _ter_h)
+	for gy in _ter_h:
+		for gx in _ter_w:
+			var k := gy * _ter_w + gx
+			verts[k] = Vector3(_ter_org.x + gx * _ter_cell, _ter[k], _ter_org.y + gy * _ter_cell) * U
+			var hx := _ter[k + 1 if gx + 1 < _ter_w else k] - _ter[k - 1 if gx > 0 else k]
+			var hy := _ter[k + _ter_w if gy + 1 < _ter_h else k] - _ter[k - _ter_w if gy > 0 else k]
+			# slopes lit a little steeper than they are, so the relief reads from the
+			# high camera
+			nrms[k] = Vector3(-hx * TER_LIGHT, 2.0 * _ter_cell, -hy * TER_LIGHT).normalized()
+	# clockwise seen from above (Godot's front face)
+	for gy in _ter_h - 1:
+		for gx in _ter_w - 1:
+			var k := gy * _ter_w + gx
+			idx.append_array([k, k + 1, k + _ter_w, k + 1, k + _ter_w + 1, k + _ter_w])
+	var apron := 9000.0
+	var x0 := _ter_org.x; var y0 := _ter_org.y
+	var x1 := _ter_org.x + (_ter_w - 1) * _ter_cell; var y1 := _ter_org.y + (_ter_h - 1) * _ter_cell
+	for r in [[x0 - apron, y0 - apron, x1 + apron, y0], [x0 - apron, y1, x1 + apron, y1 + apron],
+			[x0 - apron, y0, x0, y1], [x1, y0, x1 + apron, y1]]:
+		var b := verts.size()
+		verts.append_array([Vector3(r[0], 0, r[1]) * U, Vector3(r[2], 0, r[1]) * U, Vector3(r[0], 0, r[3]) * U, Vector3(r[2], 0, r[3]) * U])
+		nrms.append_array([Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP])
+		idx.append_array([b, b + 1, b + 2, b + 1, b + 3, b + 2])
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = verts
+	arr[Mesh.ARRAY_NORMAL] = nrms
+	arr[Mesh.ARRAY_INDEX] = idx
+	var am := ArrayMesh.new()
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	return am
 
 class Strip:
 	var st := SurfaceTool.new()
@@ -848,7 +1032,7 @@ func _build_scenery() -> void:
 		mark.call(p, 170.0, 2)
 		# front (+z) faces the road
 		var yaw := -(-nrm).angle() + PI / 2
-		shacks.append(Transform3D(basis_for.call(yaw, 1.35), w3(p)))
+		shacks.append(Transform3D(basis_for.call(yaw, 1.35), w3(p, ground_low(p, 90.0))))
 
 	# forest: jittered grid, kept where the noise says "woods", thinner far out
 	var step := 120.0
@@ -864,7 +1048,7 @@ func _build_scenery() -> void:
 			var r := rng.randf()
 			if n > 0.05 and r < kit["density"] + n:
 				var sc := 0.75 + rng.randf() * 0.6
-				var xf := Transform3D(basis_for.call(rng.randf() * TAU, sc), w3(p))
+				var xf := Transform3D(basis_for.call(rng.randf() * TAU, sc), w3(p, ground_h(p) - 3.0))
 				var pick_a := rng.randf() < 0.6
 				# Low graphics: about half the trees (the same rng draws either way, so the
 				# woods keep their shape at every setting)
@@ -873,7 +1057,7 @@ func _build_scenery() -> void:
 				mark.call(p, 30.0 * sc, 2)
 			elif r < kit["rocks"]:
 				var rs := 0.6 + rng.randf() * 0.8
-				rocks.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(rs * 1.4, rs, rs * 0.85)), w3(p)))
+				rocks.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(rs * 1.4, rs, rs * 0.85)), w3(p, ground_h(p) - 4.0)))
 				mark.call(p, 40.0, 2)
 		y += step
 	_multi(kit["a"], pines_a)
