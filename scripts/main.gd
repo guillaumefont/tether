@@ -770,6 +770,8 @@ func _run_demo(arg: String) -> void:
 			fx_shots["speed"] = true
 			await RenderingServer.frame_post_draw
 			get_viewport().get_texture().get_image().save_png(out.path_join("fx_speed.png"))
+		if OS.get_environment("SHOT_STREAK") != "" and t > secs * 0.5 and not fx_shots["streak"] and ui.streak.modulate.a < 0.1:
+			ui.show_streak(3)   # force one so its place under the HUD can be checked
 		if not fx_shots["streak"] and ui.streak.modulate.a > 0.9 and ui.streak.text.ends_with("3"):
 			fx_shots["streak"] = true
 			await RenderingServer.frame_post_draw
