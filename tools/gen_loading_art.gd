@@ -4,7 +4,9 @@ extends SceneTree
 # Render at twice the wanted size and set ART_SIZE: the frame is scaled down (supersampled)
 # for clean edges. Loading art is 2560x1440 / 1440x2560:
 #   ART_THEME=snow ART_OUT=res://art/loading_snow_land.jpg ART_SIZE=2560x1440 xvfb-run -s "-screen 0 5120x2880x24" godot --path . --rendering-method gl_compatibility --resolution 5120x2880 --script tools/gen_loading_art.gd
-#   ART_THEME=snow ART_OUT=res://art/loading_snow_port.jpg ART_SIZE=1440x2560 ART_DIST=1900 ART_AIM_UP=60 xvfb-run -s "-screen 0 2880x5120x24" godot --path . --rendering-method gl_compatibility --resolution 2880x5120 --script tools/gen_loading_art.gd
+#   ART_THEME=snow ART_OUT=res://art/loading_snow_port.jpg ART_SIZE=1440x2560 ART_YAW=260 ART_DIST=1500 ART_AIM_UP=30 xvfb-run -s "-screen 0 2880x5120x24" godot --path . --rendering-method gl_compatibility --resolution 2880x5120 --script tools/gen_loading_art.gd
+# Sand landscape uses ART_YAW=265 (a palm sits in front at 250). The AI race and the scenery
+# shift when tracks or terrain change: sweep ART_YAW / ART_SECS at low res with ART_BAKE_AO=0 first.
 # ART_SCENERY=1 renders the land beside the track, looking away from it (world cards).
 # Ambient occlusion is ray traced on the CPU and multiplied into the frame (ART_BAKE_AO =
 # strength, 0 = off; ART_AO_RES = AO buffer width; ART_AO_RANGE = ray length in metres),
@@ -93,7 +95,7 @@ func _initialize() -> void:
 	var mid: Vector2 = (c.pos * 0.6 + a.pos * 0.4)
 	var focus := Vector3(mid.x, tr.height_at(c.s) + 20.0, mid.y) * WorldView.U
 	var pitch := deg_to_rad(_env("ART_PITCH", 14.0))
-	var yaw := deg_to_rad(_env("ART_YAW", 10.0))
+	var yaw := deg_to_rad(_env("ART_YAW", 250.0))
 	var dist := _env("ART_DIST", 1050.0) * WorldView.U
 	var off := Vector3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch)) * dist
 	view.camera.fov = 42.0
