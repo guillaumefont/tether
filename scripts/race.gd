@@ -460,17 +460,6 @@ func step_car(c: Car, dt: float) -> void:
 func _ahead(from: int, to: int) -> int:
 	return posmod(to - from, track.n)
 
-func path_blocked(c: Car, horizon: float) -> bool:
-	for o in track.obstacles:
-		if o["gone"]:
-			continue
-		var t := 0.0
-		while t <= horizon:
-			if (c.pos + c.vel * t).distance_to(o["pos"]) < CR + o["r"] + 10.0:
-				return true
-			t += 0.04
-	return false
-
 func ai_think(c: Car, dt: float = 1.0 / 60.0) -> void:
 	if c.air > 0.0 or c.fall > 0.0:
 		return
@@ -483,7 +472,8 @@ func ai_think(c: Car, dt: float = 1.0 / 60.0) -> void:
 		if c.swung > a.total + 0.8 or sp < 150.0:
 			detach(c, true)
 			return
-		if past_mid and hx > 0.975 and not (track.obstacles.size() > 0 and path_blocked(c, 0.9)):
+		# no dodging: Obstacles posts stand off the racing line (tools/gen_obstacles.gd)
+		if past_mid and hx > 0.975:
 			detach(c, true)
 		return
 	if c.human < 0:
