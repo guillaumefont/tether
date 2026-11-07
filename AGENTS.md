@@ -28,9 +28,11 @@ godot --headless --path . --script tests/wall_test.gd    # a car on the road edg
 godot --headless --path . --script tests/tutorial_test.gd  # the first-launch tutorial can be finished
 godot --headless --path . --script tests/cosmetics_test.gd  # garage items: unlock rules, every look builds, looks only
 godot --headless --path . --script tests/rivals_test.gd    # rival tiers get harder, stay beatable (~4 min)
+godot --headless --path . --script tests/obstacles_test.gd # the AI's line never touches an Obstacles post
 ```
 
-After changing a track layout, rerun `tools/gen_medals.gd` to refresh `scripts/medal_times.gd`.
+After changing a track layout, rerun `tools/gen_obstacles.gd` (posts placed off the AI's racing line,
+`scripts/obstacle_spots.gd`, ~3 min), then `tools/gen_medals.gd` to refresh `scripts/medal_times.gd`.
 Also bump `LAYOUT_VERSION` in `scripts/records.gd`, so players' best times and ghosts from the old
 road are dropped (medals and campaign progress stay). `tools/tighten_layout.gd` searches for a
 layout with short links (about one lane between bends) that still passes the layout check.
