@@ -1584,11 +1584,13 @@ static func bevel_box(size: Vector3, m: Material) -> ArrayMesh:
 	st.set_material(m)
 	return st.commit()
 # a polygon with each corner cut to a curve of about radius r
-static func rounded(poly: PackedVector2Array, r: float, segs := 4) -> PackedVector2Array:
+static func rounded(poly: PackedVector2Array, r: float, segs := 4, radii := PackedFloat32Array()) -> PackedVector2Array:
 	var out := PackedVector2Array()
 	var n := poly.size()
 	for i in n:
 		var p := poly[i]
+		if i < radii.size():   # per-corner cut, overrides r
+			r = radii[i]
 		var a := p + (poly[(i + n - 1) % n] - p).normalized() * r
 		var b := p + (poly[(i + 1) % n] - p).normalized() * r
 		for k in segs + 1:   # quadratic curve a -> p -> b
@@ -1971,14 +1973,33 @@ func _car_kit_snow(chassis: Node3D, parts_list: Array, top: Material, dark: Mate
 		chassis.add_child(tip)
 		chassis.add_child(pbox(Vector3(8, 12, 6), dark, Vector3(42, 9, z * 0.85)))
 		# crawler track: a trapezoid side (long top, short bottom, ends at 45°), rounded corners
-		var trk := pprism(rounded(PackedVector2Array([Vector2(-44, 0), Vector2(-24, 0),
-				Vector2(-4, 20), Vector2(-64, 20)]), 5.0), 16.0, tread)
+		var trk := pprism(_track_side(4), 16.0, tread)
 		trk.position.z = z * U
 		chassis.add_child(trk)
-		for k in 6:   # tread stripes, trimmed to the sloped ends
-			var lx := -54.0 + k * 8.0
-			var y0 := maxf(0.0, maxf(-44.0 - lx, lx + 24.0)) + 0.5
-			chassis.add_child(pbox(Vector3(3, 20.5 - y0 + 0.5, 17), lug, Vector3(lx, (y0 + 20.5) * 0.5, z)))
+		_track_lugs(chassis, lug, z)
+
+# crawler track side: trapezoid (long top, short bottom, ends at 45°); the top corners get
+# a wide curve so the ends read blunt, not pointed
+static func _track_side(segs: int) -> PackedVector2Array:
+	return rounded(PackedVector2Array([Vector2(-44, 0), Vector2(-24, 0), Vector2(-4, 20),
+			Vector2(-64, 20)]), 5.0, segs * 2, PackedFloat32Array([8.0, 8.0, 20.0, 20.0]))
+
+# tread stripes across the track, each trimmed to the side profile so none pokes out
+static func _track_lugs(chassis: Node3D, lug: Material, z: float) -> void:
+	var prof := _track_side(4)
+	for k in 6:
+		var lx := -54.0 + k * 8.0
+		var lo := INF
+		var hi := -INF
+		for i in prof.size():   # where the vertical line x = lx crosses the outline
+			var a := prof[i]
+			var b := prof[(i + 1) % prof.size()]
+			if (a.x - lx) * (b.x - lx) <= 0.0 and a.x != b.x:
+				var y := lerpf(a.y, b.y, (lx - a.x) / (b.x - a.x))
+				lo = minf(lo, y)
+				hi = maxf(hi, y)
+		if hi - lo > 4.0:
+			chassis.add_child(pbox(Vector3(3, hi - lo + 1.0, 17), lug, Vector3(lx, (lo + hi) * 0.5, z)))
 
 # artwork snow kit (detail 2): same skis and 45° crawler tracks, as rounded panels with
 # lugs (the side stays the plain trapezoid)
@@ -2002,14 +2023,10 @@ func _car_kit_snow_hd(chassis: Node3D, ski: Material, tread: Material, lug: Mate
 		chassis.add_child(pbox(Vector3(8, 12, 6), dark, Vector3(42, 9, z * 0.85)))
 		chassis.add_child(pbox(Vector3(14, 1.2, 10), steel, Vector3(42, 3.4, z)))
 		# crawler track
-		var trk := soft_prism(rounded(PackedVector2Array([Vector2(-44, 0), Vector2(-24, 0),
-				Vector2(-4, 20), Vector2(-64, 20)]), 5.0, 6), 16.0, 2.5, tread, 3, false)
+		var trk := soft_prism(_track_side(6), 16.0, 2.5, tread, 3, false)
 		trk.position.z = z * U
 		chassis.add_child(trk)
-		for k in 6:
-			var lx := -54.0 + k * 8.0
-			var y0 := maxf(0.0, maxf(-44.0 - lx, lx + 24.0)) + 0.5
-			chassis.add_child(pbox(Vector3(3, 20.5 - y0 + 0.5, 17), lug, Vector3(lx, (y0 + 20.5) * 0.5, z)))
+		_track_lugs(chassis, lug, z)
 
 # artwork wheel (detail 2): a tyre with rounded shoulders and tread blocks, a dished
 # rim with five spokes and a hub cap on the outer face
