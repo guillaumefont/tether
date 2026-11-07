@@ -13,10 +13,20 @@ static func check(d: Dictionary) -> Dictionary:
 	var Tr := TrackData.new(d, "reverse")
 	if Tr.ramp_report != "":
 		bad += 1000.0 * Tr.ramp_report.count(";")
-	# roads keep apart unless one is a level above the other
+	# roads keep apart unless one is a level above the other (spatial grid: only nearby segments)
 	var n := T.n
 	for i in n:
-		for j in range(i + 1, n):
+		var cx := floori(T.P[i].x / TrackData.CELL)
+		var cy := floori(T.P[i].y / TrackData.CELL)
+		var near := PackedInt32Array()
+		for gx in range(cx - 2, cx + 3):
+			for gy in range(cy - 2, cy + 3):
+				var cell = T._grid.get(Vector2i(gx, gy))
+				if cell != null:
+					for j in cell:
+						if j > i: near.append(j)
+		near.sort()
+		for j in near:
 			var ds := absf(T.seg_s0[j] - T.seg_s0[i]); ds = minf(ds, T.L - ds)
 			if ds < 900.0: continue
 			var d2 := T.P[i].distance_to(T.P[j])
@@ -38,7 +48,7 @@ static func check(d: Dictionary) -> Dictionary:
 		for p in T.P:
 			if p.distance_to(a.pos) < HW + 70.0:
 				bad += 50.0; why["tower"] = why.get("tower", 0) + 1
-	return { "bad": bad, "L": T.L, "area": T.bounds.get_area(), "bridges": T.bridges.size(), "levels": Array(T.arc_level), "why": why }
+	return { "bad": bad, "L": T.L, "area": T.bounds.get_area(), "bridges": T.bridges.size(), "levels": Array(T.arc_level), "why": why, "T": T }
 
 static func _near_crossing(T: TrackData, i: int) -> bool:
 	for B in T.bridges:

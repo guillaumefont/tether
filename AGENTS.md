@@ -31,6 +31,9 @@ godot --headless --path . --script tests/rivals_test.gd    # rival tiers get har
 ```
 
 After changing a track layout, rerun `tools/gen_medals.gd` to refresh `scripts/medal_times.gd`.
+Also bump `LAYOUT_VERSION` in `scripts/records.gd`, so players' best times and ghosts from the old
+road are dropped (medals and campaign progress stay). `tools/tighten_layout.gd` searches for a
+layout with short links (about one lane between bends) that still passes the layout check.
 
 ## Design rules
 

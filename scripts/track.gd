@@ -302,9 +302,18 @@ func level(i: int) -> int:
 func _hidden(pos: Vector2, i: int) -> bool:
 	if level_of[i] != 0:
 		return false
-	for k in n:
-		if level_of[k] != 0 and P[k].distance_to(pos) < HW + 60.0:
-			return true
+	# segments are hashed by their midpoint (within 35 of P[k]); HW + 60 + 35 < CELL, so the
+	# eight neighbouring cells hold every candidate
+	var cx := floori(pos.x / CELL)
+	var cy := floori(pos.y / CELL)
+	for gx in range(cx - 1, cx + 2):
+		for gy in range(cy - 1, cy + 2):
+			var cell = _grid.get(Vector2i(gx, gy))
+			if cell == null:
+				continue
+			for k in cell:
+				if level_of[k] != 0 and P[k].distance_to(pos) < HW + 60.0:
+					return true
 	return false
 
 func _near_crossing(pos: Vector2, m: float) -> bool:
@@ -460,6 +469,10 @@ func _place_tokens(turns: Array) -> void:
 # track stays as low as possible. Which road goes over is free: gameplay only needs the
 # two passes on different layers, and the level index already separates them.
 const LEVEL_H := 150.0       # height of one deck level (world units)
+# layout tools that try thousands of candidates cap the level search (0 = no cap); a
+# capped search that gives up leaves the crossings flat, which the layout check rejects
+static var dfs_budget := 0
+var _dfs_nodes := 0
 const MIN_RAMP := 380.0      # straight length needed to climb or drop one level
 const DECK_HALF := HW * 1.3  # flat deck either side of a crossing on a straight
 var arc_level := PackedInt32Array()
@@ -554,7 +567,8 @@ func _build_heights() -> void:
 		height_of[i] = _height_s(seg_s0[i])
 
 func _dfs(idx: int, nv: int, max_l: int, cur: PackedInt32Array, cross: Array, links: Array, cost: float, bound: float) -> Dictionary:
-	if cost >= bound:
+	_dfs_nodes += 1
+	if cost >= bound or (dfs_budget > 0 and _dfs_nodes > dfs_budget):
 		return { "cost": INF, "lv": PackedInt32Array() }
 	if idx == nv:
 		return { "cost": cost, "lv": cur.duplicate() }

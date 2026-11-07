@@ -3,6 +3,11 @@
 extends RefCounted
 
 const PATH := "user://records.cfg"
+# Bumped whenever track layouts change: best times and ghosts set on an older layout are
+# dropped (they no longer match the road). Medals and campaign progress are kept.
+# 2: 2026-11 rework (shorter straights, more bends and crossings).
+const LAYOUT_VERSION := 2
+const META := "meta"
 static var _cfg: ConfigFile
 
 static func _load() -> ConfigFile:
@@ -10,7 +15,25 @@ static func _load() -> ConfigFile:
 		_cfg = ConfigFile.new()
 		_cfg.load(PATH)
 		_move_ghosts()
+		_drop_old_layout_records()
 	return _cfg
+
+static func _drop_old_layout_records() -> void:
+	if int(_cfg.get_value(META, "layouts", 1)) >= LAYOUT_VERSION:
+		return
+	var had_any := _cfg.get_sections().size() > 0
+	for k in _cfg.get_sections():
+		if k == META:
+			continue
+		for key in ["best", "lap"]:
+			if _cfg.has_section_key(k, key):
+				_cfg.erase_section_key(k, key)
+		var gp := _ghost_path(k)
+		if FileAccess.file_exists(gp):
+			DirAccess.remove_absolute(gp)
+	_cfg.set_value(META, "layouts", LAYOUT_VERSION)
+	if had_any:
+		_cfg.save(PATH)
 
 static func key(track_name: String, variant: String) -> String:
 	return track_name + ("" if variant == "standard" else "-" + variant)
@@ -100,4 +123,7 @@ static func set_flag(section: String, k: String) -> void:
 
 # anything saved at all: a player who already raced is not a first-time player
 static func any() -> bool:
-	return _load().get_sections().size() > 0
+	for k in _load().get_sections():
+		if k != META:
+			return true
+	return false
