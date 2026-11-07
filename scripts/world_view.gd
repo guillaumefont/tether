@@ -1977,12 +1977,14 @@ func _car_kit_snow(chassis: Node3D, parts_list: Array, top: Material, dark: Mate
 		trk.position.z = z * U
 		chassis.add_child(trk)
 		_track_lugs(chassis, lug, z)
+		chassis.add_child(pbox(Vector3(34, 11, 8), dark, Vector3(-34, 17, z * 0.85)))   # mount up to the body
 
 # crawler track side: trapezoid (long top, short bottom, ends at 45°); the top corners get
 # a wide curve so the ends read blunt, not pointed
 static func _track_side(segs: int) -> PackedVector2Array:
-	return rounded(PackedVector2Array([Vector2(-44, 0), Vector2(-24, 0), Vector2(-4, 20),
-			Vector2(-64, 20)]), 5.0, segs * 2, PackedFloat32Array([8.0, 8.0, 20.0, 20.0]))
+	var h := 12.0   # low, so the track sits under the belly instead of towering
+	return rounded(PackedVector2Array([Vector2(-64 + h, 0), Vector2(-4 - h, 0), Vector2(-4, h),
+			Vector2(-64, h)]), 5.0, segs * 2, PackedFloat32Array([5.0, 5.0, 10.0, 10.0]))
 
 # tread stripes across the track, each trimmed to the side profile so none pokes out
 static func _track_lugs(chassis: Node3D, lug: Material, z: float) -> void:
@@ -2027,6 +2029,7 @@ func _car_kit_snow_hd(chassis: Node3D, ski: Material, tread: Material, lug: Mate
 		trk.position.z = z * U
 		chassis.add_child(trk)
 		_track_lugs(chassis, lug, z)
+		chassis.add_child(pbox(Vector3(34, 11, 8), dark, Vector3(-34, 17, z * 0.85)))   # mount up to the body
 
 # artwork wheel (detail 2): a tyre with rounded shoulders and tread blocks, a dished
 # rim with five spokes and a hub cap on the outer face
