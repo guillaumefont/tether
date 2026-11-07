@@ -37,7 +37,6 @@ var rec_before := 0.0  # trial record when the run started (for the results delt
 var medal_targets: Array = []   # trial medal target times, bronze..pivot
 var last_beep := 4
 var end_timer := 0.0
-var flash_t := 0.0
 var ghost: Array = []
 var new_record := false
 var touch_owner := {}        # touch index -> player
@@ -324,10 +323,10 @@ func new_race(built: TrackData = null) -> void:
 	rec_before = Records.get_best(rec_key())
 	start_tier = Medals.trial_tier(cur_def()["name"], variant, rec_before)
 	ui.hide_streak()
+	ui.hide_lap_note()
 	countdown = 3.2
 	last_beep = 4
 	end_timer = 0.0
-	flash_t = 0.0
 	phase = "count"
 	touch_owner.clear()
 	ui.set_big("")
@@ -442,12 +441,8 @@ func _process(delta: float) -> void:
 				_sync_tutorial()
 				if tut.complete:
 					_show_tutorial_end()
-			elif race.clock > 0.7 and flash_t <= 0.0 and phase == "race":
+			elif race.clock > 0.7 and phase == "race":
 				ui.set_big("")
-			if flash_t > 0.0 and not tut:
-				flash_t -= dt
-				if flash_t <= 0.0 and phase == "race":
-					ui.set_big("")
 			var hs: Array = race.cars.filter(func(c): return c.human >= 0)
 			if phase == "race" and hs.all(func(c): return c.finished):
 				phase = "done"
@@ -458,7 +453,7 @@ func _process(delta: float) -> void:
 					ui.set_big(_ordinal(race.standings().find(hs[0]) + 1))
 			if phase == "done":
 				end_timer += dt
-				if end_timer > 1.5 and flash_t <= 0.0:
+				if end_timer > 1.5:
 					ui.set_big("")
 				if race.cars.all(func(c): return c.finished) or end_timer > 6.0:
 					_show_results()
@@ -565,16 +560,15 @@ func _trial_lap(c, lt: float, trace: Array) -> void:
 			Haptics.reward()
 		ghost = trace
 		Records.set_ghost(rec_key(), ghost)
-	var lines := "[font_size=54]%s[/font_size]" % UI.fmt2(lt)
-	if track.obstacles.size() > 0 and c.last_hits > 0:
-		lines += "\n[font_size=22][color=#d4452f]+%d s, %d post%s touched[/color][/font_size]" % [c.last_hits, c.last_hits, "s" if c.last_hits > 1 else ""]
-	if collect:
-		lines += "\n[font_size=22][color=#7fe3d0]+%d gems this lap, %d/%d in all[/color][/font_size]" % [c.last_got, c.gems, track.tokens.size()]
+	var lines := UI.fmt2(lt)
 	if has_prev:
 		var delta := lt - prev
-		lines += "\n[font_size=40][color=%s]%s%.2f[/color][/font_size]" % ["#5fd38d" if delta < 0.0 else "#e2574c", "−" if delta < 0.0 else "+", absf(delta)]
-	ui.set_big(lines)
-	flash_t = 1.6
+		lines += "  [font_size=22][color=%s]%s%.2f[/color][/font_size]" % ["#5fd38d" if delta < 0.0 else "#e2574c", "−" if delta < 0.0 else "+", absf(delta)]
+	if track.obstacles.size() > 0 and c.last_hits > 0:
+		lines += "\n[font_size=16][color=#d4452f]+%d s, %d post%s touched[/color][/font_size]" % [c.last_hits, c.last_hits, "s" if c.last_hits > 1 else ""]
+	if collect:
+		lines += "\n[font_size=16][color=#7fe3d0]+%d gems this lap, %d/%d in all[/color][/font_size]" % [c.last_got, c.gems, track.tokens.size()]
+	ui.show_lap_note(lines)
 
 func _trial_run(c) -> void:
 	var prev := Records.get_best(rec_key())
@@ -660,6 +654,7 @@ static func _ordinal(n: int) -> String:
 func _show_results() -> void:
 	phase = "results"
 	ui.hide_streak()
+	ui.hide_lap_note()
 	var name: String = Defs.TRACKS[track_idx]["name"]
 	if mode == "trial":
 		var c = race.cars[0]
@@ -805,6 +800,10 @@ func _run_demo(arg: String) -> void:
 			get_viewport().get_texture().get_image().save_png(out.path_join("fx_speed.png"))
 		if OS.get_environment("SHOT_STREAK") != "" and t > secs * 0.5 and not fx_shots["streak"] and ui.streak.modulate.a < 0.1:
 			ui.show_streak(3)   # force one so its place under the HUD can be checked
+		if OS.get_environment("SHOT_LAP") != "" and t > secs * 0.5 and not fx_shots.has("lap"):
+			fx_shots["lap"] = true   # a lap note as at the end of a lap, with a clean streak under it
+			ui.show_lap_note("0:42.10  [font_size=22][color=#5fd38d]−0.84[/color][/font_size]\n[font_size=16][color=#7fe3d0]+6 gems this lap, 12/20 in all[/color][/font_size]", 3.0)
+			ui.show_streak(3)
 		if not fx_shots["streak"] and ui.streak.modulate.a > 0.9 and ui.streak.text.ends_with("3"):
 			fx_shots["streak"] = true
 			await RenderingServer.frame_post_draw

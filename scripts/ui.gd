@@ -155,6 +155,23 @@ func _ready() -> void:
 	streak.modulate.a = 0.0
 	root.add_child(streak)
 
+	lap_note = RichTextLabel.new()
+	lap_note.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	lap_note.bbcode_enabled = true
+	lap_note.fit_content = true
+	lap_note.scroll_active = false
+	lap_note.autowrap_mode = TextServer.AUTOWRAP_OFF
+	lap_note.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lap_note.add_theme_font_override("normal_font", f_display)
+	lap_note.add_theme_font_size_override("normal_font_size", 30)
+	lap_note.add_theme_color_override("default_color", C_POST)
+	lap_note.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.45))
+	lap_note.add_theme_constant_override("shadow_offset_y", 3)
+	lap_note.add_theme_constant_override("shadow_offset_x", 0)
+	lap_note.add_theme_constant_override("line_separation", -4)
+	lap_note.modulate.a = 0.0
+	root.add_child(lap_note)
+
 	minimap = TrackMap.new()
 	minimap.bg = true
 	minimap.custom_minimum_size = Vector2(MINIMAP, MINIMAP)
@@ -773,6 +790,7 @@ func show_menu() -> void:
 	minimap.visible = false
 	hide_coach()
 	big.text = ""
+	hide_lap_note()
 
 # ---------------------------------------------------------------- HUD
 func _panel(col := Color(0, 0, 0, 0), radius := 6) -> PanelContainer:
@@ -937,9 +955,14 @@ func set_hud_tag(key: String, label: String, col: Color) -> void:
 # "CLEAN x3" under the HUD after bends taken without touching a rail or a post
 var streak: Label
 var _streak_tw: Tween
+func _under_hud() -> float:
+	return maxf(72.0, hud.position.y + hud_mid.position.y + hud_mid.size.y + 6.0)
+
 func show_streak(n: int) -> void:
-	# just under the centre timer column (timer + medal gap)
-	streak.offset_top = maxf(72.0, hud.position.y + hud_mid.position.y + hud_mid.size.y + 6.0)
+	# just under the centre timer column (timer + medal gap), or under the lap time while it shows
+	streak.offset_top = _under_hud()
+	if lap_note.modulate.a > 0.05:
+		streak.offset_top += lap_note.get_content_height() + 4.0
 	streak.offset_bottom = streak.offset_top + 40.0
 	streak.text = "CLEAN  ×%d" % n
 	# warmer and bigger as the run of clean bends grows
@@ -959,6 +982,25 @@ func hide_streak() -> void:
 	if _streak_tw:
 		_streak_tw.kill()
 	streak.modulate.a = 0.0
+
+# The lap time (and its gap to the record) at the end of each lap: a small line under the
+# centre timer, out of the way of the track, that fades after a moment.
+var lap_note: RichTextLabel
+var _lap_tw: Tween
+func show_lap_note(bb: String, secs := 1.6) -> void:
+	lap_note.offset_top = _under_hud()
+	lap_note.text = "[center]" + bb + "[/center]"
+	if _lap_tw:
+		_lap_tw.kill()
+	lap_note.modulate.a = 1.0
+	_lap_tw = create_tween()
+	_lap_tw.tween_interval(secs)
+	_lap_tw.tween_property(lap_note, "modulate:a", 0.0, 0.4)
+
+func hide_lap_note() -> void:
+	if _lap_tw:
+		_lap_tw.kill()
+	lap_note.modulate.a = 0.0
 
 func set_big(bb: String, size := 120) -> void:
 	# shrink long words (FINISH, 2nd...) to fit a narrow portrait screen
