@@ -29,6 +29,8 @@ const THEMES := {
 		# loose stuff piled along the lane edge, the visible reason the edge slows you:
 		# fresh powder you plough into (main colour, shade)
 		"drift": "powder", "drift_a": Color("#f4f8fb"), "drift_b": Color("#8ea6bf"),
+		# on-track objects (track_objects.gd): obstacle post, Collect gem, shards when a post breaks
+		"post": "snowman", "gem": "ice", "post_bits": [Color("#f2f6fa"), Color("#d4452f")],
 		"weather": "snow", "props": "snow", "kit": "snow",
 	},
 	"forest": {
@@ -47,6 +49,8 @@ const THEMES := {
 		"spray": [Color("#7a5a36"), Color("#5c8a3a")],
 		# undergrowth and leaf litter spilling onto the track
 		"drift": "brush", "drift_a": Color("#4f7d33"), "drift_b": Color("#7a5a36"),
+		# on-track objects (track_objects.gd): obstacle post, Collect gem, shards when a post breaks
+		"post": "toadstool", "gem": "acorn", "post_bits": [Color("#d23a2c"), Color("#efe6d2")],
 		"weather": "leaves", "props": "forest", "kit": "forest",
 	},
 	"rock": {
@@ -65,6 +69,8 @@ const THEMES := {
 		"spray": [Color("#b4b6b0"), Color("#6c6e69")],
 		# loose scree and gravel
 		"drift": "scree", "drift_a": Color("#8e9090"), "drift_b": Color("#6a625a"),
+		# on-track objects (track_objects.gd): obstacle post, Collect gem, shards when a post breaks
+		"post": "cairn", "gem": "amethyst", "post_bits": [Color("#8e9090"), Color("#e8792e")],
 		"weather": "dust", "props": "rock", "kit": "rock",
 	},
 	"sand": {
@@ -83,6 +89,8 @@ const THEMES := {
 		"spray": [Color("#efd59f"), Color("#c79c5e")],
 		# soft sand blown over the edge
 		"drift": "sand", "drift_a": Color("#ecd09a"), "drift_b": Color("#c99e64"),
+		# on-track objects (track_objects.gd): obstacle post, Collect gem, shards when a post breaks
+		"post": "jar", "gem": "coin", "post_bits": [Color("#b8643a"), Color("#f0d9a8")],
 		"weather": "sand", "props": "sand", "kit": "sand",
 	},
 }

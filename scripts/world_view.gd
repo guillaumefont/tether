@@ -6,6 +6,7 @@ extends Node3D
 const TrackData = preload("res://scripts/track.gd")
 const Themes = preload("res://scripts/themes.gd")
 const Race = preload("res://scripts/race.gd")
+const TrackObjects = preload("res://scripts/track_objects.gd")
 
 const U := 0.01
 # Model detail. 1 = the game (light enough for phones). 2 = artwork renders
@@ -1427,26 +1428,31 @@ func _build_towers() -> void:
 		static_root.add_child(t)
 
 func _build_posts() -> void:
+	# the world's own obstacle (snowman, toadstool, jar, cairn): same 32 footprint everywhere
+	var pm := TrackObjects.post_mesh(String(th.get("post", "")), quality == 0)
 	for o in track.obstacles:
-		var p := Node3D.new()
-		var r: float = o["r"]
+		var p := MeshInstance3D.new()
+		p.mesh = pm
+		p.material_override = _vert_mat
 		p.position = w3(o["pos"], 0.0)
-		p.add_child(cyl(r, 46, COL_CHALK, Vector3(0, 23, 0)))
-		p.add_child(cyl(r + 0.6, 16, COL_KERB, Vector3(0, 26, 0)))
-		p.add_child(cyl(r * 0.4, 4, COL_KERB, Vector3(0, 47, 0)))
+		p.rotation.y = -Vector2(o["pos"]).angle() * 3.0   # vary which way each one faces
 		static_root.add_child(p)
 		post_nodes.append(p)
 
 func _build_gems() -> void:
-	var bm := BoxMesh.new()
-	bm.size = Vector3(30, 30, 30) * U
-	bm.material = mat(COL_GEM.darkened(0.1), true)
+	# the world's own gem, unshaded with its facets baked in so it glows like before
+	var gm := StandardMaterial3D.new()
+	gm.vertex_color_use_as_albedo = true
+	gm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	gm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var mesh := TrackObjects.gem_mesh(String(th.get("gem", "")), quality == 0)
 	for g in track.tokens:
 		var mi := MeshInstance3D.new()
-		mi.mesh = bm
+		mi.mesh = mesh
+		mi.material_override = gm
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		var h := track.height_at(g["s"])
 		mi.position = w3(g["pos"], h + 34.0)
-		mi.rotation = Vector3(PI / 4, 0, PI / 4)
 		mi.set_meta("base_y", mi.position.y)
 		dyn_root.add_child(mi)
 		gem_nodes.append(mi)
@@ -2494,9 +2500,13 @@ func handle_event(e: Dictionary) -> void:
 				var an := randf() * TAU
 				var sp := 80.0 + randf() * 260.0
 				var v := Vector2(cos(an), sin(an)) * sp + cv * 0.5
-				_spark(w3(p + Vector2(cos(an), sin(an)) * 16.0, 30.0), Vector3(v.x, 150 + randf() * 250, v.y) * U, 0.4 + randf() * 0.4, COL_KERB if j % 2 else COL_CHALK)
+				_spark(w3(p + Vector2(cos(an), sin(an)) * 16.0, 30.0), Vector3(v.x, 150 + randf() * 250, v.y) * U, 0.4 + randf() * 0.4, _post_bits(j))
 		"shake":
 			shake = minf(10.0, maxf(shake, e["v"]))
+
+func _post_bits(j: int) -> Color:
+	var bits: Array = th.get("post_bits", [COL_KERB, COL_CHALK])
+	return bits[j % 2]
 
 func _spark(p: Vector3, v: Vector3, life: float, col: Color, sz := 1.0) -> void:
 	if parts.size() >= SPARK_MAX:
