@@ -3,6 +3,8 @@
 # y "south". The 3D view maps (x, y) to (x, height, y) / 100.
 extends RefCounted
 
+const ObstacleSpots = preload("res://scripts/obstacle_spots.gd")
+
 const SPREAD := 1.2        # tower positions in track_defs are spread by this much (roads widened 20% in 2026-11)
 const HW := 180.0          # track half width (lane 360: car = 20% of the lane)
 const WIDEN := HW - 150.0  # layouts were drawn for HW 150: radii grow by this so the inner kerb stays put
@@ -366,30 +368,14 @@ func _visible_spot(sv: float, pos: Vector2, i: int) -> bool:
 	return not near_start(sv) and not near_jump(sv, 260.0, 120.0) and level_of[i] == 0 \
 		and not _hidden(pos, i) and not _near_crossing(pos, 0.0)
 
-# Obstacles variant: small static posts, always against a wall so the middle of the
-# road stays clear. Straights alternate sides; long bends get one on the outside wall.
+# Obstacles variant: small static posts off the racing line. tools/gen_obstacles.gd places
+# them from AI laps: never where a good line goes, always where sloppy lines (a hook or a
+# release too early or too late) run over. Rerun it after changing a layout.
 func _place_obstacles() -> void:
-	var c := 0
-	for st in straights:
-		if st["len"] < 200.0:
-			continue
-		var sv := wrap_s(st["s0"] + st["len"] * 0.5)
+	for sp in ObstacleSpots.SPOTS.get(def["name"], []):
+		var sv := wrap_s(float(sp[0]))
 		var q := point_at(sv)
-		if not _visible_spot(sv, q["pos"], q["i"]):
-			continue
-		var nrm := perp(q["dir"])
-		var off := (1.0 if c % 2 else -1.0) * (HW - 38.0)
-		obstacles.append({ "pos": q["pos"] + nrm * off, "r": 32.0, "s": sv, "gone": false })
-		c += 1
-	for k in arcs.size():
-		var ar: Dictionary = arcs[k]
-		var sv := wrap_s(ar["s0"] + ar["len"] * 0.5)
-		var q := point_at(sv)
-		var a: Anchor = anchors[k]
-		if ar["len"] < 500.0 or not _visible_spot(sv, q["pos"], q["i"]):
-			continue
-		var u: Vector2 = (q["pos"] - a.pos) / a.r
-		obstacles.append({ "pos": q["pos"] + u * (HW - 38.0), "r": 32.0, "s": sv, "gone": false })
+		obstacles.append({ "pos": q["pos"] + perp(q["dir"]) * float(sp[1]), "r": 32.0, "s": sv, "gone": false })
 
 # Collect variant: rows of gems trace one racing line, circling each tower a little
 # inside or outside the middle of the road with tangent straights between.
