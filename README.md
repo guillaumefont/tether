@@ -89,7 +89,7 @@ Captured from the current `main` web build.
 ![Main menu, with a live AI race behind it](docs/menu.png)
 
 <p>
-  <img src="docs/race-obstacles.png" alt="Race on Sidestep, Obstacles variant: four cars tethered to the same tower" width="68%">
+  <img src="docs/race-obstacles.png" alt="Race on Diamond Eight, Obstacles variant: three cars tethered to the same tower" width="68%">
   <img src="docs/portrait-collect.png" alt="Portrait mode: time trial on Starfish, Collect variant" width="30%">
 </p>
 
