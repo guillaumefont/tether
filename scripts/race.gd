@@ -79,6 +79,8 @@ class Car:
 	var prog := 0.0
 	var turn_sign := 0.0
 	var hits := 0
+	var clean := true   # no rail or post touched since the last hook (feedback only)
+	var streak := 0     # bends in a row taken clean
 	var lap_hits := 0
 	var last_hits := 0
 	var chk_t := 0.0
@@ -201,9 +203,16 @@ func attach(c: Car, idx: int) -> void:
 	c.hook = idx
 	c.rope = c.pos.distance_to(a.pos)
 	c.swung = 0.0
-	c.used_anchor = idx
 	if c.human >= 0:
 		blip(1200, 0.05, "square", 0.06)
+		events.append({ "t": "hook", "h": c.human })
+		# a new bend reached without touching anything since the last hook
+		if idx != c.used_anchor and c.used_anchor >= 0:
+			c.streak = c.streak + 1 if c.clean else 0
+			if c.streak > 0:
+				events.append({ "t": "clean", "h": c.human, "n": c.streak })
+		c.clean = true
+	c.used_anchor = idx
 
 func detach(c: Car, kick: bool) -> void:
 	if c.hook < 0:
@@ -216,6 +225,8 @@ func detach(c: Car, kick: bool) -> void:
 		c.vel *= RELEASE_KICK
 		c.ice = ICE_TIME
 		c.h += c.turn_sign * 0.12  # nose stays turned in, so the car slides out on ice
+		if c.human >= 0:
+			events.append({ "t": "release", "h": c.human })
 		if c.human >= 0:
 			blip(260, 0.2, "triangle", 0.07, 420)
 
@@ -306,6 +317,7 @@ func step_car(c: Car, dt: float) -> void:
 		# rubbing along the rail: steady speed loss and sparks
 		c.vel *= exp(-SCRAPE_DRAG * dt)
 		c.scrape = 0.1
+		c.clean = false
 		var spd := c.vel.length()
 		if spd > 250.0 and randf() < 0.25:
 			events.append({ "t": "wall", "pos": c.pos + nv * CR, "n": nv, "count": 1, "s": c.s })
@@ -335,6 +347,7 @@ func step_car(c: Car, dt: float) -> void:
 				events.append({ "t": "wall", "pos": c.pos + nv * CR, "n": nv, "count": mini(16, int(vn / 18.0)), "s": c.s })
 				if c.human >= 0:
 					events.append({ "t": "shake", "v": minf(10.0, vn / 40.0) })
+					events.append({ "t": "knock", "h": c.human, "v": clampf(vn / 400.0, 0.0, 1.0) })
 					blip(70, 0.15, "sine", 0.15)
 	# obstacles: static posts. Hit one and it shatters and is gone for the rest of the race;
 	# you lose a little speed and pay OBS_PEN seconds (you fly over them in a jump).
@@ -349,9 +362,11 @@ func step_car(c: Car, dt: float) -> void:
 			c.vel *= 0.8
 			c.hits += 1
 			c.lap_hits += 1
+			c.clean = false
 			events.append({ "t": "post", "k": k, "pos": o["pos"], "vel": c.vel, "s": o["s"] })
 			if c.human >= 0:
 				events.append({ "t": "shake", "v": 6.0 })
+				events.append({ "t": "smash", "h": c.human })
 				blip(90, 0.15, "sine", 0.15)
 				blip(330, 0.2, "square", 0.05, -120)
 	c.seg = nr["i"]
@@ -391,6 +406,7 @@ func step_car(c: Car, dt: float) -> void:
 				blip(330, 0.25, "triangle", 0.06, 300)
 		else:
 			c.fall = 0.9
+			c.clean = false
 			c.fall_s = j["s"] - 260.0
 			c.vel = Vector2.ZERO
 			detach(c, false)

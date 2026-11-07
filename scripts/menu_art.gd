@@ -62,7 +62,7 @@ class Logo extends Control:
 
 # Hand-drawn icons, all in one stroke style so they read as a set.
 # Cards: "flag" (campaign), "watch" (time attack), "duel" (two players).
-# Buttons: gear, back, prev, next, play, retry, home, check, pause, ghost, spark, music, sound.
+# Buttons: gear, back, prev, next, play, retry, home, check, pause, ghost, spark, music, sound, vibrate.
 # Variants: standard, reverse, obstacles, collect.
 # Themes: snow, forest, rock, sand, and lock for one not yet unlocked.
 class Icon extends Control:
@@ -142,6 +142,14 @@ class Icon extends Control:
 				draw_colored_polygon(pts, col)
 				draw_circle(c + Vector2(s * 0.26, -s * 0.26), s * 0.05, col2)
 				draw_circle(c + Vector2(-s * 0.24, s * 0.26), s * 0.04, col2)
+			"vibrate":    # a phone with buzz marks either side
+				var r := Rect2(c + Vector2(-s * 0.14, -s * 0.3), Vector2(s * 0.28, s * 0.6))
+				draw_rect(r, col, false, lw)
+				draw_line(c + Vector2(-s * 0.05, s * 0.2), c + Vector2(s * 0.05, s * 0.2), col, lw, true)
+				for sd in [-1.0, 1.0]:
+					var x: float = c.x + sd * s * 0.26
+					draw_polyline(PackedVector2Array([Vector2(x, c.y - s * 0.16), Vector2(x + sd * s * 0.06, c.y - s * 0.06),
+						Vector2(x, c.y + s * 0.04), Vector2(x + sd * s * 0.06, c.y + s * 0.14)]), col2, lw * 0.8, true)
 			"music":
 				var h1 := c + Vector2(-s * 0.12, s * 0.2)
 				var h2 := c + Vector2(s * 0.22, s * 0.12)

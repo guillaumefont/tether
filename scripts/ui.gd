@@ -10,6 +10,7 @@ const Defs = preload("res://scripts/track_defs.gd")
 const Art = preload("res://scripts/menu_art.gd")
 const Campaign = preload("res://scripts/campaign.gd")
 const MonoLabel = preload("res://scripts/mono_label.gd")
+const Settings = preload("res://scripts/settings.gd")
 
 const TIPS := [
 	"Hook the tower as you enter the bend, let go when your nose points down the exit.",
@@ -26,16 +27,18 @@ signal menu_pressed
 signal next_pressed
 signal pause_pressed
 signal pause_action(what: String)   # resume | restart | exit
-# music_vol / sfx_vol (0..100), ghost / effects (bool)
+# music_vol / sfx_vol (0..100), quality (0..2), ghost / haptics (bool)
 signal option_changed(key: String, value)
 signal skip_pressed       # leave the tutorial
 signal tutorial_pressed   # replay the tutorial (settings screen)
+signal reward_popped(i: int)  # a results badge (record, medal) just popped in: sound + buzz
 
 const MINIMAP := 110.0
 const C_PANEL := Color(0.035, 0.075, 0.082, 0.92)
 const C_FG := Color("#f3efe6")
 const C_MUTED := Color("#9fb3b0")
 const C_POST := Color("#f2b134")
+const C_GAIN := Color("#5fd38d")   # time gained on a record (same green as the lap delta)
 const C_ASPHALT := Color("#393e46")
 
 var f_display: Font = preload("res://fonts/Bungee-Regular.ttf")
@@ -101,6 +104,11 @@ func _ready() -> void:
 	root.theme = _make_theme()
 	add_child(root)
 
+	speed_lines = SpeedLines.new()
+	speed_lines.set_anchors_preset(Control.PRESET_FULL_RECT)
+	speed_lines.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(speed_lines)
+
 	hud = Control.new()
 	hud.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	hud.offset_left = 16; hud.offset_right = -16; hud.offset_top = 10
@@ -139,6 +147,18 @@ func _ready() -> void:
 	big.add_theme_constant_override("shadow_offset_y", 6)
 	big.add_theme_constant_override("shadow_offset_x", 0)
 	root.add_child(big)
+
+	streak = Label.new()
+	streak.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	streak.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	streak.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	streak.add_theme_font_override("font", f_display)
+	streak.add_theme_font_size_override("font_size", 26)
+	streak.add_theme_color_override("font_color", Art.C_ICE)
+	streak.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.45))
+	streak.add_theme_constant_override("shadow_offset_y", 3)
+	streak.modulate.a = 0.0
+	root.add_child(streak)
 
 	minimap = TrackMap.new()
 	minimap.bg = true
@@ -371,6 +391,10 @@ func _build_results() -> void:
 	results_panel.custom_minimum_size.x = 440
 	res_title = _label("Finish", 30, C_POST, f_display)
 	vb.add_child(res_title)
+	res_rewards = HFlowContainer.new()
+	res_rewards.add_theme_constant_override("h_separation", 8)
+	res_rewards.add_theme_constant_override("v_separation", 8)
+	vb.add_child(res_rewards)
 	res_table = _grid(3)
 	res_table.add_theme_constant_override("h_separation", 16)
 	vb.add_child(res_table)
@@ -441,7 +465,7 @@ func _build_pause() -> void:
 	pause_btn.focus_mode = Control.FOCUS_NONE
 	pause_btn.pressed.connect(func(): pause_pressed.emit())
 
-# options: { music_vol, sfx_vol: 0..100, ghost: bool or null when there is no ghost, effects: bool }
+# options: { music_vol, sfx_vol: 0..100, quality: 0..2, ghost / haptics: bool, or null to hide the toggle }
 func show_pause(sub: String, opts: Dictionary) -> void:
 	_pause_sub.text = sub
 	set_options(_pause_o, opts)
@@ -546,7 +570,7 @@ func _volume_row(key: String, title: String) -> Array:
 		option_changed.emit(key, int(x)))
 	return [row, sl, v]
 
-# music and sound sliders, then Ghost car / Effects toggles
+# music and sound sliders, the Graphics quality button, then Ghost car / Vibration toggles
 func _make_options() -> Dictionary:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
@@ -555,8 +579,20 @@ func _make_options() -> Dictionary:
 		var r := _volume_row(s[0], s[1])
 		box.add_child(r[0])
 		o["sliders"][s[0]] = [r[1], r[2]]
+	# one tap steps Low -> Medium -> High -> Low
+	var q := icon_button("spark", "GRAPHICS  MEDIUM", "card", false, 50)
+	q.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	q.focus_mode = Control.FOCUS_NONE
+	q.tooltip_text = "Lower it if the game stutters or the phone gets warm"
+	q.set_meta("q", 1)
+	q.pressed.connect(func():
+		var v: int = (int(q.get_meta("q")) + 1) % Settings.QUALITY_NAMES.size()
+		_set_quality_btn(q, v)
+		option_changed.emit("quality", v))
+	box.add_child(q)
+	o["quality"] = q
 	var grid := _grid(2)
-	for t in [["ghost", "GHOST", "ghost"], ["effects", "EFFECTS", "spark"]]:
+	for t in [["ghost", "GHOST", "ghost"], ["haptics", "VIBRATION", "vibrate"]]:
 		var b := icon_button(t[2], t[1], "card", false, 50)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.focus_mode = Control.FOCUS_NONE
@@ -580,7 +616,15 @@ func _set_toggle(b: Button, on: bool) -> void:
 	var ic: Art.Icon = b.get_meta("icon")
 	ic.col = C_POST if on else Color(C_MUTED, 0.6)
 
+func _set_quality_btn(b: Button, v: int) -> void:
+	b.set_meta("q", v)
+	var l: Label = b.get_meta("label")
+	l.text = "GRAPHICS  %s" % Settings.QUALITY_NAMES[v]
+	var ic: Art.Icon = b.get_meta("icon")
+	ic.col = C_POST if v > 0 else Color(C_MUTED, 0.8)
+
 func set_options(o: Dictionary, opts: Dictionary) -> void:
+	_set_quality_btn(o["quality"], int(opts.get("quality", 1)))
 	for key in o["sliders"]:
 		var sl: HSlider = o["sliders"][key][0]
 		var v: Label = o["sliders"][key][1]
@@ -594,6 +638,7 @@ func set_options(o: Dictionary, opts: Dictionary) -> void:
 			_set_toggle(b, opts[key])
 			shown += 1
 	o["grid"].columns = maxi(1, shown)
+	o["grid"].visible = shown > 0
 
 # ---------------------------------------------------------------- settings (home screen)
 var settings_ov: Control
@@ -894,6 +939,63 @@ func set_hud_tag(key: String, label: String, col: Color) -> void:
 		hud_tags[key][0].add_theme_color_override("font_color", col)
 		hud_tags[key][1].border_color = col
 
+# Faint wind streaks round the edge of the screen for a moment after letting go,
+# pointing out from the car. amount 0..1 (WorldView.speed_kick).
+var speed_lines: SpeedLines
+class SpeedLines extends Control:
+	var amount := 0.0
+	var center := Vector2.ZERO
+	var _angles := PackedFloat32Array()
+	var _t := 0.0
+	func set_fx(a: float, c: Vector2, dt: float) -> void:
+		amount = a
+		center = c
+		_t -= dt
+		if a > 0.04 and _t <= 0.0:   # re-scatter the streaks ~20 times a second so they flicker
+			_t = 0.05
+			_angles.resize(26)
+			for k in _angles.size():
+				_angles[k] = randf() * TAU
+		visible = a > 0.04
+		if visible:
+			queue_redraw()
+	func _draw() -> void:
+		var diag := size.length()
+		for k in _angles.size():
+			var d := Vector2.from_angle(_angles[k])
+			var r0 := diag * (0.3 + 0.08 * fmod(k * 0.618, 1.0))
+			var r1 := r0 + diag * (0.08 + 0.12 * amount)
+			# a faint dark edge under a light streak, so it reads on snow and on sand
+			var w := 2.0 + 1.5 * amount
+			draw_line(center + d * r0, center + d * r1, Color(0.05, 0.1, 0.15, 0.16 * amount), w + 2.5, true)
+			draw_line(center + d * r0, center + d * r1, Color(1, 1, 1, 0.42 * amount), w, true)
+
+# "CLEAN x3" under the HUD after bends taken without touching a rail or a post
+var streak: Label
+var _streak_tw: Tween
+func show_streak(n: int) -> void:
+	# just under the centre timer column (timer + medal gap)
+	streak.offset_top = maxf(72.0, hud.position.y + hud_mid.position.y + hud_mid.size.y + 6.0)
+	streak.offset_bottom = streak.offset_top + 40.0
+	streak.text = "CLEAN  ×%d" % n
+	# warmer and bigger as the run of clean bends grows
+	var col: Color = Art.C_ICE.lerp(C_POST, clampf((n - 2) / 6.0, 0.0, 1.0))
+	streak.add_theme_color_override("font_color", col)
+	streak.pivot_offset = Vector2(streak.size.x * 0.5, 20.0)
+	if _streak_tw:
+		_streak_tw.kill()
+	streak.modulate.a = 1.0
+	streak.scale = Vector2.ONE * 1.35
+	_streak_tw = create_tween()
+	_streak_tw.tween_property(streak, "scale", Vector2.ONE * minf(1.25, 1.0 + n * 0.03), 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_streak_tw.tween_interval(0.8)
+	_streak_tw.tween_property(streak, "modulate:a", 0.0, 0.4)
+
+func hide_streak() -> void:
+	if _streak_tw:
+		_streak_tw.kill()
+	streak.modulate.a = 0.0
+
 func set_big(bb: String, size := 120) -> void:
 	# shrink long words (FINISH, 2nd...) to fit a narrow portrait screen
 	var room := root.get_viewport_rect().size.x * 0.9
@@ -988,7 +1090,12 @@ func hide_coach() -> void:
 		_coach_foot.modulate.a = 1.0
 
 # ---------------------------------------------------------------- results
-func show_results(title: String, rows: Array, note: String, has_next := false, cols := 3) -> void:
+# rewards: [{ text, col }], badges that pop in one after the other under the title
+# (new record, medal earned); the title bounces when there is any
+var res_rewards: HFlowContainer
+var _res_tw: Tween
+func show_results(title: String, rows: Array, note: String, has_next := false, cols := 3, rewards: Array = []) -> void:
+	_show_rewards(rewards)
 	next_btn.visible = has_next
 	# with a next event waiting, that is the main action and Again steps back
 	res_again.set_meta("look", "card" if has_next else "go")
@@ -1015,6 +1122,62 @@ func show_results(title: String, rows: Array, note: String, has_next := false, c
 	hud.visible = false
 	minimap.visible = false
 	big.text = ""
+
+func _show_rewards(rewards: Array) -> void:
+	for ch in res_rewards.get_children():
+		ch.queue_free()
+	res_rewards.visible = not rewards.is_empty()
+	if _res_tw:
+		_res_tw.kill()
+	res_title.scale = Vector2.ONE
+	if rewards.is_empty():
+		return
+	_res_tw = create_tween()
+	_res_tw.tween_interval(0.25)
+	for i in rewards.size():
+		var r: Dictionary = rewards[i]
+		var b := _reward_badge(String(r["text"]), r["col"])
+		b.modulate.a = 0.0
+		res_rewards.add_child(b)
+		_res_tw.tween_callback(func():
+			b.pivot_offset = b.size * 0.5
+			b.scale = Vector2.ONE * 0.3
+			b.modulate.a = 1.0
+			reward_popped.emit(i))
+		_res_tw.tween_property(b, "scale", Vector2.ONE, 0.32).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		if i == 0:   # the title answers the first badge with a little bounce
+			_res_tw.parallel().tween_callback(func(): res_title.pivot_offset = Vector2(0, res_title.size.y * 0.5))
+			_res_tw.parallel().tween_property(res_title, "scale", Vector2.ONE * 1.12, 0.12)
+			_res_tw.tween_property(res_title, "scale", Vector2.ONE, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		_res_tw.tween_interval(0.2)
+
+# a pill with a lit medal disc and a word in the reward colour
+func _reward_badge(text: String, col: Color) -> PanelContainer:
+	var p := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(col.darkened(0.75), 0.9)
+	sb.border_color = col
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(18)
+	sb.content_margin_left = 10; sb.content_margin_right = 14
+	sb.content_margin_top = 4; sb.content_margin_bottom = 4
+	p.add_theme_stylebox_override("panel", sb)
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 8)
+	var disc := Control.new()
+	disc.custom_minimum_size = Vector2(22, 22)
+	disc.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	disc.draw.connect(func():
+		var c := disc.size * 0.5
+		disc.draw_circle(c, 10.0, col)
+		disc.draw_circle(c, 6.0, col.lightened(0.45))
+		disc.draw_circle(c + Vector2(-2.5, -2.5), 2.0, Color(1, 1, 1, 0.8)))
+	hb.add_child(disc)
+	var l := _label(text, 17, col.lightened(0.25), f_display)
+	l.autowrap_mode = TextServer.AUTOWRAP_OFF
+	hb.add_child(l)
+	p.add_child(hb)
+	return p
 
 static func fmt(t: float) -> String:
 	t = snappedf(t, 0.1)
