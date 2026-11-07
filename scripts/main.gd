@@ -14,6 +14,7 @@ const Settings = preload("res://scripts/settings.gd")
 const Campaign = preload("res://scripts/campaign.gd")
 const Themes = preload("res://scripts/themes.gd")
 const Tutorial = preload("res://scripts/tutorial.gd")
+const Cosmetics = preload("res://scripts/cosmetics.gd")
 
 var view: WorldView
 var ui: UI
@@ -37,6 +38,7 @@ var new_record := false
 var touch_owner := {}        # touch index -> player
 var paused := false
 var themes_before: Array = []   # themes unlocked when the race started
+var looks_before: Array = []    # garage items open when the race started
 var building := false        # a loading screen is building the next track
 var tutorial := false        # the run is the tutorial (Defs.TUTORIAL), driven by `tut`
 var tut: Tutorial = null
@@ -163,6 +165,30 @@ func _to_menu() -> void:
 	ui.show_menu()
 	_start_attract()
 
+# Player 1's car wears the Garage look (paint is also their colour on the HUD and the
+# results). A rival whose colour is too close to it swaps to a spare one so cars stay
+# easy to tell apart. Looks only: handling is the same whatever the paint.
+func _dress(r: Race) -> Dictionary:
+	var lk := Cosmetics.player_look()
+	var me = r.cars.filter(func(c): return c.human == 0)
+	if me.is_empty():
+		return {}
+	me[0].color = lk["color"]
+	var spare := [Color("#f2b134"), Color("#4fc3e8"), Color("#e2574c"), Color("#a98cf0"), Color("#5fd38d"), Color("#eef2f5")]
+	var taken: Array = r.cars.map(func(c): return c.color)
+	for c in r.cars:
+		if c == me[0] or not _close(c.color, lk["color"]):
+			continue
+		for sc in spare:
+			if not taken.any(func(t): return _close(t, sc)):
+				c.color = sc
+				taken.append(sc)
+				break
+	return { 0: lk }
+
+static func _close(a: Color, b: Color) -> bool:
+	return Vector3(a.r - b.r, a.g - b.g, a.b - b.b).length() < 0.22
+
 func _start_attract() -> void:
 	attract_i = randi() % Defs.TRACKS.size() if attract_i < 0 else (attract_i + 1) % Defs.TRACKS.size()
 	track = TrackData.new(Defs.TRACKS[attract_i], "standard")
@@ -276,8 +302,9 @@ func new_race(built: TrackData = null) -> void:
 	view.visible = true
 	race = Race.new(track, mode, humans)
 	themes_before = Themes.ORDER.filter(func(t): return Campaign.theme_unlocked(t))
+	looks_before = Cosmetics.open_ids()
 	ghost = Records.get_ghost(rec_key()) if mode == "trial" and not tutorial else []
-	view.setup_cars(race, mode == "trial" and not tutorial)
+	view.setup_cars(race, mode == "trial" and not tutorial, _dress(race))
 	new_record = false
 	start_tier = Medals.trial_tier(cur_def()["name"], variant, Records.get_best(rec_key()))
 	countdown = 3.2
@@ -648,6 +675,13 @@ func _show_tutorial_end() -> void:
 
 # a campaign world just finished: say which theme it opened
 func _unlock_note() -> String:
+	var now := Cosmetics.open_ids()
+	var fresh := Cosmetics.new_names(looks_before, now)
+	looks_before = now
+	var garage := "New in the Garage: %s!  " % fresh if fresh != "" else ""
+	return _theme_note() + garage
+
+func _theme_note() -> String:
 	for t in Themes.ORDER:
 		if Campaign.theme_unlocked(t) and not themes_before.has(t):
 			themes_before.append(t)
@@ -674,6 +708,8 @@ func _run_demo(arg: String) -> void:
 		["menu_campaign", func(): ui.menu.kind = "campaign"; ui.menu.world = -1; ui.menu.focus = 0; ui.menu.show_list()],
 		["menu_world", func(): ui.menu.kind = "campaign"; ui.menu.world = 0; ui.menu.focus = 0; ui.menu.show_list()],
 		["menu_attack", func(): ui.menu.kind = "attack"; ui.menu.focus = 8; ui.menu.show_list()],
+		["menu_garage", func(): ui.menu.show_garage()],
+		["menu_garage_livery", func(): ui.menu.show_garage(); var g = ui.menu.body.find_children("*", "BoxContainer", true, false).filter(func(n): return n.has_method("_set_tab"))[0]; g._set_tab("livery"); g._pick(Cosmetics.find("livery", "checker"))],
 		["loading", func(): ui.show_loading(Defs.TRACKS[track_idx]["name"]); ui.set_loading_progress(0.6)],
 		["menu_event", func():
 			ui.loading.visible = false

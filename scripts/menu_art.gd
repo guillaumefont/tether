@@ -225,6 +225,35 @@ class Icon extends Control:
 				draw_circle(c + Vector2(s * 0.12, -s * 0.14), s * 0.15, C_AMBER)
 				draw_colored_polygon(PackedVector2Array([Vector2(c.x - s * 0.4, c.y + s * 0.3), Vector2(c.x - s * 0.12, c.y + s * 0.02), Vector2(c.x + s * 0.18, c.y + s * 0.3)]), Color("#e6c891"))
 				draw_colored_polygon(PackedVector2Array([Vector2(c.x - s * 0.05, c.y + s * 0.3), Vector2(c.x + s * 0.2, c.y + s * 0.1), Vector2(c.x + s * 0.4, c.y + s * 0.3)]), Color("#c99e64"))
+			"car":        # the garage: a racer from the side
+				var y0 := c.y + s * 0.12
+				draw_colored_polygon(PackedVector2Array([Vector2(c.x - s * 0.42, y0), Vector2(c.x - s * 0.42, y0 - s * 0.16),
+					Vector2(c.x - s * 0.16, y0 - s * 0.18), Vector2(c.x - s * 0.06, y0 - s * 0.34), Vector2(c.x + s * 0.14, y0 - s * 0.34),
+					Vector2(c.x + s * 0.24, y0 - s * 0.18), Vector2(c.x + s * 0.42, y0 - s * 0.12), Vector2(c.x + s * 0.42, y0)]), col)
+				draw_colored_polygon(PackedVector2Array([Vector2(c.x - s * 0.03, y0 - s * 0.29), Vector2(c.x + s * 0.12, y0 - s * 0.29),
+					Vector2(c.x + s * 0.18, y0 - s * 0.18), Vector2(c.x - s * 0.09, y0 - s * 0.18)]), Color("#1a2330"))
+				draw_rect(Rect2(Vector2(c.x - s * 0.42, y0 - s * 0.12), Vector2(s * 0.84, s * 0.035)), col2)
+				for wx in [-0.24, 0.24]:
+					draw_circle(Vector2(c.x + s * wx, y0), s * 0.11, Color("#1a2330"))
+					draw_circle(Vector2(c.x + s * wx, y0), s * 0.05, col2)
+			"paint":      # a paint drop
+				var pts := PackedVector2Array()
+				for k in 33:
+					var a := PI * k / 32.0
+					pts.append(c + Vector2(cos(a) * s * 0.26, s * 0.12 + sin(a) * s * 0.26))
+				pts.append(c + Vector2(0, -s * 0.38))
+				draw_colored_polygon(pts, col)
+				draw_circle(c + Vector2(-s * 0.09, s * 0.12), s * 0.06, Color(1, 1, 1, 0.55))
+			"livery":     # a car seen from above with two stripes
+				var r := Rect2(c - Vector2(s * 0.2, s * 0.38), Vector2(s * 0.4, s * 0.76))
+				draw_rect(r, col)
+				for sx in [-0.07, 0.04]:
+					draw_rect(Rect2(Vector2(c.x + s * sx, r.position.y), Vector2(s * 0.03, r.size.y)), col2)
+				draw_rect(Rect2(c + Vector2(-s * 0.15, -s * 0.16), Vector2(s * 0.3, s * 0.14)), Color("#1a2330"))
+			"rope":       # a coil of rope
+				for k in 3:
+					draw_arc(c + Vector2(0, s * (0.06 * k - 0.06)), s * (0.3 - k * 0.07), 0, TAU, 32, col, lw * 0.8, true)
+				draw_line(c + Vector2(s * 0.3, 0), c + Vector2(s * 0.42, s * 0.3), col, lw * 0.8, true)
 			"lock":
 				var body_r := Rect2(c + Vector2(-s * 0.22, -s * 0.04), Vector2(s * 0.44, s * 0.34))
 				draw_arc(c + Vector2(0, -s * 0.06), s * 0.15, PI, TAU, 16, Color(C_ICE_DIM, 0.8), lw, true)

@@ -30,3 +30,5 @@ jobs:
         run: ./godot --headless --path . --script tests/wall_test.gd
       - name: Tutorial can be finished
         run: ./godot --headless --path . --script tests/tutorial_test.gd
+      - name: Garage items are well formed and looks only
+        run: ./godot --headless --path . --script tests/cosmetics_test.gd
