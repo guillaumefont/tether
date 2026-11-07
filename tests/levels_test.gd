@@ -36,5 +36,18 @@ func _init() -> void:
 		if e["track"] < 0 or not Defs.VARIANTS.any(func(v): return v[0] == e["variant"]) or not e["mode"] in ["trial", "race"]:
 			bad += 1
 			printerr("bad campaign event %d: %s" % [i, str(e)])
+	# no event repeats another one (each is its own medal), and every world has twelve
+	var seen := {}
+	for i in Campaign.count():
+		var e := Campaign.event(i)
+		var k := "%s/%s/%s" % [e["name"], e["variant"], e["mode"]]
+		if seen.has(k):
+			bad += 1
+			printerr("campaign event %d repeats event %d: %s" % [i, seen[k], k])
+		seen[k] = i
+	for c in Campaign.CHAPTERS.size():
+		if Campaign.chapter_size(c) != 12:
+			bad += 1
+			printerr("campaign world %d has %d events" % [c, Campaign.chapter_size(c)])
 	printerr("BAD: ", bad)
 	quit(1 if bad else 0)
