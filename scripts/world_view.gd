@@ -1531,7 +1531,103 @@ func _blob_shadow() -> MeshInstance3D:
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return mi
 
-func _make_car(col: Color, ghost := false) -> Node3D:
+# ---------------------------------------------------------------- garage
+# The garage stage: one car on a snowy (or the theme's) plinth, tethered to a short post,
+# turning slowly. Lives in its own SubViewport; no track is built.
+var showroom_rig: Node3D
+
+func showroom(look: Dictionary, theme: String) -> void:
+	th = Themes.get_theme(theme)
+	if showroom_rig:
+		showroom_rig.queue_free()
+	env.background_color = Color(0.05, 0.11, 0.17)
+	env.glow_enabled = false   # in a small SubViewport the glow washes the whole frame
+	env.ambient_light_color = th["ambient"]
+	env.ambient_light_energy = 0.75
+	light.light_color = th["sun"]
+	light.rotation = Vector3(deg_to_rad(-50), deg_to_rad(-30), 0)
+	var rig := Node3D.new()
+	dyn_root.add_child(rig)
+	showroom_rig = rig
+	var ground: Color = th["ground"]
+	var plinth := ground.darkened(0.12) if ground.get_luminance() < 0.6 else ground.darkened(0.42)
+	rig.add_child(cyl(205, 8, plinth, Vector3(0, -4.5, -102), 215.0, 48))
+	var car := _make_car(look["color"], false, look)
+	rig.add_child(car)
+	# the rope: from the car's roof out to a little capstan post on the plinth
+	var post := cyl(12, 70, Color("#2a2f36"), Vector3(0, 35, -205), -1.0, 12)
+	rig.add_child(post)
+	rig.add_child(cyl(16, 10, Color("#6b4a2e"), Vector3(0, 66, -205), -1.0, 12))
+	var rope := cyl(2.6, 180, look.get("rope", look["color"]), Vector3(0, 62, -112), -1.0, 8)
+	rope.set_surface_override_material(0, mat(look.get("rope", look["color"]), true))
+	rope.rotation.x = PI / 2
+	rig.add_child(rope)
+	# turn round the middle of the rope
+	rig.position = Vector3(0, 0, -1.02)
+	for ch in rig.get_children():
+		ch.position.z += 1.02
+	camera.fov = 34
+	camera.position = Vector3(0, 2.3, 3.2)
+	camera.look_at(Vector3(0, 0.1, -1.02))
+	rig.rotation.y = showroom_turn
+
+var showroom_turn := 0.9
+
+func turn_showroom(dt: float) -> void:
+	showroom_turn = fmod(showroom_turn + dt * 0.35, TAU)
+	if showroom_rig:
+		showroom_rig.rotation.y = showroom_turn
+
+# a paint finish (Cosmetics): gloss is the plain toy-car paint
+static func finish_paint(c: Color, finish: String) -> Material:
+	var m := paint(c)
+	match finish:
+		"metallic":
+			m.metallic = 0.55; m.roughness = 0.3; m.metallic_specular = 0.8
+			m.albedo_color = c.lightened(0.08)
+		"matte":
+			m.roughness = 0.85; m.clearcoat_enabled = false; m.rim = 0.15; m.metallic_specular = 0.3
+		"pearl":
+			m.roughness = 0.22; m.clearcoat = 1.0; m.rim = 0.7; m.rim_tint = 0.1
+		"chrome":
+			return chrome_paint(c)
+		"neon":
+			m.emission_enabled = true; m.emission = c; m.emission_energy_multiplier = 0.55
+			m.roughness = 0.25
+	return m
+
+# Chrome without reflection probes (cheap on phones): the reflected view ray picks a
+# colour from a made-up studio sky (bright top, a hard dark horizon line, dim ground), so
+# the panels get the sharp light/dark bands that read as a mirror finish.
+static var _chrome_shader: Shader
+static func chrome_paint(c: Color) -> ShaderMaterial:
+	if _chrome_shader == null:
+		_chrome_shader = Shader.new()
+		_chrome_shader.code = """
+shader_type spatial;
+render_mode specular_schlick_ggx;
+uniform vec3 tint : source_color;
+void fragment() {
+	vec3 r = reflect(-VIEW, NORMAL);
+	vec3 rw = (INV_VIEW_MATRIX * vec4(r, 0.0)).xyz;
+	float y = rw.y;
+	vec3 sky = mix(vec3(0.62, 0.70, 0.80), vec3(1.0, 1.0, 1.0), smoothstep(0.05, 0.7, y));
+	vec3 gnd = mix(vec3(0.42, 0.40, 0.40), vec3(0.16, 0.16, 0.17), smoothstep(0.0, -0.6, y));
+	vec3 env = mix(gnd, sky, smoothstep(-0.02, 0.03, y));
+	env = mix(env, vec3(0.05), (1.0 - smoothstep(0.0, 0.06, abs(y - 0.02))) * 0.8);
+	ALBEDO = vec3(0.0);
+	EMISSION = env * tint * 0.95;
+	METALLIC = 1.0;
+	ROUGHNESS = 0.15;
+	SPECULAR = 0.8;
+}
+"""
+	var m := ShaderMaterial.new()
+	m.shader = _chrome_shader
+	m.set_shader_parameter("tint", c)
+	return m
+
+func _make_car(col: Color, ghost := false, look := {}) -> Node3D:
 	var root := Node3D.new()
 	var chassis := Node3D.new()   # follows the road slope
 	root.add_child(chassis)
@@ -1545,8 +1641,11 @@ func _make_car(col: Color, ghost := false) -> Node3D:
 	else:
 		chassis.add_child(_blob_shadow())
 	if not ghost:
-		var top := paint(col)
-		var low := paint(col.darkened(0.38), 0.5)
+		var finish := String(look.get("finish", "gloss"))
+		var top := finish_paint(col, finish)
+		var low: Material = finish_paint(col.darkened(0.38), "matte" if finish == "matte" else "gloss")
+		if finish != "matte":
+			(low as StandardMaterial3D).roughness = 0.5
 		var glass := paint(Color("#1a2330"), 0.08)
 		glass.metallic = 0.4
 		# a low painted racer body with a bubble cab; the theme kit adds the rest
@@ -1577,6 +1676,7 @@ func _make_car(col: Color, ghost := false) -> Node3D:
 			"rock": _car_kit_rock(chassis, parts_list, top, dark)
 			"sand": _car_kit_sand(chassis, parts_list, top, dark)
 			"snow": _car_kit_snow(chassis, parts_list, top, dark)
+		_livery(parts_list, look, col)
 	for p in parts_list:
 		if ghost:
 			p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -1746,9 +1846,161 @@ func _car_kit_sand(chassis: Node3D, parts_list: Array, top: Material, dark: Mate
 	parts_list.append(pbox(Vector3(18, 12, 1.5), top, Vector3(-43, 100, -24)))  # flag
 	var sand := pbox(Vector3(22, 3, 40), paint(Color("#e6c891"), 0.95), Vector3(46, 32.5, 4))  # sand on the bonnet
 	sand.rotation.z = -0.21   # follows the bonnet slope
+	sand.set_meta("bonnet", true)   # a livery on the bonnet sweeps it off
 	parts_list.append(sand)
 
-func setup_cars(race: Race, has_ghost: bool) -> void:
+# ---------------------------------------------------------------- liveries
+# Thin painted panels laid just proud of the body (same shape for every theme kit).
+# The body: rear deck y 36 (x -58..-26), glasshouse x -26..30, roof top y 53.5
+# (x -26..10), bonnet sloping from (30, 36) to (67, 28), sides at z ±30 (y 22..36).
+const BONNET_A := -0.2129   # the bonnet's slope (radians about z)
+const BONNET_LIVERIES := ["stripes", "checker", "glow"]
+
+static func _bonnet_at(x: float) -> float:
+	return 36.0 - (x - 30.0) * 8.0 / 37.0
+
+# a flat strip lying on the bonnet slope, centred at x along the car
+static func _on_bonnet(size: Vector3, m: Material, x: float, z: float) -> MeshInstance3D:
+	var b := pbox(size, m, Vector3(x, _bonnet_at(x) + 0.35, z))
+	b.rotation.z = BONNET_A
+	return b
+
+func _livery(parts_list: Array, look: Dictionary, col: Color) -> void:
+	var lv := String(look.get("livery", "none"))
+	if lv == "none" or lv == "":
+		return
+	if lv in BONNET_LIVERIES:
+		for p in parts_list.duplicate():
+			if p.has_meta("bonnet"):
+				parts_list.erase(p)
+				p.queue_free()
+	var ac: Color = look.get("accent", Color("#f4f1ea"))
+	var am := finish_paint(ac, "gloss")
+	match lv:
+		"stripes":   # two stripes nose to tail over the bonnet, roof, deck and wing
+			for z in [-7.5, 7.5]:
+				parts_list.append(_on_bonnet(Vector3(37.8, 0.6, 7), am, 48.5, z))
+				parts_list.append(pbox(Vector3(36.4, 0.6, 7), am, Vector3(-8, 53.8, z)))
+				parts_list.append(pbox(Vector3(32, 0.6, 7), am, Vector3(-42, 36.3, z)))
+				parts_list.append(pbox(Vector3(14.4, 0.6, 7), am, Vector3(-56, 43.8, z)))
+				parts_list.append(pbox(Vector3(0.6, 14, 7), am, Vector3(-58.3, 29, z)))  # down the tail
+		"number":   # a roundel with a number on the deck and on both doors
+			var disc := mat(ac)
+			var num := mat(col.darkened(0.2) if ac.get_luminance() > 0.5 else Color("#f4f1ea"))
+			parts_list.append(_roundel(Vector3(-42, 36.0, 0), "y", 12.0, disc, num))
+			for side: float in [1.0, -1.0]:
+				parts_list.append(_roundel(Vector3(-8, 29, 30.0 * side), "z" if side > 0 else "-z", 6.2, disc, num))
+		"flash":   # speed lines down both sides
+			for side: float in [1.0, -1.0]:
+				var zs := 30.3 * side
+				parts_list.append(pbox(Vector3(98, 3, 0.6), am, Vector3(-7, 32.5, zs)))
+				parts_list.append(pbox(Vector3(78, 1.6, 0.6), am, Vector3(0, 28.5, zs)))
+				parts_list.append(pbox(Vector3(52, 1.0, 0.6), am, Vector3(10, 25.5, zs)))
+			for z in [-24.0, 24.0]:   # and a short pair on the bonnet edges
+				parts_list.append(_on_bonnet(Vector3(30, 0.6, 3), am, 46.0, z))
+		"twotone":   # roof, wing and deck in the accent colour
+			parts_list.append(pbox(Vector3(36.6, 3.4, 50.6), am, Vector3(-8, 52, 0)))
+			parts_list.append(pbox(Vector3(14.6, 5.4, 66.6), am, Vector3(-56, 41, 0)))
+			parts_list.append(pbox(Vector3(32, 0.6, 60.4), am, Vector3(-42, 36.3, 0)))
+			for side: float in [1.0, -1.0]:   # and a sill along the bottom of each side
+				parts_list.append(pbox(Vector3(124, 4, 0.6), am, Vector3(4, 24, 30.3 * side)))
+		"checker":   # a chequered band across the bonnet and the wing
+			var wht := finish_paint(Color("#f4f1ea"), "gloss")
+			var blk := finish_paint(Color("#1d2229"), "gloss")
+			var sq := 7.5
+			for r in 2:
+				for k in 8:
+					var z := -26.25 + k * sq
+					var m := wht if (r + k) % 2 == 0 else blk
+					parts_list.append(_on_bonnet(Vector3(sq, 0.6, sq), m, 52.0 + r * sq * 0.978, z))
+					if r == 0:
+						parts_list.append(pbox(Vector3(14.4, 0.6, sq + 0.25), m if k % 2 else (blk if m == wht else wht), Vector3(-56, 43.8, -29.0 + k * 8.28)))
+		"bolt":   # a lightning bolt along each side and one over the roof
+			for side: float in [1.0, -1.0]:
+				for q in _bolt_quads():
+					var bp := pprism(q, 0.6, am)
+					bp.position.z = 30.3 * side * U
+					parts_list.append(bp)
+			var rb := _flat_bolt(am)
+			parts_list.append(rb)
+		"glow":   # neon strips along the body edges and under the sills
+			var nc: Color = col if String(look.get("finish", "")) == "neon" else Color("#3ff2ff")
+			var nm := mat(nc, true)
+			nm.emission_enabled = true
+			nm.emission = nc
+			nm.emission_energy_multiplier = 2.0
+			for side: float in [1.0, -1.0]:
+				parts_list.append(pbox(Vector3(88, 1.2, 1.2), nm, Vector3(-14, 36.2, 29.8 * side)))
+				parts_list.append(_on_bonnet(Vector3(37.8, 1.2, 1.2), nm, 48.5, 29.8 * side))
+				parts_list.append(pbox(Vector3(108, 2, 1.2), nm, Vector3(-4, 13, 27.5 * side)))
+			parts_list.append(pbox(Vector3(36.4, 1.0, 1.2), nm, Vector3(-8, 53.9, 0)))
+
+# a round badge with a number (Label3D) on top of it
+func _roundel(pos: Vector3, facing: String, r: float, disc: Material, num: Material) -> Node3D:
+	var n := Node3D.new()
+	n.position = pos * U
+	var d := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = r * U; cm.bottom_radius = r * U; cm.height = 0.8 * U
+	cm.radial_segments = 24 if detail == 1 else 48; cm.rings = 1
+	cm.material = disc
+	d.mesh = cm
+	n.add_child(d)
+	var lb := Label3D.new()
+	lb.text = "7"
+	lb.font = load("res://fonts/Bungee-Regular.ttf")
+	lb.font_size = 96
+	lb.outline_size = 0
+	lb.pixel_size = r * 1.25 * U / 96.0
+	lb.modulate = (num as StandardMaterial3D).albedo_color
+	lb.shaded = true
+	lb.double_sided = false
+	n.add_child(lb)
+	match facing:   # the badge is built facing up (+y): turn it onto a door
+		"y":   # on the deck: reads from behind the car
+			lb.basis = Basis(Vector3(0, 0, 1), Vector3(1, 0, 0), Vector3(0, 1, 0))
+			lb.position = Vector3(0, 0.5 * U, 0)
+		"z":
+			d.rotation.x = PI / 2
+			lb.position = Vector3(0, 0, 0.5 * U)
+		"-z":
+			d.rotation.x = PI / 2
+			lb.rotation.y = PI
+			lb.position = Vector3(0, 0, -0.5 * U)
+	return n
+
+# the side bolt as convex quads (pprism fans each profile), x along the car, y up
+static func _bolt_quads() -> Array:
+	return [
+		PackedVector2Array([Vector2(-56, 34.5), Vector2(-6, 34.5), Vector2(-2, 30.5), Vector2(-56, 31.0)]),
+		PackedVector2Array([Vector2(-6, 34.5), Vector2(2, 34.5), Vector2(8, 25.5), Vector2(0, 25.5)]),
+		PackedVector2Array([Vector2(0, 25.5), Vector2(4, 30.0), Vector2(58, 27.5), Vector2(58, 25.5)]),
+	]
+
+# a bolt lying on the roof, pointing forward
+func _flat_bolt(m: Material) -> Node3D:
+	var n := Node3D.new()
+	for q: PackedVector2Array in [
+			PackedVector2Array([Vector2(-24, -9), Vector2(-2, -3), Vector2(-2, 3), Vector2(-24, -5)]),
+			PackedVector2Array([Vector2(-6, -3), Vector2(2, -3), Vector2(-2, 5), Vector2(-10, 5)]),
+			PackedVector2Array([Vector2(-2, 3), Vector2(8, 5), Vector2(8, 9), Vector2(-2, 5)])]:
+		# profile drawn in (x, z): build it as a thin prism then lay it flat
+		var p := pprism(q, 0.6, m)
+		p.rotation.x = PI / 2
+		n.add_child(p)
+	n.position = Vector3(0, 54.0, 0) * U
+	return n
+
+# the AI rivals each wear a livery of their own so the field looks like a team grid
+static func rival_look(c) -> Dictionary:
+	var lv := { "Vesna": "stripes", "Okoro": "number", "Brandt": "flash" }
+	var col: Color = c.color
+	return { "livery": lv.get(c.name, "none"), "finish": "gloss",
+		"accent": Color("#1d2229") if col.get_luminance() > 0.62 else Color("#f4f1ea") }
+
+# looks: the cosmetic look of each human player's car (by player number); the AI rivals
+# wear their own fixed liveries (RIVAL_LIVERIES by roster colour)
+func setup_cars(race: Race, has_ghost: bool, looks := {}) -> void:
 	for cn in car_nodes:
 		cn["root"].queue_free()
 		cn["tether"].queue_free()
@@ -1757,7 +2009,8 @@ func setup_cars(race: Race, has_ghost: bool) -> void:
 		ghost_node.queue_free()
 		ghost_node = null
 	for c in race.cars:
-		var root := _make_car(c.color)
+		var lk: Dictionary = looks.get(c.human, {}) if c.human >= 0 else rival_look(c)
+		var root := _make_car(c.color, false, lk)
 		dyn_root.add_child(root)
 		var tm := CylinderMesh.new()
 		tm.top_radius = 3.5 * U
@@ -1765,7 +2018,7 @@ func setup_cars(race: Race, has_ghost: bool) -> void:
 		tm.height = 1.0
 		tm.radial_segments = 6
 		tm.rings = 1
-		tm.material = mat(c.color, true)
+		tm.material = mat(lk.get("rope", c.color), true)
 		var tether := MeshInstance3D.new()
 		tether.mesh = tm
 		tether.visible = false

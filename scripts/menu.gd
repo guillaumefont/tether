@@ -15,6 +15,8 @@ const Medals = preload("res://scripts/medals.gd")
 const Campaign = preload("res://scripts/campaign.gd")
 const Rivals = preload("res://scripts/rivals.gd")
 const Art = preload("res://scripts/menu_art.gd")
+const Garage = preload("res://scripts/garage.gd")
+const Cosmetics = preload("res://scripts/cosmetics.gd")
 # world card pictures: the land of each theme, no track (tools/gen_loading_art.gd ART_SCENERY=1)
 const WORLD_ART := {
 	"snow": preload("res://art/world_snow.jpg"), "forest": preload("res://art/world_forest.jpg"),
@@ -170,7 +172,7 @@ func _map(i: int) -> TrackData:
 func _frame() -> VBoxContainer:
 	if body:
 		body.queue_free()
-	if _scroller:
+	if _scroller and _scroller.has_meta("list"):
 		_list_scroll[_list_key()] = clampf(_scroller.scroll, 0.0, _scroller.max_scroll())
 	_pager = null
 	_scroller = null
@@ -250,6 +252,14 @@ func show_home() -> void:
 	var gap := Control.new()
 	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(gap)
+	var car: Button = ui.icon_button("car", "", "card", false, 50)
+	car.tooltip_text = "Garage"
+	car.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	car.pressed.connect(show_garage)
+	top.add_child(car)
+	var sep := Control.new()
+	sep.custom_minimum_size.x = 8
+	top.add_child(sep)
 	var gear: Button = ui.icon_button("gear", "", "card", false, 50)
 	gear.tooltip_text = "Settings"
 	gear.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -322,6 +332,17 @@ func _first_open_event() -> int:
 			return i
 	return 0
 
+# ---------------------------------------------------------------- garage
+func show_garage() -> void:
+	screen = "garage"
+	var vb := _frame()
+	var t := Cosmetics.tally()
+	_header(vb, "Garage", "%d medals  ·  %d Gold  ·  %d Pivot  ·  looks only, same car" % [t["medals"], t["golds"], t["pivots"]], func(): go_back())
+	var g := Garage.new()
+	vb.add_child(g)
+	g.setup(self, Scroller)
+	_scroller = g.scroller
+
 # ---------------------------------------------------------------- lists (one long scrolling list)
 func show_list() -> void:
 	screen = "list"
@@ -380,6 +401,7 @@ func show_list() -> void:
 	_scroller.clip_contents = true
 	_scroller.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_scroller.hold(list)
+	_scroller.set_meta("list", true)
 	vb.add_child(_scroller)
 	_scroller.scroll = _list_scroll.get(_list_key(), 0.0)
 	if focus >= 0 and focus < cards.size():
@@ -868,6 +890,7 @@ func refresh() -> void:
 		"home": show_home()
 		"list": show_list()
 		"event": show_event()
+		"garage": show_garage()
 
 # next campaign event after ev, if unlocked
 func next_event() -> Dictionary:
@@ -882,6 +905,9 @@ func next_event() -> Dictionary:
 # back button: event -> list -> home; false on the home screen (the game may then quit)
 func go_back() -> bool:
 	match screen:
+		"garage":
+			show_home()
+			return true
 		"event":
 			focus = ev["idx"]   # the list comes back with this card in view
 			if ev["kind"] == "campaign":
