@@ -20,14 +20,19 @@ SHOT_DIR=/tmp/shots/a godot --path . --resolution 1920x1080 --rendering-driver o
 
 | File | `--demo=` | Frame |
 | --- | --- | --- |
-| 01-race | `0,standard,24,race,1,snow` | race_1 |
-| 02-time-trial | `4,standard,24,trial,1,forest` | race_2 |
-| 03-obstacles | `1,obstacles,24,race,1,sand` | race_2 |
-| 04-collect | `10,collect,20,trial,1,rock` | race_2 |
-| 05-two-players | `8,standard,20,race,2,snow` | race_2 |
+| 01-race | `0,standard,24,race,1,snow` | race_2 |
+| 02-time-trial | `4,standard,24,trial,1,forest` | race_3 |
+| 03-obstacles | `1,obstacles,24,race,1,sand` | race_1 |
+| 04-collect | `10,collect,24,trial,1,rock` | race_1 |
+| 05-two-players | `8,standard,20,race,2,snow` | race_4 |
 | 06-campaign | any run | menu_world |
+| 07-garage | any run | menu_garage |
 
 README shots: `docs/race-obstacles.png` = 03 at 1280x720, `docs/pause.png` = the 03 run with
 `SHOT_PAUSE=1`, `docs/menu.png` = menu_home, `docs/portrait-collect.png` =
-`9,collect,20,trial,1,snow` at `--resolution 780x1386`, race_3, scaled to 390x693.
-The AI race shifts when gameplay or scenery code changes, so check the frames and retune.
+`9,collect,20,trial,1,snow` at `--resolution 780x1386`, race_4, scaled to 390x693.
+Since the landscape relief, one run takes 10-20 min on 4 software-GL cores; run at most two at once. The AI race shifts when gameplay or scenery code changes, so check the frames and retune.
+
+Feature graphic: `ART_THEME=snow ART_YAW=230 ART_DIST=800 ART_PITCH=22 ART_AIM_UP=-40 ART_SIZE=2048x1000`
+with `tools/gen_loading_art.gd` at `--resolution 4096x2000`, then the title (Bungee 138 px, amber)
+and tagline (Chakra Petch Medium 76 px) over a dark bottom gradient, scaled to 1024x500.
