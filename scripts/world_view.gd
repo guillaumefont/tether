@@ -1956,42 +1956,39 @@ func _make_car(col: Color, ghost := false, look := {}) -> Node3D:
 	root.set_meta("chassis", chassis)
 	return root
 
-# Snow: a short ski on each front corner and a crawler track on each back corner, in the
-# spots where the other kits put their wheels, between the road (y 0) and the belly.
+# Snow: a triangular crawler pod at each corner, where the other kits put their wheels:
+# flat along the snow, peaked up at the axle, between the road (y 0) and the belly.
+const POD_X := [-40.0, 42.0]
+const POD_Z := 36.0
+const POD_W := 14.0
+
 func _car_kit_snow(chassis: Node3D, parts_list: Array, top: Material, dark: Material) -> void:
-	var ski := paint(Color("#e9eef2"), 0.4)
 	var tread := paint(Color("#22262c"), 0.85)
 	var lug := paint(Color("#59636e"), 0.7)
-	if detail > 1:
-		_car_kit_snow_hd(chassis, ski, tread, lug, dark)
-		return
-	for side: float in [1.0, -1.0]:
-		var z := 33.0 * side
-		chassis.add_child(pbox(Vector3(38, 3, 13), ski, Vector3(44, 1.5, z)))
-		var tip := pbox(Vector3(14, 3, 13), ski, Vector3(66, 5.0, z))   # up-turned tip
-		tip.rotation.z = 0.6
-		chassis.add_child(tip)
-		chassis.add_child(pbox(Vector3(8, 12, 6), dark, Vector3(42, 9, z * 0.85)))
-		# crawler track: a trapezoid side (long top, short bottom, ends at 45°), rounded corners
-		var trk := pprism(_track_side(4), 16.0, tread)
-		trk.position.z = z * U
-		chassis.add_child(trk)
-		_track_lugs(chassis, lug, z)
-		chassis.add_child(pbox(Vector3(34, 8, 8), dark, Vector3(-34, 19, z * 0.85)))   # mount up to the body
+	for px: float in POD_X:
+		for side: float in [1.0, -1.0]:
+			var z := POD_Z * side
+			var prof := _pod_side(px, 3 if detail > 1 else 2)
+			var pod: MeshInstance3D
+			if detail > 1:
+				pod = soft_prism(prof, POD_W, 2.0, tread, 3, false)
+			else:
+				pod = pprism(prof, POD_W, tread)
+			pod.position.z = z * U
+			chassis.add_child(pod)
+			_pod_lugs(chassis, prof, px, lug, z)
+			chassis.add_child(pbox(Vector3(9, 9, 2), dark, Vector3(px, 13, z + (POD_W * 0.5 + 1.0) * side)))   # hub
+			chassis.add_child(pbox(Vector3(8, 10, 8), dark, Vector3(px, 19, z - 9.0 * side)))   # mount up to the body
 
-# crawler track side: trapezoid (long top, slightly shorter bottom); the top corners get
-# a wide curve so the ends read blunt, not pointed
-static func _track_side(segs: int) -> PackedVector2Array:
-	var h := 16.0   # between the old tall track (20) and the low one (12)
-	var inset := 5.0   # ends lean in only a little, then round off
-	return rounded(PackedVector2Array([Vector2(-64 + inset, 0), Vector2(-4 - inset, 0), Vector2(-4, h),
-			Vector2(-64, h)]), 5.0, segs * 2, PackedFloat32Array([6.0, 6.0, 8.0, 8.0]))
+# pod side: a triangle with a flat bottom and its peak over the axle, corners rounded
+static func _pod_side(px: float, segs: int) -> PackedVector2Array:
+	return rounded(PackedVector2Array([Vector2(px - 22, 0), Vector2(px + 22, 0), Vector2(px, 24)]),
+			6.0, segs * 2, PackedFloat32Array([6.0, 6.0, 7.0]))
 
-# tread stripes across the track, each trimmed to the side profile so none pokes out
-static func _track_lugs(chassis: Node3D, lug: Material, z: float) -> void:
-	var prof := _track_side(4)
-	for k in 6:
-		var lx := -54.0 + k * 8.0
+# tread stripes across a pod, each trimmed to the side profile so none pokes out
+static func _pod_lugs(chassis: Node3D, prof: PackedVector2Array, px: float, lug: Material, z: float) -> void:
+	for k in 5:
+		var lx := px - 16.0 + k * 8.0
 		var lo := INF
 		var hi := -INF
 		for i in prof.size():   # where the vertical line x = lx crosses the outline
@@ -2002,35 +1999,7 @@ static func _track_lugs(chassis: Node3D, lug: Material, z: float) -> void:
 				lo = minf(lo, y)
 				hi = maxf(hi, y)
 		if hi - lo > 4.0:
-			chassis.add_child(pbox(Vector3(3, hi - lo + 1.0, 17), lug, Vector3(lx, (lo + hi) * 0.5, z)))
-
-# artwork snow kit (detail 2): same skis and 45° crawler tracks, as rounded panels with
-# lugs (the side stays the plain trapezoid)
-func _car_kit_snow_hd(chassis: Node3D, ski: Material, tread: Material, lug: Material, dark: Material) -> void:
-	var steel := paint(Color("#9aa3ad"), 0.3)
-	steel.metallic = 0.6
-	for side: float in [1.0, -1.0]:
-		var z := 33.0 * side
-		# ski: flat run with an up-curved tip, one piece
-		var prof := PackedVector2Array([Vector2(25, 0), Vector2(56, 0)])
-		for k in range(1, 7):
-			var an := PI * 0.5 * k / 6.0
-			prof.append(Vector2(56, 9) + Vector2(sin(an), -cos(an)) * 9.0)
-		for k in range(6, 0, -1):
-			var an := PI * 0.5 * k / 6.0
-			prof.append(Vector2(56, 9) + Vector2(sin(an), -cos(an)) * 6.0)
-		prof.append(Vector2(25, 3))
-		var sk := soft_prism(prof, 13.0, 1.2, ski, 2, false)
-		sk.position.z = z * U
-		chassis.add_child(sk)
-		chassis.add_child(pbox(Vector3(8, 12, 6), dark, Vector3(42, 9, z * 0.85)))
-		chassis.add_child(pbox(Vector3(14, 1.2, 10), steel, Vector3(42, 3.4, z)))
-		# crawler track
-		var trk := soft_prism(_track_side(6), 16.0, 2.5, tread, 3, false)
-		trk.position.z = z * U
-		chassis.add_child(trk)
-		_track_lugs(chassis, lug, z)
-		chassis.add_child(pbox(Vector3(34, 8, 8), dark, Vector3(-34, 19, z * 0.85)))   # mount up to the body
+			chassis.add_child(pbox(Vector3(3, hi - lo + 1.0, POD_W + 1.0), lug, Vector3(lx, (lo + hi) * 0.5, z)))
 
 # artwork wheel (detail 2): a tyre with rounded shoulders and tread blocks, a dished
 # rim with five spokes and a hub cap on the outer face
