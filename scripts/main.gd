@@ -473,16 +473,6 @@ func _process(delta: float) -> void:
 		else:
 			view.sync(race, phase, _ghost_sample(), _aims(), dt)
 			view.update_camera(race if phase != "menu" else null, phase, dt)
-	_update_speed_lines(dt)
-
-# wind streaks out from the car for a moment after a release (not on Low graphics)
-func _update_speed_lines(dt: float) -> void:
-	var amt := view.speed_kick if view.quality > 0 and phase in ["race", "done"] and race != null else 0.0
-	var at := ui.speed_lines.size * 0.5
-	if amt > 0.04 and race.humans == 1:
-		var c = race.cars.filter(func(c): return c.human >= 0)[0]
-		at = view.camera.unproject_position(WorldView.w3(c.pos, view.track.height_at(c.s)))
-	ui.speed_lines.set_fx(amt, at, dt)
 
 func _aims() -> Dictionary:
 	var aims := {}
@@ -512,7 +502,7 @@ func _handle_events() -> void:
 			"hook":
 				Haptics.hook()
 			"release":
-				view.kick_release()
+				view.kick_release(e["h"])
 			"knock":
 				Haptics.knock(e["v"])
 			"smash":
@@ -808,8 +798,8 @@ func _run_demo(arg: String) -> void:
 		await get_tree().process_frame
 		t += get_process_delta_time()
 		_autopilot()
-		# one frame of the release speed lines and one of the clean-bend streak
-		if not fx_shots["speed"] and view.speed_kick > 0.55 and phase == "race":
+		# one frame of the release wind round the car and one of the clean-bend streak
+		if not fx_shots["speed"] and view.wind_count() > 14 and phase == "race":
 			fx_shots["speed"] = true
 			await RenderingServer.frame_post_draw
 			get_viewport().get_texture().get_image().save_png(out.path_join("fx_speed.png"))

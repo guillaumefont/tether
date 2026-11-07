@@ -900,7 +900,7 @@ func _prop_kit() -> Dictionary:
 		"hut": _shack_mesh(), "rock": _rock_mesh(), "density": 0.35, "rocks": 0.035 }
 
 # Graphics quality (Settings "quality"): 0 Low, 1 Medium, 2 High.
-#   Low:    3D drawn at 70% resolution, no shadows, glow, weather, MSAA or speed lines, half the trees
+#   Low:    3D drawn at 70% resolution, no shadows, glow, weather, MSAA or release wind, half the trees
 #   Medium: 3D at 85% resolution, shadows, glow, weather, 2x MSAA
 #   High:   full resolution, everything on, softer shadows
 # The UI is always drawn at full resolution. Tree count changes on the next track load.
@@ -917,12 +917,90 @@ func set_quality(q: int) -> void:
 	RenderingServer.directional_soft_shadow_filter_set_quality(
 		RenderingServer.SHADOW_QUALITY_SOFT_LOW if quality == 2 else RenderingServer.SHADOW_QUALITY_HARD)
 
-# Speed feel: letting go of the tether widens the view a touch for a moment
-# (and drives the UI's speed lines); see kick_release
-var _kick_t := 0.0     # target, jumps to 1 on release and decays
-var speed_kick := 0.0  # smoothed 0..1
-func kick_release() -> void:
-	_kick_t = 1.0
+# Speed feel: letting go of the tether sends a moment of wind streaming past the car:
+# thin light streaks along its sides and over the roof, left hanging in the air so the
+# car pulls away from them (not on Low graphics). wind: human index -> 0..1, decays.
+const WIND_MAX := 48
+const WIND_LIFE := 0.32
+var wind := {}
+var _wind_pool: Array = []
+var _wind_mats: Array = []     # a few alpha steps, shared (no per-instance colours, see _build_fx)
+var _winds: Array = []         # {p: Vector3, dir: Vector3, len, life}
+var _wind_acc := {}            # human -> fractional streaks owed
+func kick_release(human: int) -> void:
+	wind[human] = 1.0
+
+# streaks in the air right now (demo screenshots)
+func wind_count() -> int:
+	return _winds.size()
+
+func _build_wind() -> void:
+	_wind_pool.clear()
+	_winds.clear()
+	if _wind_mats.is_empty():
+		for k in 5:
+			var m := StandardMaterial3D.new()
+			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			m.albedo_color = Color(0.93, 0.97, 1.0, 0.16 * (k + 1))
+			m.no_depth_test = false
+			_wind_mats.append(m)
+	var box := BoxMesh.new()
+	box.size = Vector3(1, 1, 1)
+	for k in WIND_MAX:
+		var mi := MeshInstance3D.new()
+		mi.mesh = box
+		mi.visible = false
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		dyn_root.add_child(mi)
+		_wind_pool.append(mi)
+
+# called per human car from sync: new streaks while its wind lasts
+func _wind_car(c, y: float, dt: float) -> void:
+	var a: float = wind.get(c.human, 0.0)
+	if a <= 0.0:
+		return
+	a *= exp(-2.2 * dt)
+	wind[c.human] = a if a > 0.03 else 0.0
+	var spd: float = c.vel.length()
+	if quality == 0 or spd < 150.0 or c.air > 0.0 or c.fall > 0.0:
+		return
+	var owed: float = _wind_acc.get(c.human, 0.0) + dt * 70.0 * a
+	var fwd: Vector2 = c.vel / spd
+	var side := Vector2(-fwd.y, fwd.x)
+	while owed >= 1.0:
+		owed -= 1.0
+		if _winds.size() >= WIND_MAX:
+			_winds.pop_front()
+		# along either flank or just over the roof, from the nose back
+		var lat := (randf() * 2.0 - 1.0) * 34.0
+		var up := 6.0 + randf() * 22.0 if absf(lat) > 22.0 else 26.0 + randf() * 8.0
+		var p2: Vector2 = c.pos + side * lat + fwd * (randf() * 40.0 - 10.0)
+		_winds.append({ "p": w3(p2, y + ROAD_Y + up), "dir": Vector3(fwd.x, 0, fwd.y),
+			"len": (45.0 + randf() * 50.0) * clampf(spd / 600.0, 0.6, 1.3), "life": WIND_LIFE, "a": a })
+	_wind_acc[c.human] = owed
+
+func _update_wind(dt: float) -> void:
+	var alive: Array = []
+	for w in _winds:
+		w["life"] -= dt
+		if w["life"] > 0.0:
+			alive.append(w)
+	_winds = alive
+	for k in _wind_pool.size():
+		var mi: MeshInstance3D = _wind_pool[k]
+		if k >= _winds.size():
+			mi.visible = false
+			continue
+		var w: Dictionary = _winds[k]
+		var t: float = w["life"] / WIND_LIFE              # 1 when born, 0 when gone
+		var fade := sin(t * PI) * float(w["a"])          # in and out
+		mi.material_override = _wind_mats[clampi(int(fade * 5.0), 0, 4)]
+		var d: Vector3 = w["dir"]
+		var len: float = float(w["len"]) * (0.5 + 0.5 * (1.0 - t)) * U   # stretches as it trails
+		var b := Basis.looking_at(d, Vector3.UP) * Basis.from_scale(Vector3(3.0 * U, 1.5 * U, len))
+		mi.transform = Transform3D(b, Vector3(w["p"]) - d * len * 0.5)
+		mi.visible = fade > 0.03
 
 # light weather round the camera focus, one CPU particle system of tiny quads:
 # snowfall, falling leaves, drifting dust or blowing sand
@@ -1203,6 +1281,7 @@ func _build_fx() -> void:
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		dyn_root.add_child(mi)
 		spark_pool.append(mi)
+	_build_wind()
 
 	skid_mm = MultiMeshInstance3D.new()
 	var sm := MultiMesh.new()
@@ -2001,6 +2080,8 @@ static func rival_look(c) -> Dictionary:
 # looks: the cosmetic look of each human player's car (by player number); the AI rivals
 # wear their own fixed liveries (RIVAL_LIVERIES by roster colour)
 func setup_cars(race: Race, has_ghost: bool, looks := {}) -> void:
+	wind.clear()
+	_winds.clear()
 	for cn in car_nodes:
 		cn["root"].queue_free()
 		cn["tether"].queue_free()
@@ -2087,6 +2168,8 @@ func sync(race: Race, phase: String, ghost_sample, aims: Dictionary, dt: float) 
 			var root: Node3D = cn["root"]
 			var y := car_height(race, c)
 			root.position = w3(c.pos, y + ROAD_Y)
+			if c.human >= 0:
+				_wind_car(c, y, dt)
 			var spin: float = (0.9 - c.fall) * 3.0 if c.fall > 0.0 else 0.0
 			root.rotation = Vector3(0, -(c.h + spin), 0)
 			var sc := maxf(0.05, c.fall / 0.9) * 0.8 if c.fall > 0.0 else 1.0
@@ -2123,6 +2206,7 @@ func sync(race: Race, phase: String, ghost_sample, aims: Dictionary, dt: float) 
 			else:
 				ghost_node.visible = false
 	_update_fx(dt)
+	_update_wind(dt)
 
 # Visual suspension (gameplay physics untouched). The chassis follows the road slope;
 # the body sits on springs: it rolls out of the swing and the drift, squats when
@@ -2322,11 +2406,6 @@ func update_camera(race: Race, phase: String, dt: float, snap := false) -> void:
 		snowfall.visible = snowfall.emitting
 		snowfall.position = focus + Vector3(0, 5.0 if th["weather"] in ["snow", "leaves"] else 1.2, 0)
 		snowfall.emission_box_extents = Vector3(cam_vis * U * 1.1, 0.2, cam_vis * U * 0.7)
-	_kick_t *= exp(-1.6 * dt)
-	speed_kick = lerpf(speed_kick, _kick_t, 1.0 - exp(-9.0 * dt))
-	if not phase in ["race", "count", "done"]:
-		_kick_t = 0.0
-	camera.fov = FOV + 3.0 * speed_kick
 	camera.position = focus + off + jitter
 	camera.look_at(focus + jitter, Vector3.UP)
 	light.directional_shadow_max_distance = clampf(dist * 2.2, 30.0, 200.0)
