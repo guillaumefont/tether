@@ -104,11 +104,6 @@ func _ready() -> void:
 	root.theme = _make_theme()
 	add_child(root)
 
-	speed_lines = SpeedLines.new()
-	speed_lines.set_anchors_preset(Control.PRESET_FULL_RECT)
-	speed_lines.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(speed_lines)
-
 	hud = Control.new()
 	hud.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	hud.offset_left = 16; hud.offset_right = -16; hud.offset_top = 10
@@ -938,37 +933,6 @@ func set_hud_tag(key: String, label: String, col: Color) -> void:
 		hud_tags[key][0].text = label.to_upper()
 		hud_tags[key][0].add_theme_color_override("font_color", col)
 		hud_tags[key][1].border_color = col
-
-# Faint wind streaks round the edge of the screen for a moment after letting go,
-# pointing out from the car. amount 0..1 (WorldView.speed_kick).
-var speed_lines: SpeedLines
-class SpeedLines extends Control:
-	var amount := 0.0
-	var center := Vector2.ZERO
-	var _angles := PackedFloat32Array()
-	var _t := 0.0
-	func set_fx(a: float, c: Vector2, dt: float) -> void:
-		amount = a
-		center = c
-		_t -= dt
-		if a > 0.04 and _t <= 0.0:   # re-scatter the streaks ~20 times a second so they flicker
-			_t = 0.05
-			_angles.resize(26)
-			for k in _angles.size():
-				_angles[k] = randf() * TAU
-		visible = a > 0.04
-		if visible:
-			queue_redraw()
-	func _draw() -> void:
-		var diag := size.length()
-		for k in _angles.size():
-			var d := Vector2.from_angle(_angles[k])
-			var r0 := diag * (0.3 + 0.08 * fmod(k * 0.618, 1.0))
-			var r1 := r0 + diag * (0.08 + 0.12 * amount)
-			# a faint dark edge under a light streak, so it reads on snow and on sand
-			var w := 2.0 + 1.5 * amount
-			draw_line(center + d * r0, center + d * r1, Color(0.05, 0.1, 0.15, 0.16 * amount), w + 2.5, true)
-			draw_line(center + d * r0, center + d * r1, Color(1, 1, 1, 0.42 * amount), w, true)
 
 # "CLEAN x3" under the HUD after bends taken without touching a rail or a post
 var streak: Label
