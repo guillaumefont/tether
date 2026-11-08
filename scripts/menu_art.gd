@@ -56,9 +56,10 @@ class Logo extends Control:
 			draw_string(font, Vector2(x + w1, base) + o, "RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, sh if pass_i == 0 else C_ICE)
 
 	func min_width() -> float:
+		var h := maxf(size.y, custom_minimum_size.y)   # size is still 0 before the first layout
 		if font == null:
-			return size.y
-		return size.y * 1.12 + font.get_string_size("TETHER RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+			return h
+		return h * 1.12 + font.get_string_size("TETHER RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 
 # Hand-drawn icons, all in one stroke style so they read as a set.
 # Cards: "flag" (campaign), "watch" (time attack), "duel" (two players).
@@ -120,6 +121,19 @@ class Icon extends Control:
 				draw_colored_polygon(PackedVector2Array([c + Vector2(0, -s * 0.34), c + Vector2(s * 0.36, -s * 0.02), c + Vector2(-s * 0.36, -s * 0.02)]), col)
 				draw_rect(Rect2(c + Vector2(-s * 0.25, -s * 0.06), Vector2(s * 0.5, s * 0.36)), col)
 				draw_rect(Rect2(c + Vector2(-s * 0.07, s * 0.1), Vector2(s * 0.14, s * 0.2)), Color("#0d1a26"))
+			"coin":       # a gold coin with a rim and a notch
+				draw_circle(c, s * 0.36, Color("#b8801c"))
+				draw_circle(c + Vector2(-s * 0.02, -s * 0.02), s * 0.31, Color("#f2c84a"))
+				draw_arc(c, s * 0.21, 0, TAU, 24, Color("#c9922a"), maxf(1.5, s * 0.05), true)
+				draw_rect(Rect2(c + Vector2(-s * 0.04, -s * 0.13), Vector2(s * 0.08, s * 0.26)), Color("#c9922a"))
+				draw_circle(c + Vector2(-s * 0.14, -s * 0.15), s * 0.05, Color(1, 1, 1, 0.7))
+			"trophy":     # a cup on a stand
+				draw_colored_polygon(PackedVector2Array([c + Vector2(-s * 0.24, -s * 0.32), c + Vector2(s * 0.24, -s * 0.32),
+					c + Vector2(s * 0.16, -s * 0.02), c + Vector2(0, s * 0.06), c + Vector2(-s * 0.16, -s * 0.02)]), col)
+				for sx in [-1.0, 1.0]:
+					draw_arc(c + Vector2(sx * s * 0.25, -s * 0.18), s * 0.1, -PI / 2 if sx > 0 else PI / 2, PI / 2 if sx > 0 else PI * 1.5, 10, col, lw * 0.8, true)
+				draw_rect(Rect2(c + Vector2(-s * 0.04, s * 0.04), Vector2(s * 0.08, s * 0.16)), col)
+				draw_rect(Rect2(c + Vector2(-s * 0.18, s * 0.2), Vector2(s * 0.36, s * 0.1)), col)
 			"check":
 				draw_polyline(PackedVector2Array([c + Vector2(-s * 0.28, 0), c + Vector2(-s * 0.08, s * 0.2), c + Vector2(s * 0.3, -s * 0.22)]), col, lw * 1.5, true)
 			"ghost":

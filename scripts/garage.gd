@@ -1,11 +1,12 @@
 # The Garage: pick the car's paint, livery and rope colour. Visual only.
 # A 3D stage shows the car turning on a plinth; below or beside it, three tabs and a
-# scrolling grid of swatches. Locked items can be tried on (the stage shows them) but
-# not kept; the bar under the stage says what unlocks them, or offers the paid pack.
+# scrolling grid of swatches. Items not owned yet can be tried on (the stage shows them);
+# the bar under the stage offers to buy them with coins, or offers the paid pack.
 extends BoxContainer
 
 const Cosmetics = preload("res://scripts/cosmetics.gd")
 const Store = preload("res://scripts/store.gd")
+const Wallet = preload("res://scripts/wallet.gd")
 const Campaign = preload("res://scripts/campaign.gd")
 const WorldView = preload("res://scripts/world_view.gd")
 const Art = preload("res://scripts/menu_art.gd")
@@ -18,7 +19,7 @@ const TAB_NAMES := { "paint": "Paint", "livery": "Livery", "rope": "Rope" }
 var menu     # the menu (card style, ui helpers)
 var ui
 var tab := "paint"
-var tally := {}
+var on_coins: Callable    # the menu's coin counter, refreshed after a purchase
 var trying := {}          # slot -> id of a locked item being tried on
 var scroller              # menu.Scroller holding the grid
 var stage: SubViewportContainer
@@ -31,7 +32,6 @@ var grid: GridContainer
 func setup(owner_menu, scroller_class) -> void:
 	menu = owner_menu
 	ui = menu.ui
-	tally = Cosmetics.tally()
 	var tall: bool = ui.is_portrait()
 	vertical = tall
 	add_theme_constant_override("separation", 14)
@@ -129,7 +129,7 @@ func _show_tab() -> void:
 	_update_status()
 
 func _pick(it: Dictionary) -> void:
-	if Cosmetics.unlocked(it, tally):
+	if Cosmetics.owned(tab, it):
 		Cosmetics.equip(tab, it["id"])
 		trying.erase(tab)
 	else:
@@ -145,34 +145,50 @@ func _update_status() -> void:
 		return
 	status.add_theme_color_override("font_color", C_POST)
 	var u: Dictionary = it["unlock"]
+	var l: Label = buy_btn.get_meta("label")
 	if u.has("product"):
 		var pr := Store.product(u["product"])
 		status.text = "%s: part of the %s" % [it["name"], pr["name"]]
-		var l: Label = buy_btn.get_meta("label")
+		buy_btn.get_meta("icon").kind = "spark"
 		l.text = pr["price"] if Store.available() else "Soon"
 		buy_btn.disabled = not Store.available()
 		buy_btn.visible = true
 		return
-	var pg := Cosmetics.progress(it, tally)
-	status.text = "Trying on %s. Unlock: %s (%d / %d)" % [it["name"], Cosmetics.requirement(it), pg[0], pg[1]]
+	if not Cosmetics.can_buy_yet(it):
+		status.text = "Trying on %s. %s" % [it["name"], Cosmetics.requirement(it)]
+		return
+	var cost := Cosmetics.price(it)
+	var short := cost - Wallet.coins()
+	status.text = "Trying on %s" % it["name"] if short <= 0 else "Trying on %s. %d more coins needed" % [it["name"], short]
+	l.text = "%d" % cost
+	buy_btn.get_meta("icon").kind = "coin"
+	buy_btn.disabled = short > 0
+	buy_btn.visible = true
 
 func _buy() -> void:
 	var it := Cosmetics.find(tab, shown(tab))
 	var u: Dictionary = it["unlock"]
-	if not u.has("product"):
+	if u.has("product"):
+		var res := Store.buy(u["product"])
+		if res == "ok" or res == "owned":
+			Cosmetics.equip(tab, it["id"])
+			trying.erase(tab)
+			_show_tab()
+			status.text = "%s unlocked. Thank you!" % Store.product(u["product"])["name"]
+		else:
+			status.text = "The store isn't open yet."
 		return
-	var res := Store.buy(u["product"])
-	if res == "ok" or res == "owned":
+	if Cosmetics.buy(tab, it) == "ok":
 		Cosmetics.equip(tab, it["id"])
 		trying.erase(tab)
 		_show_tab()
-		status.text = "%s unlocked. Thank you!" % Store.product(u["product"])["name"]
-	else:
-		status.text = "The store isn't open yet."
+		status.text = "%s bought and equipped. %d coins left" % [it["name"], Wallet.coins()]
+		if on_coins.is_valid():
+			on_coins.call()
 
 # ---------------------------------------------------------------- tiles
 func _tile(it: Dictionary) -> Button:
-	var open := Cosmetics.unlocked(it, tally)
+	var open := Cosmetics.owned(tab, it)
 	var on: bool = it["id"] == shown(tab)
 	var b := Button.new()
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -212,9 +228,11 @@ func _tile(it: Dictionary) -> Button:
 	elif it["unlock"].has("product"):
 		sub = Store.product(it["unlock"]["product"])["price"]
 		sub_col = C_POST
+	elif not Cosmetics.can_buy_yet(it):
+		sub = _short_req(it)
 	else:
-		var pg := Cosmetics.progress(it, tally)
-		sub = "%s  %d/%d" % [_short_req(it), pg[0], pg[1]]
+		sub = "%d coins" % Cosmetics.price(it)
+		sub_col = C_POST if Cosmetics.price(it) <= Wallet.coins() else C_MUTED
 	var sl: Label = ui._label(sub, 11, sub_col, ui.f_med)
 	sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sl.autowrap_mode = TextServer.AUTOWRAP_OFF
@@ -223,7 +241,7 @@ func _tile(it: Dictionary) -> Button:
 	b.add_child(v)
 	if not open:
 		var lk := Art.Icon.new()
-		lk.kind = "lock"
+		lk.kind = "lock" if not Cosmetics.can_buy_yet(it) or it["unlock"].has("product") else "coin"
 		lk.custom_minimum_size = Vector2(22, 22)
 		lk.position = Vector2(6, 6)
 		lk.size = Vector2(22, 22)
@@ -234,9 +252,6 @@ func _tile(it: Dictionary) -> Button:
 
 static func _short_req(it: Dictionary) -> String:
 	var u: Dictionary = it["unlock"]
-	if u.has("medals"): return "Medals"
-	if u.has("golds"): return "Golds"
-	if u.has("pivots"): return "Pivots"
 	if u.has("world"): return String(Campaign.CHAPTERS[u["world"]]["theme"]).capitalize() + " world"
 	return ""
 

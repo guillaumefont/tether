@@ -81,6 +81,10 @@ class Car:
 	var hits := 0
 	var clean := true   # no rail or post touched since the last hook (feedback only)
 	var streak := 0     # bends in a row taken clean
+	var best_streak := 0
+	var lap_touched := false  # a rail or post touched (or a fall) on this lap: awards only
+	var clean_laps := 0       # clean laps in a row so far
+	var best_clean_laps := 0
 	var lap_hits := 0
 	var last_hits := 0
 	var chk_t := 0.0
@@ -209,6 +213,7 @@ func attach(c: Car, idx: int) -> void:
 		# a new bend reached without touching anything since the last hook
 		if idx != c.used_anchor and c.used_anchor >= 0:
 			c.streak = c.streak + 1 if c.clean else 0
+			c.best_streak = maxi(c.best_streak, c.streak)
 			if c.streak > 0:
 				events.append({ "t": "clean", "h": c.human, "n": c.streak })
 		c.clean = true
@@ -318,6 +323,7 @@ func step_car(c: Car, dt: float) -> void:
 		c.vel *= exp(-SCRAPE_DRAG * dt)
 		c.scrape = 0.1
 		c.clean = false
+		c.lap_touched = true
 		var spd := c.vel.length()
 		if spd > 250.0 and randf() < 0.25:
 			events.append({ "t": "wall", "pos": c.pos + nv * CR, "n": nv, "count": 1, "s": c.s })
@@ -363,6 +369,7 @@ func step_car(c: Car, dt: float) -> void:
 			c.hits += 1
 			c.lap_hits += 1
 			c.clean = false
+			c.lap_touched = true
 			events.append({ "t": "post", "k": k, "pos": o["pos"], "vel": c.vel, "s": o["s"] })
 			if c.human >= 0:
 				events.append({ "t": "shake", "v": 6.0 })
@@ -407,6 +414,7 @@ func step_car(c: Car, dt: float) -> void:
 		else:
 			c.fall = 0.9
 			c.clean = false
+			c.lap_touched = true
 			c.fall_s = j["s"] - 260.0
 			c.vel = Vector2.ZERO
 			detach(c, false)
@@ -436,8 +444,11 @@ func step_car(c: Car, dt: float) -> void:
 			if c.best_lap < 0.0 or lt < c.best_lap:
 				c.best_lap = lt
 			c.laps.append(lt)
+			c.clean_laps = 0 if c.lap_touched else c.clean_laps + 1
+			c.best_clean_laps = maxi(c.best_clean_laps, c.clean_laps)
 			events.append({ "t": "lap", "car": c, "lt": lt, "trace": c.trace.duplicate() })
 		c.lap_start = clock
+		c.lap_touched = false
 		c.lap += 1
 		c.trace = []  # Collect: gems are not refilled, a gem picked up stays gone for the race
 		if c.lap > laps_total and not c.finished:

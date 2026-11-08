@@ -1,7 +1,7 @@
 extends SceneTree
-# Garage items: every item has a known unlock rule and a paid item names a real Store
-# product; a fresh player owns only the free items; every look builds a car on every
-# theme kit; cosmetics never reach the race sim (a painted car laps in the same time).
+# Garage items: every item is free, priced in coins (maybe behind a campaign world) or in a
+# real Store product; ids are unique; every old medal rule has an item; every look builds a
+# car on every theme kit; cosmetics never reach the race sim (a painted car laps in the same time).
 const Cosmetics = preload("res://scripts/cosmetics.gd")
 const Store = preload("res://scripts/store.gd")
 const WorldView = preload("res://scripts/world_view.gd")
@@ -16,8 +16,6 @@ func fail(msg: String) -> void:
 	printerr(msg)
 
 func _init() -> void:
-	var zero := { "medals": 0, "golds": 0, "pivots": 0 }
-	var lots := { "medals": 9999, "golds": 9999, "pivots": 9999 }
 	for slot in Cosmetics.SLOTS:
 		var ids := {}
 		var items: Array = Cosmetics.items(slot)
@@ -29,17 +27,22 @@ func _init() -> void:
 			ids[it["id"]] = true
 			var u: Dictionary = it["unlock"]
 			for k in u:
-				if not k in ["medals", "golds", "pivots", "world", "product"]:
+				if not k in ["coins", "world", "product"]:
 					fail("%s %s: unknown unlock rule %s" % [slot, it["id"], k])
 			if u.has("product") and not Store.PRODUCTS.has(u["product"]):
 				fail("%s %s: no Store product %s" % [slot, it["id"], u["product"]])
+			if u.has("world") and not u.has("coins"):
+				fail("%s %s: a world item needs a coin price too" % [slot, it["id"]])
+			if u.has("coins") and int(u["coins"]) <= 0:
+				fail("%s %s: a priced item must cost something" % [slot, it["id"]])
+			if not u.is_empty() and not u.has("coins") and not u.has("product"):
+				fail("%s %s: neither free, priced nor paid" % [slot, it["id"]])
 			if Cosmetics.requirement(it) == "":
 				fail("%s %s: no requirement text" % [slot, it["id"]])
-			var counted := u.has("medals") or u.has("golds") or u.has("pivots")
-			if counted and Cosmetics.unlocked(it, zero):
-				fail("%s %s: open with no medals" % [slot, it["id"]])
-			if counted and not Cosmetics.unlocked(it, lots):
-				fail("%s %s: still locked with every medal" % [slot, it["id"]])
+	for k in Cosmetics.LEGACY:
+		var p: PackedStringArray = k.split(":")
+		if Cosmetics.find(p[0], p[1])["id"] != p[1]:
+			fail("old unlock rule %s has no item" % k)
 	# every paint x livery builds on every theme kit
 	var view := WorldView.new()
 	for theme in ["snow", "forest", "sand", "rock"]:

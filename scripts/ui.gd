@@ -31,6 +31,7 @@ signal pause_action(what: String)   # resume | restart | exit
 signal option_changed(key: String, value)
 signal skip_pressed       # leave the tutorial
 signal tutorial_pressed   # replay the tutorial (settings screen)
+signal reset_pressed      # erase all progress (settings screen, confirmed with a second tap)
 signal reward_popped(i: int)  # a results badge (record, medal) just popped in: sound + buzz
 
 const MINIMAP := 110.0
@@ -673,6 +674,11 @@ func _build_settings() -> void:
 		hide_settings()
 		tutorial_pressed.emit())
 	vb.add_child(tut)
+	# a second tap within a few seconds confirms; anything else puts the button back
+	_reset_btn = icon_button("retry", "RESET PROGRESS", "card", false, 50)
+	_reset_btn.focus_mode = Control.FOCUS_NONE
+	_reset_btn.pressed.connect(_reset_tap)
+	vb.add_child(_reset_btn)
 	var done := icon_button("check", "DONE", "go", false, 56)
 	done.pressed.connect(hide_settings)
 	vb.add_child(done)
@@ -680,10 +686,34 @@ func _build_settings() -> void:
 
 func show_settings(opts: Dictionary) -> void:
 	set_options(_settings_o, opts)
+	_reset_arm(false)
 	settings_ov.visible = true
 
 func hide_settings() -> void:
+	_reset_arm(false)
 	settings_ov.visible = false
+
+var _reset_btn: Button
+var _reset_armed_ms := -1
+
+func _reset_tap() -> void:
+	if _reset_armed_ms >= 0 and Time.get_ticks_msec() - _reset_armed_ms < 5000:
+		_reset_arm(false)
+		reset_pressed.emit()
+		return
+	_reset_arm(true)
+	get_tree().create_timer(5.0).timeout.connect(func():
+		if _reset_armed_ms >= 0 and Time.get_ticks_msec() - _reset_armed_ms >= 4900:
+			_reset_arm(false))
+
+# armed: the button turns red and asks for the second tap
+func _reset_arm(on: bool) -> void:
+	if _reset_btn == null:
+		return
+	_reset_armed_ms = Time.get_ticks_msec() if on else -1
+	var l: Label = _reset_btn.get_meta("label")
+	l.text = "TAP AGAIN TO ERASE ALL PROGRESS" if on else "RESET PROGRESS"
+	l.add_theme_color_override("font_color", Color("#ff6a5c") if on else C_FG)
 
 func hide_pause() -> void:
 	pause_ov.visible = false
