@@ -112,6 +112,8 @@ jobs:
           mkdir -p "$OUT/stage"
           cp -r "$OUT/web/." "$OUT/stage/"
           cp "$OUT/android/tether-racing.apk" "$OUT/stage/"
+          # site root only: dead PR preview links land on 404.html, which opens the main build
+          if [ "$DEST" = "." ]; then cp .github/pages/404.html "$OUT/stage/"; fi
           bash .github/publish-pages.sh "$OUT/stage" "$DEST" "Build of ${GITHUB_SHA::7} for $DEST"
 
       - name: Deploy the site
