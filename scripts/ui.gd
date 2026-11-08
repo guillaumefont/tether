@@ -724,8 +724,6 @@ var _load_title: Label
 var _load_tip: Label
 var _load_tween: Tween
 var _load_box: VBoxContainer
-
-var _load_bar
 # loading artwork per theme: [landscape, portrait]; the screen wears the menu's theme.
 # Loaded on demand (load() caches) so only the pictures in use sit in memory.
 const ART := {
@@ -737,11 +735,11 @@ const ART := {
 var art_theme := "snow"
 var _load_art
 
-# logo near the top, title / tip / bar at the bottom, whatever the screen shape
+# logo near the top (its ring is the progress indicator), title and tip at the bottom
 func _place_loading() -> void:
 	var ins := safe_insets()
 	_load_box.offset_bottom = -22 - ins["b"]
-	_load_box.offset_top = _load_box.offset_bottom - 104
+	_load_box.offset_top = _load_box.offset_bottom - 70
 	var pair: Array = ART.get(art_theme, ART["snow"])
 	_load_art.bg = load(pair[1] if is_portrait() else pair[0])
 
@@ -773,13 +771,6 @@ func _build_loading() -> void:
 	_load_tip.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
 	_load_tip.add_theme_constant_override("shadow_offset_y", 1)
 	vb.add_child(_load_tip)
-	var bar_row := CenterContainer.new()
-	bar_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_load_bar = Art.LoadBar.new()
-	_load_bar.custom_minimum_size = Vector2(300, 26)
-	_load_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bar_row.add_child(_load_bar)
-	vb.add_child(bar_row)
 	loading.visible = false
 	root.add_child(loading)
 
@@ -793,19 +784,19 @@ func show_loading(title: String) -> void:
 	_load_tip.text = TIPS[randi() % TIPS.size()]
 	loading.modulate.a = 1.0
 	loading.visible = true
-	_load_bar.value = 0.0
-	_load_bar.target = 0.08
+	_load_art.shown = 0.0
+	_load_art.progress = 0.08
 	_place_loading()
 
 func set_loading_progress(v: float) -> void:
-	_load_bar.target = v
+	_load_art.progress = v
 
 func hide_loading() -> void:
 	if not loading.visible:
 		return
-	_load_bar.target = 1.0
+	_load_art.progress = 1.0
 	_load_tween = create_tween()
-	_load_tween.tween_interval(0.25)   # let the bar reach the end
+	_load_tween.tween_interval(0.25)   # let the ring close
 	_load_tween.tween_property(loading, "modulate:a", 0.0, 0.35)
 	_load_tween.tween_callback(func(): loading.visible = false)
 
