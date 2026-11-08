@@ -66,7 +66,7 @@ to the `gh-pages` branch (GitHub Pages: Settings > Pages > Deploy from a branch 
   - Play in a browser: https://guillaumefont.github.io/tether/
   - Install on Android: https://guillaumefont.github.io/tether/tether-racing.apk (allow installs from your browser when asked)
 - Each open pull request gets its own preview, linked in a comment on the PR and updated on every push:
-  https://guillaumefont.github.io/tether/pr/N/ and `.../pr/N/tether-racing.apk`. It is deleted when the PR closes.
+  https://guillaumefont.github.io/tether/pr/N/ and `.../pr/N/tether-racing.apk`. It is deleted when the PR closes; after that, its links open the latest `main` build instead (via the site's 404 page).
 
 All APKs share one app id, so installing a preview replaces the installed `main` build (and the other way round).
 The APK is also attached to each workflow run as the `tether-racing-apk` artifact.
