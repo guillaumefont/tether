@@ -214,7 +214,9 @@ func _header(vb: VBoxContainer, title: String, sub: String, back: Callable) -> H
 	tv.add_child(t)
 	if sub != "":
 		var s: Label = ui._label(sub, 13, C_MUTED, ui.f_bold)
-		s.autowrap_mode = TextServer.AUTOWRAP_OFF
+		# wraps instead of widening the page: a long line pushed the whole screen
+		# past the right edge in portrait
+		s.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		tv.add_child(s)
 	hb.add_child(tv)
 	vb.add_child(hb)
