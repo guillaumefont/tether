@@ -763,16 +763,17 @@ func _pay(medal_coins: int, daily: int, run: Dictionary, rewards: Array) -> Stri
 	var won := Awards.check(run)
 	var total := medal_coins + daily
 	for a in won:
-		total += int(a["coins"])
 		rewards.append({ "text": "AWARD: %s" % String(a["name"]).to_upper(), "col": Color("#5fe0d0") })
-	if total <= 0:
-		return ""
-	rewards.push_front({ "text": "+%d COINS" % total, "col": Color("#f2c84a") })
-	var parts: Array = []
-	if medal_coins > 0: parts.append("medal %d" % medal_coins)
-	if daily > 0: parts.append("Track of the day %d" % daily)
-	for a in won: parts.append("%s %d" % [a["name"], a["coins"]])
-	return "+%d coins (%s): %d in all.  " % [total, ", ".join(parts), Wallet.coins()]
+	var txt := ""
+	if total > 0:
+		rewards.push_front({ "text": "+%d COINS" % total, "col": Color("#f2c84a") })
+		var parts: Array = []
+		if medal_coins > 0: parts.append("medal %d" % medal_coins)
+		if daily > 0: parts.append("Track of the day %d" % daily)
+		txt = "+%d coins (%s): %d in all.  " % [total, ", ".join(parts), Wallet.coins()]
+	if not won.is_empty():
+		txt += "New award%s: collect %d coins on the Awards screen.  " % ["s" if won.size() > 1 else "", won.reduce(func(n, a): return n + int(a["coins"]), 0)]
+	return txt
 
 # Settings > Reset progress (confirmed there): coins, looks bought, awards, medals,
 # records, ghosts and the campaign start over. Options and paid packs stay.
@@ -807,7 +808,7 @@ func show_world_unlock(c: int) -> void:
 			lines.append("%s paint for sale in the Garage" % it["name"])
 	var aw := Awards.find("world_" + done)
 	if not aw.is_empty():
-		lines.append("Award %s: +%d coins" % [aw["name"], aw["coins"]])
+		lines.append("Award %s: %d coins to collect" % [aw["name"], aw["coins"]])
 	var title := "All worlds done!" if last else "%s unlocked" % Themes.get_theme(nxt)["name"]
 	var sub := "%s world finished" % Themes.get_theme(done)["name"]
 	var w := WorldUnlock.new()

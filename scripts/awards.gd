@@ -1,4 +1,4 @@
-# Awards: one-off goals that pay coins once. Some are about a single run (three clean laps,
+# Awards: one-off goals that pay coins once, collected on the Awards screen. Some are about a single run (three clean laps,
 # every gem), others about the player's whole progress (ten Gold medals, a world finished).
 # Checked when a one-player run ends; earned ones are kept in the wallet.
 extends RefCounted
@@ -75,14 +75,32 @@ static func reached(run: Dictionary) -> Array:
 	if Wallet.stat("records") >= 25: ids.append("records25")
 	return ids
 
-# pay every award the run reached for the first time; returns those awards
+# mark every award the run reached for the first time as earned (its coins wait on the
+# Awards screen); returns those awards
 static func check(run: Dictionary) -> Array:
 	var out: Array = []
 	for id in reached(run):
 		if Wallet.has_award(id):
 			continue
-		var a := find(id)
 		Wallet.set_award(id)
-		Wallet.add(a["coins"])
-		out.append(a)
+		out.append(find(id))
 	return out
+
+static func claimed(id: String) -> bool:
+	return bool(Wallet.get_v("claimed", id, false))
+
+# earned but its coins not collected yet
+static func ready(id: String) -> bool:
+	return Wallet.has_award(id) and not claimed(id)
+
+static func ready_count() -> int:
+	return LIST.filter(func(a): return ready(a["id"])).size()
+
+# collect an earned award's coins; returns the coins paid (0 if nothing to collect)
+static func claim(id: String) -> int:
+	if not ready(id):
+		return 0
+	var a := find(id)
+	Wallet.set_v("claimed", id, true)
+	Wallet.add(a["coins"])
+	return int(a["coins"])

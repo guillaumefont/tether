@@ -265,6 +265,23 @@ func show_home() -> void:
 	side.append(coins)
 	var cup: Button = ui.icon_button("trophy", "", "card", false, bh)
 	cup.tooltip_text = "Awards"
+	var ready := Awards.ready_count()
+	if ready > 0:   # awards waiting to be collected: a little amber count on the cup
+		var dot := Label.new()
+		dot.text = str(ready)
+		dot.add_theme_font_override("font", ui.f_bold)
+		dot.add_theme_font_size_override("font_size", 12)
+		dot.add_theme_color_override("font_color", Color("#1d2229"))
+		dot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		dot.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		var ds := StyleBoxFlat.new()
+		ds.bg_color = C_POST
+		ds.set_corner_radius_all(9)
+		dot.add_theme_stylebox_override("normal", ds)
+		dot.size = Vector2(18, 18)
+		dot.position = Vector2(bh - 14, -4)
+		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cup.add_child(dot)
 	cup.pressed.connect(show_awards)
 	side.append(cup)
 	var car: Button = ui.icon_button("car", "", "card", false, bh)
@@ -443,14 +460,21 @@ func show_garage() -> void:
 func show_awards() -> void:
 	screen = "awards"
 	var vb := _frame()
-	_header(vb, "Awards", "%d / %d earned  ·  each one pays coins once" % [Awards.earned_count(), Awards.LIST.size()], func(): go_back())
+	var hb := _header(vb, "Awards", _awards_sub(), func(): go_back())
+	var coins: Button = ui.icon_button("coin", str(Wallet.coins()), "card", false, 50)
+	coins.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hb.add_child(coins)
 	var tall: bool = ui.is_portrait()
 	var g := GridContainer.new()
-	g.columns = 1 if tall else 2
-	g.add_theme_constant_override("h_separation", 12)
+	g.columns = 2 if tall else 4
+	g.add_theme_constant_override("h_separation", 10)
 	g.add_theme_constant_override("v_separation", 10)
-	for a in Awards.LIST:
-		g.add_child(_award_row(a))
+	# ready to collect first, then still to earn, then collected
+	var order := Awards.LIST.duplicate()
+	var rank := func(a): return 0 if Awards.ready(a["id"]) else (2 if Awards.claimed(a["id"]) else 1)
+	order.sort_custom(func(x, y): return rank.call(x) < rank.call(y) or (rank.call(x) == rank.call(y) and Awards.LIST.find(x) < Awards.LIST.find(y)))
+	for a in order:
+		g.add_child(_award_tile(a, hb, coins))
 	var list := VBoxContainer.new()
 	list.add_child(g)
 	var pad := Control.new()
@@ -462,44 +486,104 @@ func show_awards() -> void:
 	_scroller.hold(list)
 	vb.add_child(_scroller)
 
-func _award_row(a: Dictionary) -> PanelContainer:
-	var got := Wallet.has_award(a["id"])
-	var p := PanelContainer.new()
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = C_CARD if got else Color(C_CARD, 0.55)
-	sb.set_corner_radius_all(12)
-	sb.border_color = C_POST if got else Color(1, 1, 1, 0.08)
-	sb.set_border_width_all(2)
-	sb.set_content_margin_all(12)
-	p.add_theme_stylebox_override("panel", sb)
-	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	p.custom_minimum_size.y = 70
-	var hb := HBoxContainer.new()
-	hb.add_theme_constant_override("separation", 12)
+func _awards_sub() -> String:
+	var n := Awards.ready_count()
+	var sub := "%d / %d earned" % [Awards.earned_count(), Awards.LIST.size()]
+	return sub + ("  ·  %d to collect: tap them" % n if n > 0 else "  ·  each one pays coins once")
+
+func _tile_style(b: Control, border: Color, bg: Color, width := 2) -> void:
+	for st in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = bg.lightened(0.05) if st.begins_with("hover") else bg
+		sb.set_corner_radius_all(4)
+		sb.border_color = border
+		sb.set_border_width_all(width)
+		sb.shadow_color = Color(0, 0, 0, 0.25)
+		sb.shadow_size = 4
+		sb.shadow_offset = Vector2(0, 2)
+		b.add_theme_stylebox_override(st, sb)
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+
+# A rectangular tile: trophy (or lock), name, what to do, and the reward. An earned award
+# glows amber with COLLECT +n until tapped.
+func _award_tile(a: Dictionary, header: HBoxContainer, coins: Button) -> Button:
+	var id: String = a["id"]
+	var ready := Awards.ready(id)
+	var got := Awards.claimed(id)
+	var b := Button.new()
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.custom_minimum_size = Vector2(0, 150 if ui.is_portrait() else 168)
+	b.clip_contents = true
+	var bg := Color(C_CARD, 0.82 if (ready or got) else 0.5)
+	_tile_style(b, C_POST if ready else (Color(C_POST, 0.45) if got else Color(1, 1, 1, 0.08)), bg, 3 if ready else 2)
+	var v := VBoxContainer.new()
+	v.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	v.offset_left = 10; v.offset_right = -10; v.offset_top = 10; v.offset_bottom = -10
+	v.add_theme_constant_override("separation", 3)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var ic := Art.Icon.new()
-	ic.kind = "trophy" if got else "lock"
-	ic.custom_minimum_size = Vector2(34, 34)
-	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	hb.add_child(ic)
-	var tv := VBoxContainer.new()
-	tv.add_theme_constant_override("separation", 0)
-	tv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tv.alignment = BoxContainer.ALIGNMENT_CENTER
-	tv.add_child(ui._label(a["name"], 17, C_FG if got else C_MUTED, ui.f_bold))
-	tv.add_child(ui._label(a["desc"], 13, C_MUTED))
-	hb.add_child(tv)
-	var cl: Label = ui._label("Earned" if got else "+%d" % a["coins"], 15, C_POST if got else C_FG, ui.f_bold)
-	cl.autowrap_mode = TextServer.AUTOWRAP_OFF
-	cl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	hb.add_child(cl)
+	ic.kind = "lock" if not (ready or got) else "trophy"
+	ic.custom_minimum_size = Vector2(36, 36)
+	ic.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(ic)
+	var name: Label = ui._label(a["name"], 16, C_FG if (ready or got) else C_MUTED, ui.f_bold)
+	name.autowrap_mode = TextServer.AUTOWRAP_OFF
+	name.clip_text = true
+	v.add_child(name)
+	var desc: Label = ui._label(a["desc"], 12, C_MUTED)
+	desc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	v.add_child(desc)
+	var foot := HBoxContainer.new()
+	foot.add_theme_constant_override("separation", 6)
+	foot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var fl: Label = ui._label("", 14, C_POST, ui.f_display if ready else ui.f_bold)
+	fl.autowrap_mode = TextServer.AUTOWRAP_OFF
+	fl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	if ready:
+		fl.text = "COLLECT +%d" % a["coins"]
+		fl.add_theme_font_size_override("font_size", 17)
+	elif got:
+		fl.text = "Collected"
+		fl.add_theme_color_override("font_color", Color(C_POST, 0.6))
+	else:
+		fl.text = "+%d" % a["coins"]
+		fl.add_theme_color_override("font_color", C_FG)
+	foot.add_child(fl)
 	if not got:
 		var coin := Art.Icon.new()
 		coin.kind = "coin"
-		coin.custom_minimum_size = Vector2(22, 22)
+		coin.custom_minimum_size = Vector2(20, 20)
 		coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		hb.add_child(coin)
-	p.add_child(hb)
-	return p
+		coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		foot.add_child(coin)
+	v.add_child(foot)
+	b.add_child(v)
+	if ready:
+		# a slow amber breath so earned tiles catch the eye
+		var tw := b.create_tween().set_loops()
+		tw.tween_property(b, "self_modulate", Color(1.25, 1.15, 0.9), 0.7).set_trans(Tween.TRANS_SINE)
+		tw.tween_property(b, "self_modulate", Color.WHITE, 0.7).set_trans(Tween.TRANS_SINE)
+		b.pressed.connect(func():
+			var n := Awards.claim(id)
+			if n <= 0:
+				return
+			ui.reward_popped.emit(1)
+			coins.get_meta("label").text = str(Wallet.coins())
+			# the tile pops, then the screen is rebuilt in its new order
+			b.pivot_offset = b.size * 0.5
+			var pop := b.create_tween()
+			pop.tween_property(b, "scale", Vector2.ONE * 1.08, 0.08)
+			pop.tween_property(b, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			fl.text = "+%d COINS!" % n
+			pop.tween_interval(0.35)
+			pop.tween_callback(func():
+				var keep := _scroller.scroll if _scroller else 0.0
+				show_awards()
+				_scroller.scroll = keep))
+	else:
+		b.mouse_filter = Control.MOUSE_FILTER_PASS
+	return b
 
 # ---------------------------------------------------------------- lists (one long scrolling list)
 func show_list() -> void:

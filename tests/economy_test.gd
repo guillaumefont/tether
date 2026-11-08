@@ -3,7 +3,7 @@ extends SceneTree
 # quarter for repeats; the daily pick depends only on the date, covers every track before
 # repeating, never shows a track two days running and brings every variant round; the
 # daily pays once (plus the difference for a better medal); buying spends coins, keeps the
-# look and refuses when short; a world paint waits for its world; awards pay once; a reset
+# look and refuses when short; a world paint waits for its world; awards are collected once; a reset
 # empties the wallet and the records.
 const Wallet = preload("res://scripts/wallet.gd")
 const Daily = preload("res://scripts/daily.gd")
@@ -82,7 +82,12 @@ func _init() -> void:
 	var ids := won.map(func(a): return a["id"])
 	ids.sort()
 	expect(ids, ["clean_laps", "no_posts", "streak10"], "awards from one run")
+	expect(Wallet.coins() - c0, 0, "awards wait to be collected")
+	expect(Awards.ready_count(), 3, "three awards to collect")
+	expect(Awards.claim("clean_laps") + Awards.claim("no_posts") + Awards.claim("streak10"), 150 + 100 + 100, "collected coins")
+	expect(Awards.claim("clean_laps"), 0, "collected once")
 	expect(Wallet.coins() - c0, 150 + 100 + 100, "award coins")
+	expect(Awards.ready_count(), 0, "nothing left to collect")
 	expect(Awards.check({ "mode": "trial", "variant": "obstacles", "finished": true, "clean_laps": 3, "streak": 12, "hits": 0 }).size(), 0, "awards pay once")
 	expect(Awards.check({ "mode": "race", "finished": true, "place": 1, "lead": 4.0 }).size(), 2, "win and runaway")
 	for a in Awards.LIST:
@@ -100,6 +105,7 @@ func _init() -> void:
 	expect(Cosmetics.owned("paint", signal_paint), false, "looks after reset")
 	expect(Cosmetics.equipped("paint"), "amber", "default paint after reset")
 	expect(Wallet.has_award("clean_laps"), false, "awards after reset")
+	expect(Awards.claimed("clean_laps"), false, "collected awards after reset")
 	# the migration of an old save does not hand looks back after a reset
 	Cosmetics.migrate()
 	expect(Cosmetics.owned("paint", signal_paint), false, "no looks from the old rules after reset")
