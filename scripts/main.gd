@@ -17,6 +17,9 @@ const Themes = preload("res://scripts/themes.gd")
 const Tutorial = preload("res://scripts/tutorial.gd")
 const Cosmetics = preload("res://scripts/cosmetics.gd")
 const Haptics = preload("res://scripts/haptics.gd")
+const Wallet = preload("res://scripts/wallet.gd")
+const Daily = preload("res://scripts/daily.gd")
+const Awards = preload("res://scripts/awards.gd")
 
 var view: WorldView
 var ui: UI
@@ -42,7 +45,6 @@ var new_record := false
 var touch_owner := {}        # touch index -> player
 var paused := false
 var themes_before: Array = []   # themes unlocked when the race started
-var looks_before: Array = []    # garage items open when the race started
 var building := false        # a loading screen is building the next track
 var tutorial := false        # the run is the tutorial (Defs.TUTORIAL), driven by `tut`
 var tut: Tutorial = null
@@ -66,6 +68,7 @@ func _ready() -> void:
 	ui.reward_popped.connect(_reward_popped)
 	ui.menu.settings_pressed.connect(func(): ui.show_settings(_options(true)))
 	ui.pause_pressed.connect(_toggle_pause)
+	ui.reset_pressed.connect(_reset_progress)
 	ui.pause_action.connect(_pause_action)
 	ui.menu.start_event.connect(_start_event)
 	ui.again_pressed.connect(new_race)
@@ -316,7 +319,6 @@ func new_race(built: TrackData = null) -> void:
 	race = Race.new(track, mode, humans)
 	race.set_rivals(rival_tier, catch_up)
 	themes_before = Themes.ORDER.filter(func(t): return Campaign.theme_unlocked(t))
-	looks_before = Cosmetics.open_ids()
 	ghost = Records.get_ghost(rec_key()) if mode == "trial" and not tutorial else []
 	view.setup_cars(race, mode == "trial" and not tutorial, _dress(race))
 	new_record = false
@@ -685,6 +687,16 @@ func _show_results() -> void:
 			var tg: float = Medals.targets(name, variant)[tier]
 			if tg > 0.0:
 				note += " Next medal (%s): %s." % [Medals.NAMES[tier], UI.fmt2(tg)]
+		if new_record:
+			Wallet.bump("records")
+		var run_val: float = c.finish_time if track.tokens.size() > 0 else c.best_lap
+		var run_tier := Medals.trial_tier(name, variant, run_val) if c.finished else 0
+		var coins := Wallet.medal_coins(start_tier, run_tier)
+		var daily := 0
+		if c.finished and Daily.is_today(track_idx, variant):
+			daily = Daily.claim(run_tier)
+		note = _pay(coins, daily, { "mode": "trial", "variant": variant, "finished": c.finished, "clean_laps": c.best_clean_laps,
+			"streak": c.best_streak, "hits": c.hits, "gems_all": track.tokens.size() > 0 and c.gems == track.tokens.size() }, rewards) + note
 		ui.show_results("New record" if new_record else "Time trial", rows, _unlock_note() + note, not ui.menu.next_event().is_empty(), 3, rewards)
 		return
 	var st := race.standings()
@@ -707,8 +719,11 @@ func _show_results() -> void:
 		if place == 1 and me.finished:
 			lead = (st[1].finish_time - me.finish_time) if st.size() > 1 and st[1].finished else 99.0
 		var tier := Medals.race_tier(place, lead) if me.finished else 0
+		var held := Records.get_medal(rec_key(), "race")
 		if Records.award_medal(rec_key(), "race", tier):
 			rrewards.append({ "text": "%s MEDAL" % Medals.NAMES[tier - 1].to_upper(), "col": Medals.COLORS[tier - 1] })
+		rnote = _pay(Wallet.medal_coins(held, tier), 0, { "mode": "race", "variant": variant, "finished": me.finished, "place": place,
+			"lead": lead, "clean_laps": me.best_clean_laps, "streak": me.best_streak, "hits": me.hits }, rrewards) + rnote
 	ui.show_results(title, rows2, _unlock_note() + rnote, not ui.menu.next_event().is_empty(), 3, rrewards)
 
 # mirror the tutorial's card and big word onto the UI when they change
@@ -734,11 +749,35 @@ func _show_tutorial_end() -> void:
 
 # a campaign world just finished: say which theme it opened
 func _unlock_note() -> String:
-	var now := Cosmetics.open_ids()
-	var fresh := Cosmetics.new_names(looks_before, now)
-	looks_before = now
-	var garage := "New in the Garage: %s!  " % fresh if fresh != "" else ""
-	return _theme_note() + garage
+	return _theme_note()
+
+# One-player run over: pay the medal and Track of the day coins and any awards reached,
+# add their badges, and return a line for the results note.
+func _pay(medal_coins: int, daily: int, run: Dictionary, rewards: Array) -> String:
+	Wallet.add(medal_coins)
+	var won := Awards.check(run)
+	var total := medal_coins + daily
+	for a in won:
+		total += int(a["coins"])
+		rewards.append({ "text": "AWARD: %s" % String(a["name"]).to_upper(), "col": Color("#5fe0d0") })
+	if total <= 0:
+		return ""
+	rewards.push_front({ "text": "+%d COINS" % total, "col": Color("#f2c84a") })
+	var parts: Array = []
+	if medal_coins > 0: parts.append("medal %d" % medal_coins)
+	if daily > 0: parts.append("Track of the day %d" % daily)
+	for a in won: parts.append("%s %d" % [a["name"], a["coins"]])
+	return "+%d coins (%s): %d in all.  " % [total, ", ".join(parts), Wallet.coins()]
+
+# Settings > Reset progress (confirmed there): coins, looks bought, awards, medals,
+# records, ghosts and the campaign start over. Options and paid packs stay.
+func _reset_progress() -> void:
+	Records.reset()
+	Wallet.reset()
+	Cosmetics.unequip_all()
+	ui.hide_settings()
+	ui.menu.world = -1
+	ui.menu.show_home()
 
 func _theme_note() -> String:
 	for t in Themes.ORDER:
@@ -769,6 +808,18 @@ func _run_demo(arg: String) -> void:
 		["menu_attack", func(): ui.menu.kind = "attack"; ui.menu.focus = 8; ui.menu.show_list()],
 		["menu_garage", func(): ui.menu.show_garage()],
 		["menu_garage_livery", func(): ui.menu.show_garage(); var g = ui.menu.body.find_children("*", "BoxContainer", true, false).filter(func(n): return n.has_method("_set_tab"))[0]; g._set_tab("livery"); g._pick(Cosmetics.find("livery", "checker"))],
+		["menu_awards", func(): ui.menu.show_awards()],
+		["menu_daily", func():
+			var p := Daily.current()
+			ui.menu.ev = { "track": p["track"], "variant": p["variant"], "mode": "trial", "humans": 1, "kind": "daily", "idx": 0, "theme": Campaign.track_theme(p["track"]) }
+			ui.menu.show_event()],
+		["settings_reset", func(): ui.show_settings(_options(true)); ui._reset_tap()],
+		["results_coins", func():
+			ui.hide_settings()
+			ui.menu.visible = false
+			ui.show_results("Time trial", [{ "cells": ["Lap 1", "", "0:12.10"], "hl": true }, { "cells": ["Lap 2", "", "0:12.45"] }], "+400 coins (medal 100, Track of the day 100, Clean triple 150, Smooth operator 100): 1240 in all.", false, 3,
+				[{ "text": "+450 COINS", "col": Color("#f2c84a") }, { "text": "GOLD MEDAL", "col": Medals.COLORS[2] }, { "text": "AWARD: CLEAN TRIPLE", "col": Color("#5fe0d0") }])],
+		["menu_back", func(): ui.results.visible = false; ui.menu.visible = true; ui.menu.show_home()],
 		["loading", func(): ui.show_loading(Defs.TRACKS[track_idx]["name"]); ui.set_loading_progress(0.6)],
 		["menu_event", func():
 			ui.loading.visible = false

@@ -17,6 +17,9 @@ const Rivals = preload("res://scripts/rivals.gd")
 const Art = preload("res://scripts/menu_art.gd")
 const Garage = preload("res://scripts/garage.gd")
 const Cosmetics = preload("res://scripts/cosmetics.gd")
+const Wallet = preload("res://scripts/wallet.gd")
+const Daily = preload("res://scripts/daily.gd")
+const Awards = preload("res://scripts/awards.gd")
 # world card pictures: the land of each theme, no track (tools/gen_loading_art.gd ART_SCENERY=1)
 const WORLD_ART := {
 	"snow": preload("res://art/world_snow.jpg"), "forest": preload("res://art/world_forest.jpg"),
@@ -252,6 +255,22 @@ func show_home() -> void:
 	var gap := Control.new()
 	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(gap)
+	var coins: Button = ui.icon_button("coin", str(Wallet.coins()), "card", false, 50)
+	coins.tooltip_text = "Coins: spend them in the Garage"
+	coins.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	coins.pressed.connect(show_garage)
+	top.add_child(coins)
+	var sep0 := Control.new()
+	sep0.custom_minimum_size.x = 8
+	top.add_child(sep0)
+	var cup: Button = ui.icon_button("trophy", "", "card", false, 50)
+	cup.tooltip_text = "Awards"
+	cup.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	cup.pressed.connect(show_awards)
+	top.add_child(cup)
+	var sep1 := Control.new()
+	sep1.custom_minimum_size.x = 8
+	top.add_child(sep1)
 	var car: Button = ui.icon_button("car", "", "card", false, 50)
 	car.tooltip_text = "Garage"
 	car.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -279,6 +298,7 @@ func show_home() -> void:
 	cab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	sub.add_child(cab)
 	vb.add_child(sub)
+	vb.add_child(_daily_banner())
 	var row: BoxContainer = VBoxContainer.new() if tall else HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -292,6 +312,67 @@ func show_home() -> void:
 		func(): kind = "attack"; _list_scroll.erase(kind); show_list()))
 	row.add_child(_big_choice("duel", "2 PLAYERS", "One phone, two thumbs", "Race a friend on any track.",
 		func(): kind = "versus"; _list_scroll.erase(kind); show_list()))
+
+# Track of the day: a slim card under the title; tap it for its Event screen
+func _daily_banner() -> Button:
+	var p := Daily.current()
+	var b := Button.new()
+	b.custom_minimum_size.y = 62
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_card_style(b)
+	var hb := HBoxContainer.new()
+	hb.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	hb.offset_left = 14; hb.offset_right = -14
+	hb.add_theme_constant_override("separation", 12)
+	hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var ic := Art.Icon.new()
+	ic.kind = p["variant"]
+	ic.custom_minimum_size = Vector2(34, 34)
+	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hb.add_child(ic)
+	var tv := VBoxContainer.new()
+	tv.add_theme_constant_override("separation", -2)
+	tv.alignment = BoxContainer.ALIGNMENT_CENTER
+	tv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tv.add_child(ui._label("TRACK OF THE DAY", 13, C_MUTED, ui.f_bold))
+	var name: Label = ui._label("%s  ·  %s" % [p["name"], _variant_name(p["variant"])], 18, C_FG, ui.f_display)
+	name.autowrap_mode = TextServer.AUTOWRAP_OFF
+	name.clip_text = true
+	tv.add_child(name)
+	hb.add_child(tv)
+	var paid := Daily.paid_tier()
+	var right := ""
+	if paid < 0:
+		right = "+%d" % Daily.BASE
+	elif paid < Medals.NAMES.size():
+		right = "Done · +%d / medal" % Daily.PER_TIER
+	else:
+		right = "Done"
+	var rl: Label = ui._label(right, 16, C_POST, ui.f_bold)
+	rl.autowrap_mode = TextServer.AUTOWRAP_OFF
+	rl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hb.add_child(rl)
+	if paid < 0:
+		var coin := Art.Icon.new()
+		coin.kind = "coin"
+		coin.custom_minimum_size = Vector2(24, 24)
+		coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hb.add_child(coin)
+	b.add_child(hb)
+	b.pressed.connect(func():
+		ev = { "track": p["track"], "variant": p["variant"], "mode": "trial", "humans": 1, "kind": "daily", "idx": 0,
+			"theme": Campaign.track_theme(p["track"]) }
+		show_event())
+	return b
+
+static func _variant_name(v: String) -> String:
+	for x in Defs.VARIANTS:
+		if x[0] == v:
+			return x[1]
+	return v
 
 # best medal held on every track and variant (time trial), counted by tier
 func _medal_counts() -> Array:
@@ -336,12 +417,78 @@ func _first_open_event() -> int:
 func show_garage() -> void:
 	screen = "garage"
 	var vb := _frame()
-	var t := Cosmetics.tally()
-	_header(vb, "Garage", "%d medals  ·  %d Gold  ·  %d Pivot  ·  looks only, same car" % [t["medals"], t["golds"], t["pivots"]], func(): go_back())
+	var gsub := "Looks only, same car" if ui.is_portrait() else "Looks only, same car  ·  earn coins with medals, awards and the Track of the day"
+	var hb := _header(vb, "Garage", gsub, func(): go_back())
+	var coins: Button = ui.icon_button("coin", str(Wallet.coins()), "card", false, 50)
+	coins.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hb.add_child(coins)
 	var g := Garage.new()
+	g.on_coins = func(): coins.get_meta("label").text = str(Wallet.coins())
 	vb.add_child(g)
 	g.setup(self, Scroller)
 	_scroller = g.scroller
+
+# ---------------------------------------------------------------- awards
+func show_awards() -> void:
+	screen = "awards"
+	var vb := _frame()
+	_header(vb, "Awards", "%d / %d earned  ·  each one pays coins once" % [Awards.earned_count(), Awards.LIST.size()], func(): go_back())
+	var tall: bool = ui.is_portrait()
+	var g := GridContainer.new()
+	g.columns = 1 if tall else 2
+	g.add_theme_constant_override("h_separation", 12)
+	g.add_theme_constant_override("v_separation", 10)
+	for a in Awards.LIST:
+		g.add_child(_award_row(a))
+	var list := VBoxContainer.new()
+	list.add_child(g)
+	var pad := Control.new()
+	pad.custom_minimum_size.y = 8
+	list.add_child(pad)
+	_scroller = Scroller.new()
+	_scroller.clip_contents = true
+	_scroller.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_scroller.hold(list)
+	vb.add_child(_scroller)
+
+func _award_row(a: Dictionary) -> PanelContainer:
+	var got := Wallet.has_award(a["id"])
+	var p := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = C_CARD if got else Color(C_CARD, 0.55)
+	sb.set_corner_radius_all(12)
+	sb.border_color = C_POST if got else Color(1, 1, 1, 0.08)
+	sb.set_border_width_all(2)
+	sb.set_content_margin_all(12)
+	p.add_theme_stylebox_override("panel", sb)
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	p.custom_minimum_size.y = 70
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 12)
+	var ic := Art.Icon.new()
+	ic.kind = "trophy" if got else "lock"
+	ic.custom_minimum_size = Vector2(34, 34)
+	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hb.add_child(ic)
+	var tv := VBoxContainer.new()
+	tv.add_theme_constant_override("separation", 0)
+	tv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tv.alignment = BoxContainer.ALIGNMENT_CENTER
+	tv.add_child(ui._label(a["name"], 17, C_FG if got else C_MUTED, ui.f_bold))
+	tv.add_child(ui._label(a["desc"], 13, C_MUTED))
+	hb.add_child(tv)
+	var cl: Label = ui._label("Earned" if got else "+%d" % a["coins"], 15, C_POST if got else C_FG, ui.f_bold)
+	cl.autowrap_mode = TextServer.AUTOWRAP_OFF
+	cl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hb.add_child(cl)
+	if not got:
+		var coin := Art.Icon.new()
+		coin.kind = "coin"
+		coin.custom_minimum_size = Vector2(22, 22)
+		coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		hb.add_child(coin)
+	p.add_child(hb)
+	return p
 
 # ---------------------------------------------------------------- lists (one long scrolling list)
 func show_list() -> void:
@@ -593,6 +740,10 @@ func show_event() -> void:
 			if ev["mode"] == "race":
 				sub += "  ·  %s rivals" % Rivals.tier_name(Rivals.campaign_tier(c))
 		"attack": sub = "Time attack  ·  %d laps" % int(d.get("laps", 3))
+		"daily":
+			var paid := Daily.paid_tier()
+			sub = "Track of the day  ·  %s  ·  %s" % [_variant_name(ev["variant"]),
+				"+%d coins, +%d per medal" % [Daily.BASE, Daily.PER_TIER] if paid < 0 else "done today, a better medal pays +%d" % Daily.PER_TIER]
 		"versus": sub = "2-player race  ·  %d laps" % int(d.get("laps", 3))
 	_header(vb, d["name"], sub, func(): go_back())
 	var tall: bool = ui.is_portrait()
@@ -628,7 +779,7 @@ func show_event() -> void:
 	right.add_theme_constant_override("separation", 10)
 	row.add_child(right)
 	right.add_child(ui._label(d["note"], 15, C_MUTED, ui.f_bold))
-	if ev["kind"] != "campaign":
+	if ev["kind"] in ["attack", "versus"]:
 		var g := GridContainer.new()
 		g.columns = 2 if tall else 4
 		g.add_theme_constant_override("h_separation", 8)
@@ -688,6 +839,8 @@ func show_event() -> void:
 
 # where the event screen sits in its carousel: [index, count]
 func _event_pos() -> Array:
+	if ev["kind"] == "daily":
+		return [0, 1]
 	if ev["kind"] == "campaign":
 		var c := Campaign.chapter_of(ev["idx"])
 		return [ev["idx"] - Campaign.chapter_start(c), Campaign.chapter_size(c)]
@@ -891,6 +1044,7 @@ func refresh() -> void:
 		"list": show_list()
 		"event": show_event()
 		"garage": show_garage()
+		"awards": show_awards()
 
 # next campaign event after ev, if unlocked
 func next_event() -> Dictionary:
@@ -905,10 +1059,13 @@ func next_event() -> Dictionary:
 # back button: event -> list -> home; false on the home screen (the game may then quit)
 func go_back() -> bool:
 	match screen:
-		"garage":
+		"garage", "awards":
 			show_home()
 			return true
 		"event":
+			if ev["kind"] == "daily":
+				show_home()
+				return true
 			focus = ev["idx"]   # the list comes back with this card in view
 			if ev["kind"] == "campaign":
 				world = Campaign.chapter_of(ev["idx"])
