@@ -495,7 +495,7 @@ func _tile_style(b: Control, border: Color, bg: Color, width := 2) -> void:
 	for st in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
 		var sb := StyleBoxFlat.new()
 		sb.bg_color = bg.lightened(0.05) if st.begins_with("hover") else bg
-		sb.set_corner_radius_all(4)
+		sb.set_corner_radius_all(14)
 		sb.border_color = border
 		sb.set_border_width_all(width)
 		sb.shadow_color = Color(0, 0, 0, 0.25)
