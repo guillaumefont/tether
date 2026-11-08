@@ -56,9 +56,10 @@ class Logo extends Control:
 			draw_string(font, Vector2(x + w1, base) + o, "RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, sh if pass_i == 0 else C_ICE)
 
 	func min_width() -> float:
+		var h := maxf(size.y, custom_minimum_size.y)   # size is still 0 before the first layout
 		if font == null:
-			return size.y
-		return size.y * 1.12 + font.get_string_size("TETHER RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+			return h
+		return h * 1.12 + font.get_string_size("TETHER RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 
 # Hand-drawn icons, all in one stroke style so they read as a set.
 # Cards: "flag" (campaign), "watch" (time attack), "duel" (two players).

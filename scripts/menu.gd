@@ -255,33 +255,30 @@ func show_home() -> void:
 	var gap := Control.new()
 	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(gap)
-	# the coin counter: in the top bar on a wide screen, beside the medals on a phone held
-	# upright (the top bar has no room left there)
-	var coins: Button = ui.icon_button("coin", str(Wallet.coins()), "card", false, 40 if tall else 50)
+	# coins, awards and garage: in the top bar on a wide screen; on a phone held upright
+	# the title needs that room, so they sit in the medal row under it
+	var bh := 44 if tall else 50
+	var side: Array = []
+	var coins: Button = ui.icon_button("coin", str(Wallet.coins()), "card", false, bh)
 	coins.tooltip_text = "Coins: spend them in the Garage"
-	coins.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	coins.pressed.connect(show_garage)
-	if not tall:
-		top.add_child(coins)
-		var sep0 := Control.new()
-		sep0.custom_minimum_size.x = 8
-		top.add_child(sep0)
-	var cup: Button = ui.icon_button("trophy", "", "card", false, 50)
+	side.append(coins)
+	var cup: Button = ui.icon_button("trophy", "", "card", false, bh)
 	cup.tooltip_text = "Awards"
-	cup.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	cup.pressed.connect(show_awards)
-	top.add_child(cup)
-	var sep1 := Control.new()
-	sep1.custom_minimum_size.x = 8
-	top.add_child(sep1)
-	var car: Button = ui.icon_button("car", "", "card", false, 50)
+	side.append(cup)
+	var car: Button = ui.icon_button("car", "", "card", false, bh)
 	car.tooltip_text = "Garage"
-	car.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	car.pressed.connect(show_garage)
-	top.add_child(car)
-	var sep := Control.new()
-	sep.custom_minimum_size.x = 8
-	top.add_child(sep)
+	side.append(car)
+	for b in side:
+		b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	if not tall:
+		for b in side:
+			top.add_child(b)
+			var sp := Control.new()
+			sp.custom_minimum_size.x = 8
+			top.add_child(sp)
 	var gear: Button = ui.icon_button("gear", "", "card", false, 50)
 	gear.tooltip_text = "Settings"
 	gear.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -304,8 +301,10 @@ func show_home() -> void:
 		mrow.add_theme_constant_override("separation", 10)
 		cab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		cab.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		cab.custom_minimum_size.x = 0
 		mrow.add_child(cab)
-		mrow.add_child(coins)
+		for b in side:
+			mrow.add_child(b)
 		sub.add_child(mrow)
 	else:
 		sub.add_child(cab)
