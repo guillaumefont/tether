@@ -127,3 +127,14 @@ static func any() -> bool:
 		if k != META:
 			return true
 	return false
+
+# progress reset (Settings): every best time, ghost, medal and campaign flag goes
+static func reset() -> void:
+	_load()
+	for k in _cfg.get_sections():
+		var gp := _ghost_path(k)
+		if FileAccess.file_exists(gp):
+			DirAccess.remove_absolute(gp)
+	_cfg = ConfigFile.new()
+	_cfg.set_value(META, "layouts", LAYOUT_VERSION)
+	_cfg.save(PATH)

@@ -31,6 +31,7 @@ signal pause_action(what: String)   # resume | restart | exit
 signal option_changed(key: String, value)
 signal skip_pressed       # leave the tutorial
 signal tutorial_pressed   # replay the tutorial (settings screen)
+signal reset_pressed      # erase all progress (settings screen, confirmed with a second tap)
 signal reward_popped(i: int)  # a results badge (record, medal) just popped in: sound + buzz
 
 const MINIMAP := 110.0
@@ -673,6 +674,11 @@ func _build_settings() -> void:
 		hide_settings()
 		tutorial_pressed.emit())
 	vb.add_child(tut)
+	# a second tap within a few seconds confirms; anything else puts the button back
+	_reset_btn = icon_button("retry", "RESET PROGRESS", "card", false, 50)
+	_reset_btn.focus_mode = Control.FOCUS_NONE
+	_reset_btn.pressed.connect(_reset_tap)
+	vb.add_child(_reset_btn)
 	var done := icon_button("check", "DONE", "go", false, 56)
 	done.pressed.connect(hide_settings)
 	vb.add_child(done)
@@ -680,10 +686,34 @@ func _build_settings() -> void:
 
 func show_settings(opts: Dictionary) -> void:
 	set_options(_settings_o, opts)
+	_reset_arm(false)
 	settings_ov.visible = true
 
 func hide_settings() -> void:
+	_reset_arm(false)
 	settings_ov.visible = false
+
+var _reset_btn: Button
+var _reset_armed_ms := -1
+
+func _reset_tap() -> void:
+	if _reset_armed_ms >= 0 and Time.get_ticks_msec() - _reset_armed_ms < 5000:
+		_reset_arm(false)
+		reset_pressed.emit()
+		return
+	_reset_arm(true)
+	get_tree().create_timer(5.0).timeout.connect(func():
+		if _reset_armed_ms >= 0 and Time.get_ticks_msec() - _reset_armed_ms >= 4900:
+			_reset_arm(false))
+
+# armed: the button turns red and asks for the second tap
+func _reset_arm(on: bool) -> void:
+	if _reset_btn == null:
+		return
+	_reset_armed_ms = Time.get_ticks_msec() if on else -1
+	var l: Label = _reset_btn.get_meta("label")
+	l.text = "TAP AGAIN TO ERASE ALL PROGRESS" if on else "RESET PROGRESS"
+	l.add_theme_color_override("font_color", Color("#ff6a5c") if on else C_FG)
 
 func hide_pause() -> void:
 	pause_ov.visible = false
@@ -694,8 +724,6 @@ var _load_title: Label
 var _load_tip: Label
 var _load_tween: Tween
 var _load_box: VBoxContainer
-
-var _load_bar
 # loading artwork per theme: [landscape, portrait]; the screen wears the menu's theme.
 # Loaded on demand (load() caches) so only the pictures in use sit in memory.
 const ART := {
@@ -707,11 +735,11 @@ const ART := {
 var art_theme := "snow"
 var _load_art
 
-# logo near the top, title / tip / bar at the bottom, whatever the screen shape
+# logo near the top (its ring is the progress indicator), title and tip at the bottom
 func _place_loading() -> void:
 	var ins := safe_insets()
 	_load_box.offset_bottom = -22 - ins["b"]
-	_load_box.offset_top = _load_box.offset_bottom - 104
+	_load_box.offset_top = _load_box.offset_bottom - 70
 	var pair: Array = ART.get(art_theme, ART["snow"])
 	_load_art.bg = load(pair[1] if is_portrait() else pair[0])
 
@@ -743,13 +771,6 @@ func _build_loading() -> void:
 	_load_tip.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
 	_load_tip.add_theme_constant_override("shadow_offset_y", 1)
 	vb.add_child(_load_tip)
-	var bar_row := CenterContainer.new()
-	bar_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_load_bar = Art.LoadBar.new()
-	_load_bar.custom_minimum_size = Vector2(300, 26)
-	_load_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bar_row.add_child(_load_bar)
-	vb.add_child(bar_row)
 	loading.visible = false
 	root.add_child(loading)
 
@@ -763,19 +784,19 @@ func show_loading(title: String) -> void:
 	_load_tip.text = TIPS[randi() % TIPS.size()]
 	loading.modulate.a = 1.0
 	loading.visible = true
-	_load_bar.value = 0.0
-	_load_bar.target = 0.08
+	_load_art.shown = 0.0
+	_load_art.progress = 0.08
 	_place_loading()
 
 func set_loading_progress(v: float) -> void:
-	_load_bar.target = v
+	_load_art.progress = v
 
 func hide_loading() -> void:
 	if not loading.visible:
 		return
-	_load_bar.target = 1.0
+	_load_art.progress = 1.0
 	_load_tween = create_tween()
-	_load_tween.tween_interval(0.25)   # let the bar reach the end
+	_load_tween.tween_interval(0.25)   # let the ring close
 	_load_tween.tween_property(loading, "modulate:a", 0.0, 0.35)
 	_load_tween.tween_callback(func(): loading.visible = false)
 

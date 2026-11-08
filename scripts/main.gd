@@ -17,6 +17,10 @@ const Themes = preload("res://scripts/themes.gd")
 const Tutorial = preload("res://scripts/tutorial.gd")
 const Cosmetics = preload("res://scripts/cosmetics.gd")
 const Haptics = preload("res://scripts/haptics.gd")
+const Wallet = preload("res://scripts/wallet.gd")
+const Daily = preload("res://scripts/daily.gd")
+const Awards = preload("res://scripts/awards.gd")
+const WorldUnlock = preload("res://scripts/world_unlock.gd")
 
 var view: WorldView
 var ui: UI
@@ -42,7 +46,7 @@ var new_record := false
 var touch_owner := {}        # touch index -> player
 var paused := false
 var themes_before: Array = []   # themes unlocked when the race started
-var looks_before: Array = []    # garage items open when the race started
+var worlds_before: Array = []   # campaign worlds finished when the race started
 var building := false        # a loading screen is building the next track
 var tutorial := false        # the run is the tutorial (Defs.TUTORIAL), driven by `tut`
 var tut: Tutorial = null
@@ -61,11 +65,12 @@ func _ready() -> void:
 	add_child(ui)
 	sfx.set_volumes(Settings.get_opt("music_vol"), Settings.get_opt("sfx_vol"))
 	view.set_quality(Settings.get_opt("quality"))
-	sfx.prewarm(_streak_notes() + _reward_notes())
+	sfx.prewarm(_streak_notes() + _reward_notes() + _all_world_notes())
 	ui.option_changed.connect(_option_changed)
 	ui.reward_popped.connect(_reward_popped)
 	ui.menu.settings_pressed.connect(func(): ui.show_settings(_options(true)))
 	ui.pause_pressed.connect(_toggle_pause)
+	ui.reset_pressed.connect(_reset_progress)
 	ui.pause_action.connect(_pause_action)
 	ui.menu.start_event.connect(_start_event)
 	ui.again_pressed.connect(new_race)
@@ -316,7 +321,7 @@ func new_race(built: TrackData = null) -> void:
 	race = Race.new(track, mode, humans)
 	race.set_rivals(rival_tier, catch_up)
 	themes_before = Themes.ORDER.filter(func(t): return Campaign.theme_unlocked(t))
-	looks_before = Cosmetics.open_ids()
+	worlds_before = range(Campaign.CHAPTERS.size()).filter(func(c): return Campaign.chapter_done(c))
 	ghost = Records.get_ghost(rec_key()) if mode == "trial" and not tutorial else []
 	view.setup_cars(race, mode == "trial" and not tutorial, _dress(race))
 	new_record = false
@@ -685,7 +690,18 @@ func _show_results() -> void:
 			var tg: float = Medals.targets(name, variant)[tier]
 			if tg > 0.0:
 				note += " Next medal (%s): %s." % [Medals.NAMES[tier], UI.fmt2(tg)]
+		if new_record:
+			Wallet.bump("records")
+		var run_val: float = c.finish_time if track.tokens.size() > 0 else c.best_lap
+		var run_tier := Medals.trial_tier(name, variant, run_val) if c.finished else 0
+		var coins := Wallet.medal_coins(start_tier, run_tier)
+		var daily := 0
+		if c.finished and Daily.is_today(track_idx, variant):
+			daily = Daily.claim(run_tier)
+		note = _pay(coins, daily, { "mode": "trial", "variant": variant, "finished": c.finished, "clean_laps": c.best_clean_laps,
+			"streak": c.best_streak, "hits": c.hits, "gems_all": track.tokens.size() > 0 and c.gems == track.tokens.size() }, rewards) + note
 		ui.show_results("New record" if new_record else "Time trial", rows, _unlock_note() + note, not ui.menu.next_event().is_empty(), 3, rewards)
+		_world_moment()
 		return
 	var st := race.standings()
 	var winner = st[0]
@@ -707,9 +723,13 @@ func _show_results() -> void:
 		if place == 1 and me.finished:
 			lead = (st[1].finish_time - me.finish_time) if st.size() > 1 and st[1].finished else 99.0
 		var tier := Medals.race_tier(place, lead) if me.finished else 0
+		var held := Records.get_medal(rec_key(), "race")
 		if Records.award_medal(rec_key(), "race", tier):
 			rrewards.append({ "text": "%s MEDAL" % Medals.NAMES[tier - 1].to_upper(), "col": Medals.COLORS[tier - 1] })
+		rnote = _pay(Wallet.medal_coins(held, tier), 0, { "mode": "race", "variant": variant, "finished": me.finished, "place": place,
+			"lead": lead, "clean_laps": me.best_clean_laps, "streak": me.best_streak, "hits": me.hits }, rrewards) + rnote
 	ui.show_results(title, rows2, _unlock_note() + rnote, not ui.menu.next_event().is_empty(), 3, rrewards)
+	_world_moment()
 
 # mirror the tutorial's card and big word onto the UI when they change
 func _sync_tutorial() -> void:
@@ -734,11 +754,89 @@ func _show_tutorial_end() -> void:
 
 # a campaign world just finished: say which theme it opened
 func _unlock_note() -> String:
-	var now := Cosmetics.open_ids()
-	var fresh := Cosmetics.new_names(looks_before, now)
-	looks_before = now
-	var garage := "New in the Garage: %s!  " % fresh if fresh != "" else ""
-	return _theme_note() + garage
+	return _theme_note()
+
+# One-player run over: pay the medal and Track of the day coins and any awards reached,
+# add their badges, and return a line for the results note.
+func _pay(medal_coins: int, daily: int, run: Dictionary, rewards: Array) -> String:
+	Wallet.add(medal_coins)
+	var won := Awards.check(run)
+	var total := medal_coins + daily
+	for a in won:
+		rewards.append({ "text": "AWARD: %s" % String(a["name"]).to_upper(), "col": Color("#5fe0d0") })
+	var txt := ""
+	if total > 0:
+		rewards.push_front({ "text": "+%d COINS" % total, "col": Color("#f2c84a") })
+		var parts: Array = []
+		if medal_coins > 0: parts.append("medal %d" % medal_coins)
+		if daily > 0: parts.append("Track of the day %d" % daily)
+		txt = "+%d coins (%s): %d in all.  " % [total, ", ".join(parts), Wallet.coins()]
+	if not won.is_empty():
+		txt += "New award%s: collect %d coins on the Awards screen.  " % ["s" if won.size() > 1 else "", won.reduce(func(n, a): return n + int(a["coins"]), 0)]
+	return txt
+
+# Settings > Reset progress (confirmed there): coins, looks bought, awards, medals,
+# records, ghosts and the campaign start over. Options and paid packs stay.
+func _reset_progress() -> void:
+	Records.reset()
+	Wallet.reset()
+	Cosmetics.unequip_all()
+	ui.hide_settings()
+	ui.menu.world = -1
+	ui.menu.show_home()
+
+# a campaign world finished on this run: the "world unlocked" show over the results
+func _world_moment() -> void:
+	for c in Campaign.CHAPTERS.size():
+		if Campaign.chapter_done(c) and not worlds_before.has(c):
+			worlds_before.append(c)
+			show_world_unlock(c)
+			return
+
+func show_world_unlock(c: int) -> void:
+	var done: String = Campaign.CHAPTERS[c]["theme"]
+	var last := c + 1 >= Campaign.CHAPTERS.size()
+	var nxt: String = done if last else String(Campaign.CHAPTERS[c + 1]["theme"])
+	var lines: Array = []
+	if not last:
+		lines.append("World %d, %s, open in the Campaign" % [c + 2, Themes.get_theme(nxt)["name"]])
+	if c > 0:
+		lines.append("%s theme in Time attack" % Themes.get_theme(done)["name"])
+		lines.append("Menu and loading screen dressed in %s" % Themes.get_theme(done)["name"])
+	for it in Cosmetics.PAINTS:
+		if it["unlock"].get("world", -1) == c:
+			lines.append("%s paint for sale in the Garage" % it["name"])
+	var aw := Awards.find("world_" + done)
+	if not aw.is_empty():
+		lines.append("Award %s: %d coins to collect" % [aw["name"], aw["coins"]])
+	var title := "All worlds done!" if last else "%s unlocked" % Themes.get_theme(nxt)["name"]
+	var sub := "%s world finished" % Themes.get_theme(done)["name"]
+	var w := WorldUnlock.new()
+	ui.root.add_child(w)
+	w.setup(ui, ui.menu.WORLD_ART[nxt], nxt, title, sub, lines)
+	w.step.connect(_world_step)
+
+# the show's beats: a rattle, the click open, a rising chord for the title, a tick per line
+func _world_step(k: int) -> void:
+	for n in _world_notes(k):
+		sfx.blip(n[0], n[1], n[2], n[3], n[4])
+	if k == 1 or k == 2:
+		Haptics.reward()
+	elif k == 0:
+		Haptics.buzz(30, 0.4)
+
+static func _world_notes(k: int) -> Array:
+	match k:
+		0: return [[110.0, 0.08, "square", 0.05, 0.0]]
+		1: return [[523.0, 0.06, "square", 0.05, 0.0], [1568.0, 0.18, "triangle", 0.06, 0.0]]
+		2: return [[523.0, 0.35, "triangle", 0.06, 0.0], [659.0, 0.35, "triangle", 0.05, 0.0], [784.0, 0.45, "triangle", 0.05, 0.0], [1047.0, 0.6, "triangle", 0.05, 0.0]]
+	return [[snappedf(880.0 * pow(1.0595, mini(k - 3, 6) * 2), 1.0), 0.07, "triangle", 0.04, 0.0]]
+
+static func _all_world_notes() -> Array:
+	var a: Array = []
+	for k in 10:
+		a += _world_notes(k)
+	return a
 
 func _theme_note() -> String:
 	for t in Themes.ORDER:
@@ -769,6 +867,22 @@ func _run_demo(arg: String) -> void:
 		["menu_attack", func(): ui.menu.kind = "attack"; ui.menu.focus = 8; ui.menu.show_list()],
 		["menu_garage", func(): ui.menu.show_garage()],
 		["menu_garage_livery", func(): ui.menu.show_garage(); var g = ui.menu.body.find_children("*", "BoxContainer", true, false).filter(func(n): return n.has_method("_set_tab"))[0]; g._set_tab("livery"); g._pick(Cosmetics.find("livery", "checker"))],
+		["menu_awards", func(): ui.menu.show_awards()],
+		["menu_daily", func():
+			var p := Daily.current()
+			ui.menu.ev = { "track": p["track"], "variant": p["variant"], "mode": "trial", "humans": 1, "kind": "daily", "idx": 0, "theme": Campaign.track_theme(p["track"]) }
+			ui.menu.show_event()],
+		["settings_reset", func(): ui.show_settings(_options(true)); ui._reset_tap()],
+		["results_coins", func():
+			ui.hide_settings()
+			ui.menu.visible = false
+			ui.show_results("Time trial", [{ "cells": ["Lap 1", "", "0:12.10"], "hl": true }, { "cells": ["Lap 2", "", "0:12.45"] }], "+400 coins (medal 100, Track of the day 100, Clean triple 150, Smooth operator 100): 1240 in all.", false, 3,
+				[{ "text": "+450 COINS", "col": Color("#f2c84a") }, { "text": "GOLD MEDAL", "col": Medals.COLORS[2] }, { "text": "AWARD: CLEAN TRIPLE", "col": Color("#5fe0d0") }])],
+		["world_lock", func(): show_world_unlock(0)],
+		["world_open", func(): pass],
+		["world_done", func(): pass],
+		["world_close", func(): for w in ui.root.get_children(): if w is WorldUnlock: w.queue_free()],
+		["menu_back", func(): ui.results.visible = false; ui.menu.visible = true; ui.menu.show_home()],
 		["loading", func(): ui.show_loading(Defs.TRACKS[track_idx]["name"]); ui.set_loading_progress(0.6)],
 		["menu_event", func():
 			ui.loading.visible = false
@@ -782,7 +896,7 @@ func _run_demo(arg: String) -> void:
 		["results", func(): pass]]   # same panel once the badges have popped in
 	for sh in shots:
 		sh[1].call()
-		await get_tree().create_timer(1.5 if sh[0] == "results" else 0.3).timeout
+		await get_tree().create_timer({ "results": 1.5, "world_open": 1.1, "world_done": 2.6 }.get(sh[0], 0.3)).timeout
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png(out.path_join(sh[0] + ".png"))
 	new_race()

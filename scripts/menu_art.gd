@@ -56,9 +56,10 @@ class Logo extends Control:
 			draw_string(font, Vector2(x + w1, base) + o, "RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, sh if pass_i == 0 else C_ICE)
 
 	func min_width() -> float:
+		var h := maxf(size.y, custom_minimum_size.y)   # size is still 0 before the first layout
 		if font == null:
-			return size.y
-		return size.y * 1.12 + font.get_string_size("TETHER RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+			return h
+		return h * 1.12 + font.get_string_size("TETHER RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 
 # Hand-drawn icons, all in one stroke style so they read as a set.
 # Cards: "flag" (campaign), "watch" (time attack), "duel" (two players).
@@ -120,6 +121,19 @@ class Icon extends Control:
 				draw_colored_polygon(PackedVector2Array([c + Vector2(0, -s * 0.34), c + Vector2(s * 0.36, -s * 0.02), c + Vector2(-s * 0.36, -s * 0.02)]), col)
 				draw_rect(Rect2(c + Vector2(-s * 0.25, -s * 0.06), Vector2(s * 0.5, s * 0.36)), col)
 				draw_rect(Rect2(c + Vector2(-s * 0.07, s * 0.1), Vector2(s * 0.14, s * 0.2)), Color("#0d1a26"))
+			"coin":       # a gold coin with a rim and a notch
+				draw_circle(c, s * 0.36, Color("#b8801c"))
+				draw_circle(c + Vector2(-s * 0.02, -s * 0.02), s * 0.31, Color("#f2c84a"))
+				draw_arc(c, s * 0.21, 0, TAU, 24, Color("#c9922a"), maxf(1.5, s * 0.05), true)
+				draw_rect(Rect2(c + Vector2(-s * 0.04, -s * 0.13), Vector2(s * 0.08, s * 0.26)), Color("#c9922a"))
+				draw_circle(c + Vector2(-s * 0.14, -s * 0.15), s * 0.05, Color(1, 1, 1, 0.7))
+			"trophy":     # a cup on a stand
+				draw_colored_polygon(PackedVector2Array([c + Vector2(-s * 0.24, -s * 0.32), c + Vector2(s * 0.24, -s * 0.32),
+					c + Vector2(s * 0.16, -s * 0.02), c + Vector2(0, s * 0.06), c + Vector2(-s * 0.16, -s * 0.02)]), col)
+				for sx in [-1.0, 1.0]:
+					draw_arc(c + Vector2(sx * s * 0.25, -s * 0.18), s * 0.1, -PI / 2 if sx > 0 else PI / 2, PI / 2 if sx > 0 else PI * 1.5, 10, col, lw * 0.8, true)
+				draw_rect(Rect2(c + Vector2(-s * 0.04, s * 0.04), Vector2(s * 0.08, s * 0.16)), col)
+				draw_rect(Rect2(c + Vector2(-s * 0.18, s * 0.2), Vector2(s * 0.36, s * 0.1)), col)
 			"check":
 				draw_polyline(PackedVector2Array([c + Vector2(-s * 0.28, 0), c + Vector2(-s * 0.08, s * 0.2), c + Vector2(s * 0.3, -s * 0.22)]), col, lw * 1.5, true)
 			"ghost":
@@ -301,6 +315,9 @@ class Cabinet extends Control:
 
 # The title card shared by the boot splash (tools/gen_splash.gd renders it to a PNG) and the
 # in-game loading screen: a snowy night, a row of pines, the tower emblem and the wordmark.
+# The emblem is also the game's only loading indicator: set `progress` (0..1) and an amber ring
+# fills around it while the car keeps lapping the tower; `spinner` runs an endless chasing arc
+# instead (web/shell_template.html draws the same emblem in SVG for the browser loader).
 const C_NIGHT_TOP := Color("#0d2233")
 const C_NIGHT_BOT := Color("#06121b")
 
@@ -315,10 +332,16 @@ class Splash extends Control:
 	var bg: Texture2D          # loading screen artwork, cropped to cover the screen
 	var emblem_y := 0.38       # emblem centre, fraction of the height
 	var emblem_k := 1.0        # emblem and wordmark scale
+	var show_emblem := true    # false: wordmark only (the web page draws its own animated emblem)
+	var progress := -1.0       # loading progress target 0..1; below 0 the ring is not drawn
+	var shown := 0.0           # progress as drawn, eases towards `progress`
+	var spinner := false       # no known progress: an arc chases round the ring
 
 	func _process(dt: float) -> void:
 		if animate and is_visible_in_tree():
 			t += dt
+			if progress >= 0.0:
+				shown = lerpf(shown, progress, 1.0 - exp(-10.0 * dt))
 			queue_redraw()
 
 	func _draw() -> void:
@@ -388,22 +411,8 @@ class Splash extends Control:
 		# emblem: tower, rotor, car on its tether
 		var c := Vector2(w * 0.5, h * (emblem_y - 0.08 * lift))
 		var R := u * 0.15 * emblem_k
-		draw_circle(c, R * 1.08, Color(C_NIGHT_BOT, 0.55) if bg else Color(1, 1, 1, 0.05))
-		draw_arc(c, R * 1.08, 0, TAU, 64, Color(C_ICE, 0.3), maxf(2.0, u * 0.004), true)
-		draw_arc(c, R * 0.78, 0, TAU, 64, Color(C_ICE, 0.12), maxf(1.0, u * 0.003), true)
-		draw_circle(c, R * 0.3, C_TOWER)
-		draw_circle(c, R * 0.23, C_AMBER)
-		for k in 3:
-			var ra := -t * 3.0 + TAU * k / 3.0
-			draw_line(c, c + Vector2.from_angle(ra) * R * 0.2, C_TOWER, maxf(2.0, R * 0.06), true)
-		var a := t * 1.6
-		var p := c + Vector2.from_angle(a) * R * 0.78
-		draw_line(c, p, C_AMBER, maxf(2.0, R * 0.045), true)
-		var fwd := Vector2.from_angle(a + PI / 2)
-		var side := Vector2.from_angle(a)
-		var L := R * 0.24; var W := R * 0.14
-		draw_colored_polygon(PackedVector2Array([p + fwd * L + side * W, p + fwd * L - side * W, p - fwd * L - side * W, p - fwd * L + side * W]), C_CAR)
-		draw_colored_polygon(PackedVector2Array([p + fwd * L * 0.2 + side * W * 0.7, p + fwd * L * 0.2 - side * W * 0.7, p - fwd * L * 0.4 - side * W * 0.7, p - fwd * L * 0.4 + side * W * 0.7]), Color("#1a2330"))
+		if show_emblem:
+			draw_emblem(self, c, R, t, shown if progress >= 0.0 else -1.0, spinner, bg != null)
 		if font == null:
 			return
 		var fs := int(u * 0.085 * emblem_k)
@@ -416,42 +425,39 @@ class Splash extends Control:
 		draw_string(font, Vector2(x, base), "TETHER", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, C_AMBER)
 		draw_string(font, Vector2(x + w1, base), "RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, C_ICE)
 
-# Loading bar: a frosted track, an amber fill with a soft sheen, and a little car
-# riding the end of the fill on its tether.
-class LoadBar extends Control:
-	var value := 0.0          # shown value, eases towards target
-	var target := 0.0
-	var t := 0.0
-
-	func _process(dt: float) -> void:
-		if not is_visible_in_tree():
-			return
-		t += dt
-		value = lerpf(value, target, 1.0 - exp(-10.0 * dt))
-		queue_redraw()
-
-	func _draw() -> void:
-		var h := size.y
-		var r := h * 0.5
-		var track := Rect2(Vector2(0, h * 0.3), Vector2(size.x, h * 0.4))
-		var sb := StyleBoxFlat.new()
-		sb.bg_color = Color(0.03, 0.08, 0.13, 0.85)
-		sb.set_corner_radius_all(int(track.size.y * 0.5))
-		sb.border_color = Color(C_ICE, 0.45)
-		sb.set_border_width_all(1)
-		draw_style_box(sb, track)
-		var fw := maxf(track.size.y, track.size.x * clampf(value, 0.0, 1.0))
-		var fill := Rect2(track.position, Vector2(fw, track.size.y))
-		var fb := StyleBoxFlat.new()
-		fb.bg_color = C_AMBER
-		fb.set_corner_radius_all(int(track.size.y * 0.5))
-		draw_style_box(fb, fill.grow(-2))
-		# moving sheen
-		var sx := fposmod(t * 160.0, fw + 60.0) - 30.0
-		draw_rect(Rect2(track.position + Vector2(maxf(2.0, sx), 3), Vector2(minf(18.0, maxf(0.0, fw - sx - 4.0)), track.size.y * 0.3)), Color(1, 1, 1, 0.35))
-		# the car at the head of the fill, nose forward
-		var p := Vector2(track.position.x + fw, h * 0.5)
-		var cw := h * 0.9; var ch := h * 0.55
-		draw_rect(Rect2(p - Vector2(cw * 0.5, ch * 0.5), Vector2(cw, ch)), C_CAR)
-		draw_rect(Rect2(p - Vector2(cw * 0.15, ch * 0.32), Vector2(cw * 0.35, ch * 0.64)), Color("#1a2330"))
-		draw_circle(p - Vector2(cw * 0.5, 0), r * 0.2, C_ICE)
+	# the emblem: tower with its spinning rotor, the car lapping it on its tether, and the ring
+	# round them that doubles as the loading indicator. `prog` 0..1 fills the ring in amber from
+	# the top, clockwise (below 0: no ring); `spin` instead runs a short arc round and round.
+	static func draw_emblem(ci: CanvasItem, c: Vector2, R: float, t: float, prog := -1.0, spin := false, dark := true) -> void:
+		var u := R / 0.15
+		ci.draw_circle(c, R * 1.08, Color(C_NIGHT_BOT, 0.55) if dark else Color(1, 1, 1, 0.05))
+		ci.draw_arc(c, R * 1.08, 0, TAU, 64, Color(C_ICE, 0.3), maxf(2.0, u * 0.004), true)
+		ci.draw_arc(c, R * 0.78, 0, TAU, 64, Color(C_ICE, 0.12), maxf(1.0, u * 0.003), true)
+		var rw := maxf(3.0, R * 0.07)
+		if spin:
+			var a0 := t * 4.2 - PI / 2
+			var a1 := a0 + PI * (0.35 + 0.25 * sin(t * 2.1))
+			ci.draw_arc(c, R * 1.08, a0, a1, 32, C_AMBER, rw, true)
+			ci.draw_circle(c + Vector2.from_angle(a1) * R * 1.08, rw * 0.5, C_AMBER)
+			ci.draw_circle(c + Vector2.from_angle(a0) * R * 1.08, rw * 0.5, C_AMBER)
+		elif prog >= 0.0:
+			var p := clampf(prog, 0.0, 1.0)
+			var a1 := -PI / 2 + TAU * p
+			ci.draw_arc(c, R * 1.08, -PI / 2, a1, maxi(4, int(64 * p)), C_AMBER, rw, true)
+			ci.draw_circle(c + Vector2.from_angle(-PI / 2) * R * 1.08, rw * 0.5, C_AMBER)
+			var head := c + Vector2.from_angle(a1) * R * 1.08
+			ci.draw_circle(head, rw * 0.95, Color(C_AMBER, 0.35 + 0.15 * sin(t * 8.0)))
+			ci.draw_circle(head, rw * 0.6, Color("#fff3d1"))
+		ci.draw_circle(c, R * 0.3, C_TOWER)
+		ci.draw_circle(c, R * 0.23, C_AMBER)
+		for k in 3:
+			var ra := -t * 3.0 + TAU * k / 3.0
+			ci.draw_line(c, c + Vector2.from_angle(ra) * R * 0.2, C_TOWER, maxf(2.0, R * 0.06), true)
+		var a := t * 1.6
+		var p := c + Vector2.from_angle(a) * R * 0.78
+		ci.draw_line(c, p, C_AMBER, maxf(2.0, R * 0.045), true)
+		var fwd := Vector2.from_angle(a + PI / 2)
+		var side := Vector2.from_angle(a)
+		var L := R * 0.24; var W := R * 0.14
+		ci.draw_colored_polygon(PackedVector2Array([p + fwd * L + side * W, p + fwd * L - side * W, p - fwd * L - side * W, p - fwd * L + side * W]), C_CAR)
+		ci.draw_colored_polygon(PackedVector2Array([p + fwd * L * 0.2 + side * W * 0.7, p + fwd * L * 0.2 - side * W * 0.7, p - fwd * L * 0.4 - side * W * 0.7, p - fwd * L * 0.4 + side * W * 0.7]), Color("#1a2330"))
