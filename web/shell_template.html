@@ -11,28 +11,30 @@ body { color: #e6f1f8; background-color: #06121b; overflow: hidden; touch-action
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 #canvas { display: block; }
 #canvas:focus { outline: none; }
-/* Tether Racing loading page: dusk artwork, logo, tip and a themed progress bar */
+/* Tether Racing loading page: dusk artwork, the animated tower emblem (its ring is the
+   progress indicator, the same drawing as the in-game loading screen), the wordmark and a tip */
 #status { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
   justify-content: space-between; visibility: hidden; transition: opacity 0.4s;
   background: linear-gradient(to bottom, rgba(13,34,51,0.85) 0%, rgba(13,34,51,0) 48%, rgba(6,18,27,0) 55%, rgba(6,18,27,0.92) 100%),
     url("data:image/jpeg;base64,__ART__") center 12% / cover no-repeat, #06121b; }
-#logo { width: min(78vw, 52vh, 560px); margin-top: 5vh; }
+#brand { --w: min(78vw, 52vh, 560px); width: var(--w); margin-top: 5vh; display: flex; flex-direction: column; align-items: center; }
+#emblem { width: calc(var(--w) * 0.42); height: auto; overflow: visible; }
+#logo { width: var(--w); margin-top: calc(var(--w) * 0.03); }
 #bottom { width: min(86vw, 420px); margin-bottom: 6vh; text-align: center; }
 #title { color: #f2b134; font-weight: 800; letter-spacing: 0.08em; font-size: 15px; margin-bottom: 6px; }
 #tip { font-size: 14px; line-height: 1.35; text-shadow: 0 1px 2px rgba(0,0,0,0.6); min-height: 2.7em; }
-#bar { position: relative; height: 10px; margin: 14px 12px 0; border-radius: 6px; background: rgba(8,20,33,0.85);
-  border: 1px solid rgba(230,241,248,0.45); }
-#fill { position: absolute; left: 0; top: 0; bottom: 0; width: 4%; border-radius: 6px; background: #f2b134;
-  transition: width 0.25s; overflow: hidden; }
-#fill::after { content: ""; position: absolute; top: 2px; width: 18px; height: 3px; background: rgba(255,255,255,0.4);
-  animation: sheen 1.4s linear infinite; }
-@keyframes sheen { from { left: -20px; } to { left: 100%; } }
-#car { position: absolute; top: -6px; width: 26px; height: 20px; margin-left: -13px; left: 4%; border-radius: 3px;
-  background: linear-gradient(to right, #f2b134 0 30%, #1a2330 30% 62%, #f2b134 62%); transition: left 0.25s;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.4); }
-#bar.indeterminate #fill { width: 30% !important; animation: slide 1.2s ease-in-out infinite alternate; }
-#bar.indeterminate #car { display: none; }
-@keyframes slide { from { left: 0; } to { left: 70%; } }
+/* emblem parts, in a 240 x 240 box centred on the tower */
+#orbit { animation: orbit 3.927s linear infinite; }           /* 1.6 rad/s, like the game */
+#rotor { animation: rotor 2.094s linear infinite; }           /* -3 rad/s */
+@keyframes orbit { to { transform: rotate(360deg); } }
+@keyframes rotor { to { transform: rotate(-360deg); } }
+#ring { transform: rotate(-90deg); transition: stroke-dashoffset 0.3s ease-out; }
+#ring.spin { stroke-dasharray: 22 78; animation: ringspin 1.5s linear infinite; transition: none; }
+@keyframes ringspin { from { transform: rotate(-90deg); } to { transform: rotate(270deg); } }
+#head { transform: rotate(-90deg); transition: transform 0.3s ease-out; }
+#head circle:first-child { animation: pulse 0.8s ease-in-out infinite alternate; }
+@keyframes pulse { from { opacity: 0.25; } to { opacity: 0.55; } }
+#ring.spin + #head { display: none; }
 #notice { display: none; margin-top: 14px; padding: 10px 14px; border-radius: 8px; background: rgba(169,52,42,0.9);
   font-size: 14px; white-space: pre-line; }
 </style>
@@ -42,11 +44,29 @@ $GODOT_HEAD_INCLUDE
 <canvas id="canvas">Your browser does not support the canvas tag.</canvas>
 <noscript>Your browser does not support JavaScript.</noscript>
 <div id="status">
-  <img id="logo" alt="Tether Racing" src="data:image/png;base64,__LOGO__">
+  <div id="brand">
+    <svg id="emblem" viewBox="-120 -120 240 240" role="progressbar" aria-label="Loading">
+      <circle r="108" fill="rgba(6,18,27,0.55)" stroke="rgba(230,241,248,0.3)" stroke-width="2"/>
+      <circle r="78" fill="none" stroke="rgba(230,241,248,0.12)" stroke-width="1.5"/>
+      <circle id="ring" class="spin" r="108" fill="none" stroke="#f2b134" stroke-width="7" stroke-linecap="round"
+        pathLength="100" stroke-dasharray="100 100" stroke-dashoffset="100"/>
+      <g id="head"><circle cx="108" r="6.6" fill="#f2b134"/><circle cx="108" r="4.2" fill="#fff3d1"/></g>
+      <circle r="30" fill="#2a2f36"/>
+      <circle r="23" fill="#f2b134"/>
+      <g id="rotor" stroke="#2a2f36" stroke-width="6" stroke-linecap="round">
+        <line x2="20"/><line x2="20" transform="rotate(120)"/><line x2="20" transform="rotate(240)"/>
+      </g>
+      <g id="orbit">
+        <line x2="78" stroke="#f2b134" stroke-width="4.5" stroke-linecap="round"/>
+        <rect x="64" y="-24" width="28" height="48" fill="#f2b134"/>
+        <rect x="68.2" y="-9.6" width="19.6" height="14.4" fill="#1a2330"/>
+      </g>
+    </svg>
+    <img id="logo" alt="Tether Racing" src="data:image/png;base64,__LOGO__">
+  </div>
   <div id="bottom">
     <div id="title">LOADING</div>
     <div id="tip"></div>
-    <div id="bar"><div id="fill"></div><div id="car"></div></div>
     <div id="notice"></div>
   </div>
 </div>
@@ -63,9 +83,16 @@ const engine = new Engine(GODOT_CONFIG);
     "Beat a medal time to unlock the next campaign event.",
   ];
   const status = document.getElementById("status");
-  const bar = document.getElementById("bar");
-  const fill = document.getElementById("fill");
-  const car = document.getElementById("car");
+  const ring = document.getElementById("ring");
+  const head = document.getElementById("head");
+  const emblem = document.getElementById("emblem");
+  // the emblem's ring fills clockwise from the top; without a known size it spins instead
+  function progress(f) {
+    ring.classList.remove("spin");
+    ring.style.strokeDashoffset = String(100 - f * 100);
+    head.style.transform = "rotate(" + (-90 + 360 * f) + "deg)";
+    emblem.setAttribute("aria-valuenow", String(Math.round(f * 100)));
+  }
   const notice = document.getElementById("notice");
   document.getElementById("tip").textContent = TIPS[Math.floor(Math.random() * TIPS.length)];
   status.style.visibility = "visible";
@@ -73,7 +100,10 @@ const engine = new Engine(GODOT_CONFIG);
   function fail(err) {
     const msg = err && err.message ? err.message : String(err);
     console.error(msg);
-    bar.style.display = "none";
+    ring.classList.remove("spin");
+    ring.style.stroke = "#a9342a";
+    ring.style.strokeDashoffset = "0";
+    head.style.display = "none";
     notice.style.display = "block";
     notice.textContent = msg;
     engine.unload && engine.unload();
@@ -87,17 +117,13 @@ const engine = new Engine(GODOT_CONFIG);
   engine.startGame({
     onProgress: function (current, total) {
       if (current > 0 && total > 0) {
-        bar.classList.remove("indeterminate");
-        const pct = Math.max(4, Math.min(100, (current / total) * 100)) + "%";
-        fill.style.width = pct;
-        car.style.left = pct;
+        progress(Math.max(0.04, Math.min(1, current / total)));
       } else {
-        bar.classList.add("indeterminate");
+        ring.classList.add("spin");
       }
     },
   }).then(function () {
-    fill.style.width = "100%";
-    car.style.left = "100%";
+    progress(1);
     status.style.opacity = "0";
     setTimeout(function () { status.style.visibility = "hidden"; }, 450);
   }, fail);

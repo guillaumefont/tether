@@ -1,6 +1,7 @@
 extends SceneTree
 # Builds web/shell.html (the browser loading page) from web/shell_template.html: inlines the
-# loading artwork and a transparent logo rendered from the game's own drawing. Needs a display:
+# loading artwork and a transparent wordmark rendered from the game's own drawing (the animated
+# emblem with its progress ring is SVG in the template). Needs a display:
 #   xvfb-run godot --path . --rendering-method gl_compatibility --resolution 900x900 --script tools/gen_web_shell.gd
 const Art = preload("res://scripts/menu_art.gd")
 
@@ -11,6 +12,7 @@ func _initialize() -> void:
 	sp.animate = false
 	sp.flat = true
 	sp.clear_bg = true
+	sp.show_emblem = false   # the page draws the emblem itself (SVG), animated, as its progress ring
 	sp.t = 0.55
 	sp.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.add_child(sp)
