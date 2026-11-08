@@ -255,14 +255,17 @@ func show_home() -> void:
 	var gap := Control.new()
 	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(gap)
-	var coins: Button = ui.icon_button("coin", str(Wallet.coins()), "card", false, 50)
+	# the coin counter: in the top bar on a wide screen, beside the medals on a phone held
+	# upright (the top bar has no room left there)
+	var coins: Button = ui.icon_button("coin", str(Wallet.coins()), "card", false, 40 if tall else 50)
 	coins.tooltip_text = "Coins: spend them in the Garage"
 	coins.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	coins.pressed.connect(show_garage)
-	top.add_child(coins)
-	var sep0 := Control.new()
-	sep0.custom_minimum_size.x = 8
-	top.add_child(sep0)
+	if not tall:
+		top.add_child(coins)
+		var sep0 := Control.new()
+		sep0.custom_minimum_size.x = 8
+		top.add_child(sep0)
 	var cup: Button = ui.icon_button("trophy", "", "card", false, 50)
 	cup.tooltip_text = "Awards"
 	cup.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -296,7 +299,16 @@ func show_home() -> void:
 	cab.counts = _medal_counts()
 	cab.custom_minimum_size = Vector2(250, 26)
 	cab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	sub.add_child(cab)
+	if tall:
+		var mrow := HBoxContainer.new()
+		mrow.add_theme_constant_override("separation", 10)
+		cab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		cab.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		mrow.add_child(cab)
+		mrow.add_child(coins)
+		sub.add_child(mrow)
+	else:
+		sub.add_child(cab)
 	vb.add_child(sub)
 	vb.add_child(_daily_banner())
 	var row: BoxContainer = VBoxContainer.new() if tall else HBoxContainer.new()
