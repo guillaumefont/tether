@@ -27,6 +27,9 @@ SHOT_DIR=/tmp/shots/a godot --path . --resolution 1920x1080 --rendering-driver o
 | 05-two-players | `8,standard,20,race,2,snow` | race_1 |
 | 06-campaign | any run | menu_world |
 | 07-garage | any run | menu_garage |
+| 08-awards | any run | menu_awards |
+
+Menus only (no race needed): `0,standard,4,race,1,snow` takes about 4 min.
 
 README shots: `docs/race-obstacles.png` = 03 at 1280x720, `docs/pause.png` = the 03 run with
 `SHOT_PAUSE=1`, `docs/menu.png` = menu_home, `docs/portrait-collect.png` =
