@@ -33,6 +33,7 @@ signal skip_pressed       # leave the tutorial
 signal tutorial_pressed   # replay the tutorial (settings screen)
 signal reset_pressed      # erase all progress (settings screen, confirmed with a second tap)
 signal reward_popped(i: int)  # a results badge (record, medal) just popped in: sound + buzz
+signal awards_pressed         # the trophy on the results screen: open the Awards screen
 
 const MINIMAP := 110.0
 const C_PANEL := Color(0.035, 0.075, 0.082, 0.92)
@@ -292,6 +293,11 @@ func layout() -> void:
 	minimap.offset_top = minimap.offset_bottom - MINIMAP
 	var vp := root.get_viewport_rect().size
 	results_panel.custom_minimum_size.x = minf(440.0, vp.x - 40.0)
+	if res_cup:
+		res_cup.offset_right = -14 - ins["r"]
+		res_cup.offset_left = res_cup.offset_right - 50
+		res_cup.offset_top = 12 + ins["t"]
+		res_cup.offset_bottom = res_cup.offset_top + 50
 	if pause_panel:
 		pause_panel.custom_minimum_size.x = minf(440.0, vp.x - 40.0)
 	if settings_panel:
@@ -427,6 +433,13 @@ func _build_results() -> void:
 	row.add_child(next_btn)
 	for b in row.get_children():
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# the trophy in the corner that new award medallions fly into; shown when there are some
+	res_cup = icon_button("trophy", "", "card", false, 50)
+	res_cup.tooltip_text = "Awards"
+	res_cup.anchor_left = 1.0; res_cup.anchor_right = 1.0
+	res_cup.pressed.connect(func(): awards_pressed.emit())
+	res_cup.visible = false
+	results.add_child(res_cup)
 	results.visible = false
 
 # ---------------------------------------------------------------- pause
@@ -1120,9 +1133,14 @@ func hide_coach() -> void:
 # rewards: [{ text, col }], badges that pop in one after the other under the title
 # (new record, medal earned); the title bounces when there is any
 var res_rewards: HFlowContainer
+var res_cup: Button
 var _res_tw: Tween
 func show_results(title: String, rows: Array, note: String, has_next := false, cols := 3, rewards: Array = []) -> void:
 	_show_rewards(rewards)
+	res_cup.visible = false
+	for ch in results.get_children():
+		if ch.has_signal("finished"):   # an award show left from the last results
+			ch.queue_free()
 	next_btn.visible = has_next
 	# with a next event waiting, that is the main action and Again steps back
 	res_again.set_meta("look", "card" if has_next else "go")

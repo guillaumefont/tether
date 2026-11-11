@@ -21,6 +21,7 @@ const Wallet = preload("res://scripts/wallet.gd")
 const Daily = preload("res://scripts/daily.gd")
 const Awards = preload("res://scripts/awards.gd")
 const WorldUnlock = preload("res://scripts/world_unlock.gd")
+const AwardShow = preload("res://scripts/award_show.gd")
 
 var view: WorldView
 var ui: UI
@@ -47,6 +48,7 @@ var touch_owner := {}        # touch index -> player
 var paused := false
 var themes_before: Array = []   # themes unlocked when the race started
 var worlds_before: Array = []   # campaign worlds finished when the race started
+var awards_won: Array = []      # awards this run earned: their medallions play over the results
 var building := false        # a loading screen is building the next track
 var tutorial := false        # the run is the tutorial (Defs.TUTORIAL), driven by `tut`
 var tut: Tutorial = null
@@ -65,7 +67,7 @@ func _ready() -> void:
 	add_child(ui)
 	sfx.set_volumes(Settings.get_opt("music_vol"), Settings.get_opt("sfx_vol"))
 	view.set_quality(Settings.get_opt("quality"))
-	sfx.prewarm(_streak_notes() + _reward_notes() + _all_world_notes())
+	sfx.prewarm(_streak_notes() + _reward_notes() + _all_world_notes() + _all_award_notes())
 	ui.option_changed.connect(_option_changed)
 	ui.reward_popped.connect(_reward_popped)
 	ui.menu.settings_pressed.connect(func(): ui.show_settings(_options(true)))
@@ -80,6 +82,7 @@ func _ready() -> void:
 			ui.menu.ev = nx
 			_start_event(nx))
 	ui.menu_pressed.connect(func(): _with_loading("", _to_menu))
+	ui.awards_pressed.connect(func(): _with_loading("", _to_awards))
 	ui.skip_pressed.connect(_leave_tutorial)
 	ui.tutorial_pressed.connect(start_tutorial)
 	ui.show_loading("")   # picks up from the boot splash, fades out once the menu scene is up
@@ -164,6 +167,11 @@ func _load_race() -> void:
 	building = false
 	new_race(tr)
 	ui.hide_loading()
+
+# the trophy on the results screen: back to the menu, straight onto the Awards screen
+func _to_awards() -> void:
+	_to_menu()
+	ui.menu.show_awards()
 
 func _to_menu() -> void:
 	if tutorial:
@@ -702,6 +710,7 @@ func _show_results() -> void:
 			"streak": c.best_streak, "hits": c.hits, "gems_all": track.tokens.size() > 0 and c.gems == track.tokens.size() }, rewards) + note
 		ui.show_results("New record" if new_record else "Time trial", rows, _unlock_note() + note, not ui.menu.next_event().is_empty(), 3, rewards)
 		_world_moment()
+		_award_moment()
 		return
 	var st := race.standings()
 	var winner = st[0]
@@ -730,6 +739,7 @@ func _show_results() -> void:
 			"lead": lead, "clean_laps": me.best_clean_laps, "streak": me.best_streak, "hits": me.hits }, rrewards) + rnote
 	ui.show_results(title, rows2, _unlock_note() + rnote, not ui.menu.next_event().is_empty(), 3, rrewards)
 	_world_moment()
+	_award_moment()
 
 # mirror the tutorial's card and big word onto the UI when they change
 func _sync_tutorial() -> void:
@@ -761,9 +771,8 @@ func _unlock_note() -> String:
 func _pay(medal_coins: int, daily: int, run: Dictionary, rewards: Array) -> String:
 	Wallet.add(medal_coins)
 	var won := Awards.check(run)
+	awards_won = won   # each one gets its own medallion moment after the badges (_award_moment)
 	var total := medal_coins + daily
-	for a in won:
-		rewards.append({ "text": "AWARD: %s" % String(a["name"]).to_upper(), "col": Color("#5fe0d0") })
 	var txt := ""
 	if total > 0:
 		rewards.push_front({ "text": "+%d COINS" % total, "col": Color("#f2c84a") })
@@ -792,6 +801,48 @@ func _world_moment() -> void:
 			worlds_before.append(c)
 			show_world_unlock(c)
 			return
+
+# the awards this run earned: once the results badges have popped in (and after the
+# "world unlocked" show, if there is one), each award's medallion plays and flies into the cup
+func _award_moment() -> void:
+	var won := awards_won
+	awards_won = []
+	if won.is_empty():
+		return
+	for w in ui.root.get_children():
+		if w is WorldUnlock:
+			w.closed.connect(func(): show_awards_won(won))
+			return
+	var wait := 0.45 + ui.res_rewards.get_child_count() * 0.52
+	get_tree().create_timer(wait).timeout.connect(func(): show_awards_won(won))
+
+func show_awards_won(won: Array) -> void:
+	if not ui.results.visible:
+		return
+	ui.res_cup.visible = true
+	var sh := AwardShow.new()
+	ui.results.add_child(sh)
+	sh.setup(ui, won, ui.res_cup)
+	sh.step.connect(_award_step)
+
+# the medallion's beats: a rising pair as it appears, a bright chime when its scene is
+# done, a tick as it drops into the cup
+func _award_step(k: int) -> void:
+	for n in _award_notes(k):
+		sfx.blip(n[0], n[1], n[2], n[3], n[4])
+	if k == 1:
+		Haptics.reward()
+	elif k == 2:
+		Haptics.buzz(20, 0.4)
+
+static func _award_notes(k: int) -> Array:
+	match k:
+		0: return [[587.0, 0.12, "triangle", 0.05, 200.0]]
+		1: return [[784.0, 0.3, "triangle", 0.05, 0.0], [1175.0, 0.4, "triangle", 0.04, 0.0], [1568.0, 0.5, "sine", 0.04, 0.0]]
+	return [[1320.0, 0.06, "square", 0.04, 0.0]]
+
+static func _all_award_notes() -> Array:
+	return _award_notes(0) + _award_notes(1) + _award_notes(2)
 
 func show_world_unlock(c: int) -> void:
 	var done: String = Campaign.CHAPTERS[c]["theme"]
@@ -878,7 +929,10 @@ func _run_demo(arg: String) -> void:
 			ui.hide_settings()
 			ui.menu.visible = false
 			ui.show_results("Time trial", [{ "cells": ["Lap 1", "", "0:12.10"], "hl": true }, { "cells": ["Lap 2", "", "0:12.45"] }], "+400 coins (medal 100, Track of the day 100, Clean triple 150, Smooth operator 100): 1240 in all.", false, 3,
-				[{ "text": "+450 COINS", "col": Color("#f2c84a") }, { "text": "GOLD MEDAL", "col": Medals.COLORS[2] }, { "text": "AWARD: CLEAN TRIPLE", "col": Color("#5fe0d0") }])],
+				[{ "text": "+450 COINS", "col": Color("#f2c84a") }, { "text": "GOLD MEDAL", "col": Medals.COLORS[2] }])],
+		["award_play", func(): show_awards_won([Awards.find("clean_laps"), Awards.find("first_pivot")])],
+		["award_done", func(): pass],
+		["award_fly", func(): pass],
 		["world_lock", func(): show_world_unlock(0)],
 		["world_open", func(): pass],
 		["world_done", func(): pass],
@@ -897,7 +951,7 @@ func _run_demo(arg: String) -> void:
 		["results", func(): pass]]   # same panel once the badges have popped in
 	for sh in shots:
 		sh[1].call()
-		await get_tree().create_timer({ "results": 1.5, "world_open": 1.1, "world_done": 2.6 }.get(sh[0], 0.3)).timeout
+		await get_tree().create_timer({ "results": 1.5, "world_open": 1.1, "world_done": 2.6, "award_play": 0.9, "award_done": 1.4 }.get(sh[0], 0.3)).timeout
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png(out.path_join(sh[0] + ".png"))
 	new_race()

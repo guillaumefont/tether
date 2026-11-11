@@ -20,6 +20,7 @@ const Cosmetics = preload("res://scripts/cosmetics.gd")
 const Wallet = preload("res://scripts/wallet.gd")
 const Daily = preload("res://scripts/daily.gd")
 const Awards = preload("res://scripts/awards.gd")
+const AwardMedal = preload("res://scripts/award_medal.gd")
 # world card pictures: the land of each theme, no track (tools/gen_loading_art.gd ART_SCENERY=1)
 const WORLD_ART := {
 	"snow": preload("res://art/world_snow.jpg"), "forest": preload("res://art/world_forest.jpg"),
@@ -267,23 +268,17 @@ func show_home() -> void:
 	side.append(coins)
 	var cup: Button = ui.icon_button("trophy", "", "card", false, bh)
 	cup.tooltip_text = "Awards"
-	var ready := Awards.ready_count()
-	if ready > 0:   # awards waiting to be collected: a little amber count on the cup
-		var dot := Label.new()
-		dot.text = str(ready)
-		dot.add_theme_font_override("font", ui.f_bold)
-		dot.add_theme_font_size_override("font_size", 12)
-		dot.add_theme_color_override("font_color", Color("#1d2229"))
-		dot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		dot.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		var ds := StyleBoxFlat.new()
-		ds.bg_color = C_POST
-		ds.set_corner_radius_all(9)
-		dot.add_theme_stylebox_override("normal", ds)
-		dot.size = Vector2(18, 18)
-		dot.position = Vector2(bh - 14, -4)
-		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		cup.add_child(dot)
+	if Awards.ready_count() > 0:   # awards waiting to be collected: the cup gives a little hop now and then
+		var ic: Control = cup.get_meta("icon")
+		ic.pivot_offset = ic.custom_minimum_size * 0.5
+		ic.resized.connect(func(): ic.pivot_offset = ic.size * 0.5)
+		var hop := ic.create_tween().set_loops()
+		hop.tween_interval(1.6)
+		hop.tween_property(ic, "scale", Vector2.ONE * 1.25, 0.12).set_trans(Tween.TRANS_SINE)
+		hop.tween_property(ic, "rotation", 0.25, 0.08)
+		hop.tween_property(ic, "rotation", -0.25, 0.12)
+		hop.tween_property(ic, "rotation", 0.0, 0.08)
+		hop.tween_property(ic, "scale", Vector2.ONE, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	cup.pressed.connect(show_awards)
 	side.append(cup)
 	var car: Button = ui.icon_button("car", "", "card", false, bh)
@@ -523,9 +518,19 @@ func _award_tile(a: Dictionary, header: HBoxContainer, coins: Button) -> Button:
 	v.offset_left = 10; v.offset_right = -10; v.offset_top = 10; v.offset_bottom = -10
 	v.add_theme_constant_override("separation", 3)
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var ic := Art.Icon.new()
-	ic.kind = "lock" if not (ready or got) else "trophy"
-	ic.custom_minimum_size = Vector2(36, 36)
+	# an earned award shows its medallion (which plays its scene again when collected)
+	var ic: Control
+	var medal: AwardMedal = null
+	if ready or got:
+		medal = AwardMedal.new()
+		medal.id = id
+		ic = medal
+		ic.custom_minimum_size = Vector2(44, 44)
+	else:
+		var lk := Art.Icon.new()
+		lk.kind = "lock"
+		ic = lk
+		ic.custom_minimum_size = Vector2(36, 36)
 	ic.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.add_child(ic)
@@ -578,7 +583,8 @@ func _award_tile(a: Dictionary, header: HBoxContainer, coins: Button) -> Button:
 			pop.tween_property(b, "scale", Vector2.ONE * 1.08, 0.08)
 			pop.tween_property(b, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 			fl.text = "+%d COINS!" % n
-			pop.tween_interval(0.35)
+			medal.play()
+			pop.tween_interval(AwardMedal.duration(id) - 0.2)
 			pop.tween_callback(func():
 				var keep := _scroller.scroll if _scroller else 0.0
 				show_awards()

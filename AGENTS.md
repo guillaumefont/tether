@@ -36,6 +36,7 @@ godot --headless --path . --script tests/wall_test.gd    # a car on the road edg
 godot --headless --path . --script tests/tutorial_test.gd  # the first-launch tutorial can be finished
 godot --headless --path . --script tests/cosmetics_test.gd  # garage items: prices, every look builds, looks only
 godot --headless --path . --script tests/economy_test.gd    # coins, Track of the day, awards, buying, progress reset
+godot --headless --path . --script tests/award_anim_test.gd # every award has a medallion scene that draws
 godot --headless --path . --script tests/rivals_test.gd    # rival tiers get harder, stay beatable (~4 min)
 godot --headless --path . --script tests/obstacles_test.gd # the AI's line never touches an Obstacles post
 ```
