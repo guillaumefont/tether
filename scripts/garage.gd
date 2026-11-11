@@ -163,6 +163,8 @@ func _show_tab() -> void:
 	_update_status()
 
 func _pick(it: Dictionary) -> void:
+	if tab == "body":
+		menu.vehicle_picked.emit(it["id"])   # a taste of its engine
 	if tab == "body" and it["home"] != home:
 		home = it["home"]   # the stage moves to that vehicle's world
 		trying.erase("body")

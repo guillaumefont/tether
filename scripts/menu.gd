@@ -32,6 +32,7 @@ const WORLD_ART := {
 
 signal start_event(ev: Dictionary)   # { track, variant, mode, humans, kind, idx }
 signal settings_pressed
+signal vehicle_picked(id: String)   # Garage: a vehicle tapped, rev its engine
 
 # a light night-blue wash over the live race round the page
 const C_BG_TOP := Color(0.03, 0.09, 0.15, 0.45)

@@ -42,3 +42,5 @@ jobs:
         run: ./godot --headless --path . --script tests/obstacles_test.gd
       - name: Cinematic camera test
         run: ./godot --headless --path . --script tests/camera_test.gd
+      - name: Engine sounds test
+        run: ./godot --headless --path . --script tests/engine_test.gd
