@@ -2853,8 +2853,8 @@ const CINE_SHOTS := {
 	# pitch (deg) from..to, distance (m) from..to, yaw (deg, 0 = in front of the nose,
 	# 180 = behind) at the start, yaw speed (deg/s), ease in / out (s), look height (m)
 	"intro":  { "pitch": [22.0, 34.0], "dist": [3.4, 4.4], "yaw": 155.0, "spin": 5.0, "in": 0.01, "out": 0.6, "lift": 0.18 },
-	"finish": { "pitch": [15.0, 15.0], "dist": [2.6, 2.6], "yaw": 180.0, "spin": 0.0, "chase": 18.0, "in": 1.0, "out": 0.6, "lift": 0.2 },
-	"win":    { "pitch": [11.0, 11.0], "dist": [2.2, 2.2], "yaw": 180.0, "spin": 0.0, "chase": 24.0, "in": 0.9, "out": 0.6, "lift": 0.18 },
+	"finish": { "pitch": [17.0, 17.0], "dist": [3.6, 3.6], "yaw": 180.0, "spin": 0.0, "chase": 18.0, "in": 1.0, "out": 0.6, "lift": 0.2 },
+	"win":    { "pitch": [13.0, 13.0], "dist": [3.1, 3.1], "yaw": 180.0, "spin": 0.0, "chase": 24.0, "in": 0.9, "out": 0.6, "lift": 0.18 },
 	"card":   { "pitch": [13.0, 13.0], "dist": [2.6, 2.6], "yaw": 50.0, "spin": 10.0, "in": 1.0, "out": 0.7, "lift": 0.18 },
 	"freeze": { "pitch": [20.0, 20.0], "dist": [4.2, 4.2], "yaw": 160.0, "spin": 0.0, "in": 0.55, "out": 0.45, "lift": 0.0 },
 }
