@@ -1724,7 +1724,7 @@ func _car_body_hd(parts_list: Array, col: Color, top: Material, low: Material) -
 	glass.rim_enabled = false
 	glass.clearcoat_enabled = false
 	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	parts_list.append(soft_prism(rounded(PackedVector2Array([Vector2(-26, 35), Vector2(30, 35),
+	parts_list.append(soft_prism(rounded(PackedVector2Array([Vector2(-38, 35), Vector2(30, 35),
 			Vector2(12, 51), Vector2(-26, 51)]), 2.5), 50.0, 4.0, glass))   # glasshouse
 	parts_list.append(soft_prism(rounded(PackedVector2Array([Vector2(-27, 50.5), Vector2(11, 50.5),
 			Vector2(11, 53.5), Vector2(-27, 53.5)]), 1.2), 52.0, 1.5, top))   # roof
@@ -1930,8 +1930,8 @@ func _make_car(col: Color, ghost := false, look := {}) -> Node3D:
 			parts_list.append(pprism(PackedVector2Array([Vector2(30, 20), Vector2(67, 20),
 					Vector2(67, 28), Vector2(30, 36)]), 60.0, top))   # flush with the body
 			# one tinted glasshouse: the windscreen is its sloped front face
-			parts_list.append(pprism(PackedVector2Array([Vector2(-26, 35), Vector2(30, 35),
-					Vector2(12, 51), Vector2(-26, 51)]), 50.0, glass))
+			parts_list.append(pprism(PackedVector2Array([Vector2(-38, 35), Vector2(30, 35),
+					Vector2(12, 51), Vector2(-26, 51)]), 50.0, glass))   # rear window slopes too
 			parts_list.append(pbox(Vector3(36, 3, 50), top, Vector3(-8, 52, 0)))      # roof
 			parts_list.append(pbox(Vector3(14, 5, 66), low, Vector3(-56, 41, 0)))     # rear spoiler
 			parts_list.append(pbox(Vector3(5, 6, 5), low, Vector3(-56, 36, 22)))
@@ -2119,7 +2119,7 @@ func _car_kit_sand(chassis: Node3D, parts_list: Array, top: Material, dark: Mate
 
 # ---------------------------------------------------------------- liveries
 # Thin painted panels laid just proud of the body (same shape for every theme kit).
-# The body: rear deck y 36 (x -58..-26), glasshouse x -26..30, roof top y 53.5
+# The body: rear deck y 36 (x -58..-38), glasshouse x -38..30 (rear window sloped), roof top y 53.5
 # (x -26..10), bonnet sloping from (30, 36) to (67, 28), sides at z ±30 (y 22..36).
 const BONNET_A := -0.2129   # the bonnet's slope (radians about z)
 const BONNET_LIVERIES := ["stripes", "checker", "glow"]
@@ -2169,7 +2169,7 @@ func _livery(parts_list: Array, look: Dictionary, col: Color) -> void:
 		"twotone":   # roof, wing and deck in the accent colour
 			parts_list.append(pbox(Vector3(36.6, 3.4, 50.6), am, Vector3(-8, 52, 0)))
 			parts_list.append(pbox(Vector3(14.6, 5.4, 66.6), am, Vector3(-56, 41, 0)))
-			parts_list.append(pbox(Vector3(32, 0.6, 60.4), am, Vector3(-42, 36.3, 0)))
+			parts_list.append(pbox(Vector3(20, 0.6, 60.4), am, Vector3(-48, 36.3, 0)))
 			for side: float in [1.0, -1.0]:   # and a sill along the bottom of each side
 				parts_list.append(pbox(Vector3(124, 4, 0.6), am, Vector3(4, 24, 30.3 * side)))
 		"checker":   # a chequered band across the bonnet and the wing
