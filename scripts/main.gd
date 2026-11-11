@@ -866,6 +866,7 @@ func _run_demo(arg: String) -> void:
 		["menu_world", func(): ui.menu.kind = "campaign"; ui.menu.world = 0; ui.menu.focus = 0; ui.menu.show_list()],
 		["menu_attack", func(): ui.menu.kind = "attack"; ui.menu.focus = 8; ui.menu.show_list()],
 		["menu_garage", func(): ui.menu.show_garage()],
+		["menu_garage_vehicle", func(): ui.menu.show_garage(); var g = ui.menu.body.find_children("*", "BoxContainer", true, false).filter(func(n): return n.has_method("_set_tab"))[0]; g._pick(Cosmetics.find("body", "rally"))],
 		["menu_garage_livery", func(): ui.menu.show_garage(); var g = ui.menu.body.find_children("*", "BoxContainer", true, false).filter(func(n): return n.has_method("_set_tab"))[0]; g._set_tab("livery"); g._pick(Cosmetics.find("livery", "checker"))],
 		["menu_awards", func(): ui.menu.show_awards()],
 		["menu_daily", func():

@@ -1,5 +1,5 @@
-# Car cosmetics: paint (colour + finish), livery (a pattern in an accent colour) and rope
-# colour. Visual only: nothing here touches the car's handling, so rankings stay fair.
+# Car cosmetics: vehicle (one per world), paint (colour + finish), livery (a pattern in an
+# accent colour) and rope colour. Visual only: nothing here touches the car's handling, so rankings stay fair.
 # Items are bought with coins (scripts/wallet.gd: earned with medals, the Track of the day
 # and awards); a world's own paint can only be bought once that campaign world is finished.
 # Paid packs are owned through a Store product. The player's picks live in settings.cfg.
@@ -59,7 +59,25 @@ const ROPES := [
 	{ "id": "neon", "name": "Neon", "color": Color("#3ff2ff"), "unlock": { "product": "neon_pack" } },
 ]
 
-const SLOTS := { "paint": PAINTS, "livery": LIVERIES, "rope": ROPES }
+# Each world drives its own kind of vehicle (WorldView builds them): three per world, the
+# first free and the one the rivals drive. "home" is the world it belongs to; the player
+# picks one vehicle per world, and a race uses the pick of the world it is run in.
+const BODIES := [
+	{ "id": "sled", "name": "Snowmobile", "home": "snow", "unlock": {} },
+	{ "id": "snowcat", "name": "Snowcat", "home": "snow", "unlock": { "coins": 600 } },
+	{ "id": "van", "name": "Arctic van", "home": "snow", "unlock": { "coins": 900, "world": 0 } },
+	{ "id": "pickup", "name": "Pickup", "home": "forest", "unlock": {} },
+	{ "id": "jeep", "name": "Open 4x4", "home": "forest", "unlock": { "coins": 600 } },
+	{ "id": "hauler", "name": "Timber hauler", "home": "forest", "unlock": { "coins": 900, "world": 1 } },
+	{ "id": "buggy", "name": "Buggy", "home": "sand", "unlock": {} },
+	{ "id": "rally", "name": "Rally truck", "home": "sand", "unlock": { "coins": 600 } },
+	{ "id": "bug", "name": "Beach bug", "home": "sand", "unlock": { "coins": 900, "world": 2 } },
+	{ "id": "monster", "name": "Monster truck", "home": "rock", "unlock": {} },
+	{ "id": "crawler", "name": "Rock crawler", "home": "rock", "unlock": { "coins": 600 } },
+	{ "id": "expedition", "name": "Expedition 6x6", "home": "rock", "unlock": { "coins": 900, "world": 3 } },
+]
+
+const SLOTS := { "body": BODIES, "paint": PAINTS, "livery": LIVERIES, "rope": ROPES }
 
 static func items(slot: String) -> Array:
 	return SLOTS[slot]
@@ -155,28 +173,66 @@ static func requirement(it: Dictionary) -> String:
 
 # ---------------------------------------------------------------- the player's picks
 static func equipped(slot: String) -> String:
+	if slot == "body":
+		return equipped_body(Campaign.menu_theme())
 	var id := String(Settings.get_opt("car_" + slot, SLOTS[slot][0]["id"]))
 	var it := find(slot, id)
 	return it["id"] if owned(slot, it) else SLOTS[slot][0]["id"]
 
 static func equip(slot: String, id: String) -> bool:
-	if not owned(slot, find(slot, id)):
+	var it := find(slot, id)
+	if it["id"] != id or not owned(slot, it):
 		return false
-	Settings.set_opt("car_" + slot, id)
+	Settings.set_opt("car_body_" + it["home"] if slot == "body" else "car_" + slot, id)
 	return true
+
+# whether this item is what the player has on (a vehicle: for its own world)
+static func is_equipped(slot: String, it: Dictionary) -> bool:
+	if slot == "body":
+		return equipped_body(it["home"]) == it["id"]
+	return equipped(slot) == it["id"]
+
+# the vehicle picked for a world (its default until another is bought and picked)
+static func equipped_body(home: String) -> String:
+	var id := String(Settings.get_opt("car_body_" + home, ""))
+	var it := find("body", id)
+	if it["id"] == id and it["home"] == home and owned("body", it):
+		return id
+	return default_body(home)
+
+static func default_body(home: String) -> String:
+	for it in BODIES:
+		if it["home"] == home:
+			return it["id"]
+	return BODIES[0]["id"]
+
+# world -> picked vehicle, for every world
+static func bodies() -> Dictionary:
+	var d := {}
+	for c in Campaign.CHAPTERS:
+		d[c["theme"]] = equipped_body(c["theme"])
+	return d
 
 # back to the default look (progress reset)
 static func unequip_all() -> void:
 	for slot in SLOTS:
-		Settings.set_opt("car_" + slot, SLOTS[slot][0]["id"])
+		if slot == "body":
+			for c in Campaign.CHAPTERS:
+				Settings.set_opt("car_body_" + String(c["theme"]), "")
+		else:
+			Settings.set_opt("car_" + slot, SLOTS[slot][0]["id"])
 
-# the look the 3D view builds: { color, finish, livery, accent, rope }
-static func look(paint_id: String, livery_id: String, rope_id := "car") -> Dictionary:
+# the look the 3D view builds: { color, finish, livery, accent, rope, bodies } plus "body"
+# when one vehicle is asked for whatever the world (the Garage stage)
+static func look(paint_id: String, livery_id: String, rope_id := "car", body_id := "") -> Dictionary:
 	var p := find("paint", paint_id)
 	var col: Color = p["color"]
 	var rope: Color = find("rope", rope_id)["color"]
-	return { "color": col, "finish": p["finish"], "livery": livery_id,
-		"accent": accent_for(col), "rope": col if rope.a == 0.0 else rope }
+	var lk := { "color": col, "finish": p["finish"], "livery": livery_id,
+		"accent": accent_for(col), "rope": col if rope.a == 0.0 else rope, "bodies": bodies() }
+	if body_id != "":
+		lk["body"] = body_id
+	return lk
 
 static func player_look() -> Dictionary:
 	return look(equipped("paint"), equipped("livery"), equipped("rope"))
