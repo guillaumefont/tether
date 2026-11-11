@@ -59,6 +59,10 @@ with `SHOT_DIR=<dir>`. Demo flags in `scripts/main.gd`: `--demo=`, `--tutorial-d
 
 - Original game: track layouts and art must be original, never copied from another game.
 - Targets Android and iOS (web build via WASM).
+- Colour roles: the UI accent is ice blue `#4fb6ff` (`C_ACCENT` in `menu_art.gd`, mirrored in `ui.gd`,
+  `menu.gd`, `garage.gd`); amber `#f2b134` is the player's car and rope; gold is only for medals and
+  coins (`C_COIN`). Icons/splash PNGs and the logo PNG inside `web/shell.html` must follow `icon.svg`
+  and `menu_art.gd` when these change.
 - The race camera stays fairly top-down (68°) while the player steers, so lines through bends stay
   readable. Low cinematic shots (`WorldView.CINE_SHOTS`, picked in `main.gd` `_pick_shot`) are only
   for moments nobody steers: countdown, finish/results, the tutorial's cards and frozen bends.

@@ -13,7 +13,8 @@ const Art = preload("res://scripts/menu_art.gd")
 
 const C_FG := Color("#f3efe6")
 const C_MUTED := Color("#9fb3b0")
-const C_POST := Color("#f2b134")
+const C_ACCENT := Color("#4fb6ff")   # UI accent, same as Art.C_ACCENT
+const C_COIN := Color("#f2b134")     # coin amounts stay gold
 const Themes = preload("res://scripts/themes.gd")
 const Settings = preload("res://scripts/settings.gd")
 const TABS := ["body", "paint", "livery", "rope"]
@@ -170,7 +171,7 @@ func _update_status() -> void:
 			status.text = "%s  ·  driven in %s" % [it["name"], Themes.get_theme(it["home"])["name"]]
 		status.add_theme_color_override("font_color", C_FG)
 		return
-	status.add_theme_color_override("font_color", C_POST)
+	status.add_theme_color_override("font_color", C_ACCENT)
 	var u: Dictionary = it["unlock"]
 	var l: Label = buy_btn.get_meta("label")
 	if u.has("product"):
@@ -225,7 +226,7 @@ func _tile(it: Dictionary) -> Button:
 	if on:
 		for st in ["normal", "hover", "pressed", "hover_pressed"]:
 			var sb: StyleBoxFlat = b.get_theme_stylebox(st).duplicate()
-			sb.border_color = C_POST
+			sb.border_color = C_ACCENT
 			sb.set_border_width_all(3)
 			b.add_theme_stylebox_override(st, sb)
 	var v := VBoxContainer.new()
@@ -251,18 +252,18 @@ func _tile(it: Dictionary) -> Button:
 	var sub_col := C_MUTED
 	if open:
 		sub = "Equipped" if Cosmetics.is_equipped(tab, it) else ""
-		sub_col = C_POST
+		sub_col = C_ACCENT
 		if tab == "body" and sub == "":
 			sub = Themes.get_theme(it["home"])["name"]
 			sub_col = C_MUTED
 	elif it["unlock"].has("product"):
 		sub = Store.product(it["unlock"]["product"])["price"]
-		sub_col = C_POST
+		sub_col = C_ACCENT
 	elif not Cosmetics.can_buy_yet(it):
 		sub = _short_req(it)
 	else:
 		sub = "%d coins" % Cosmetics.price(it)
-		sub_col = C_POST if Cosmetics.price(it) <= Wallet.coins() else C_MUTED
+		sub_col = C_COIN if Cosmetics.price(it) <= Wallet.coins() else C_MUTED
 	var sl: Label = ui._label(sub, 11, sub_col, ui.f_med)
 	sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sl.autowrap_mode = TextServer.AUTOWRAP_OFF

@@ -194,7 +194,7 @@ func _close() -> void:
 
 # A padlock; `open` lifts and swings the shackle (0 shut, 1 open)
 class Padlock extends Control:
-	var col := Color("#f2b134")
+	var col := Color("#4fb6ff")
 	var open := 0.0:
 		set(v):
 			open = v

@@ -37,7 +37,8 @@ const C_CARD := Color(0.05, 0.11, 0.17, 0.82)
 const C_FROST := Color(0.86, 0.93, 0.98, 0.55)
 const C_FG := Color("#f3efe6")
 const C_MUTED := Color("#9fb3b0")
-const C_POST := Color("#f2b134")
+const C_ACCENT := Color("#4fb6ff")   # UI accent, same as Art.C_ACCENT
+const C_COIN := Color("#f2b134")     # coin amounts stay gold
 const MODE_NAMES := { "trial": "Time trial", "race": "Race" }
 
 var ui                      # the UI CanvasLayer (fonts, helpers)
@@ -231,7 +232,7 @@ func _card_style(b: Button, locked := false) -> void:
 			s.bg_color = Color(C_CARD, 0.55)
 		s.set_corner_radius_all(12)
 		# a rim of frost along the top edge, like snow on a ledge
-		s.border_color = C_POST if st.contains("pressed") else Color(1, 1, 1, 0.08)
+		s.border_color = C_ACCENT if st.contains("pressed") else Color(1, 1, 1, 0.08)
 		s.set_border_width_all(2)
 		if not st.contains("pressed") and not locked:
 			s.border_color = C_FROST if st.begins_with("hover") else Color(C_FROST, 0.4)
@@ -375,7 +376,7 @@ func _daily_banner() -> Button:
 		right = "Done · +%d / medal" % Daily.PER_TIER
 	else:
 		right = "Done"
-	var rl: Label = ui._label(right, 16, C_POST, ui.f_bold)
+	var rl: Label = ui._label(right, 16, C_COIN, ui.f_bold)
 	rl.autowrap_mode = TextServer.AUTOWRAP_OFF
 	rl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	hb.add_child(rl)
@@ -425,7 +426,7 @@ func _big_choice(icon: String, title: String, sub: String, desc: String, cb: Cal
 	ic.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.add_child(ic)
-	v.add_child(ui._label(title, 30, C_POST, ui.f_display))
+	v.add_child(ui._label(title, 30, C_ACCENT, ui.f_display))
 	v.add_child(ui._label(sub, 16, C_FG, ui.f_bold))
 	v.add_child(ui._label(desc, 13, C_MUTED))
 	b.add_child(v)
@@ -512,7 +513,7 @@ func _award_tile(a: Dictionary, header: HBoxContainer, coins: Button) -> Button:
 	b.custom_minimum_size = Vector2(0, 150 if ui.is_portrait() else 168)
 	b.clip_contents = true
 	var bg := Color(C_CARD, 0.82 if (ready or got) else 0.5)
-	_tile_style(b, C_POST if ready else (Color(C_POST, 0.45) if got else Color(1, 1, 1, 0.08)), bg, 3 if ready else 2)
+	_tile_style(b, C_ACCENT if ready else (Color(C_ACCENT, 0.45) if got else Color(1, 1, 1, 0.08)), bg, 3 if ready else 2)
 	var v := VBoxContainer.new()
 	v.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	v.offset_left = 10; v.offset_right = -10; v.offset_top = 10; v.offset_bottom = -10
@@ -544,7 +545,7 @@ func _award_tile(a: Dictionary, header: HBoxContainer, coins: Button) -> Button:
 	var foot := HBoxContainer.new()
 	foot.add_theme_constant_override("separation", 6)
 	foot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var fl: Label = ui._label("", 14, C_POST, ui.f_display if ready else ui.f_bold)
+	var fl: Label = ui._label("", 14, C_ACCENT, ui.f_display if ready else ui.f_bold)
 	fl.autowrap_mode = TextServer.AUTOWRAP_OFF
 	fl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	if ready:
@@ -552,7 +553,7 @@ func _award_tile(a: Dictionary, header: HBoxContainer, coins: Button) -> Button:
 		fl.add_theme_font_size_override("font_size", 17)
 	elif got:
 		fl.text = "Collected"
-		fl.add_theme_color_override("font_color", Color(C_POST, 0.6))
+		fl.add_theme_color_override("font_color", Color(C_ACCENT, 0.6))
 	else:
 		fl.text = "+%d" % a["coins"]
 		fl.add_theme_color_override("font_color", C_FG)
@@ -785,7 +786,7 @@ func _world_card(c: int) -> Button:
 	l1.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
 	l1.add_theme_constant_override("shadow_offset_y", 2)
 	v.add_child(l1)
-	var l2: Label = ui._label(line2, 13, C_POST if open else C_MUTED, ui.f_bold)
+	var l2: Label = ui._label(line2, 13, C_ACCENT if open else C_MUTED, ui.f_bold)
 	l2.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
 	l2.add_theme_constant_override("shadow_offset_y", 1)
 	v.add_child(l2)
@@ -932,7 +933,7 @@ func show_event() -> void:
 		ms.custom_minimum_size = Vector2(0, 50)
 		ms.set_state(Campaign.medal(d["name"], ev["variant"], ev["mode"]), labels)
 		right.add_child(ms)
-		right.add_child(ui._label(line, 14, C_POST, ui.f_bold))
+		right.add_child(ui._label(line, 14, C_ACCENT, ui.f_bold))
 	var fill := Control.new()
 	fill.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	right.add_child(fill)

@@ -4,6 +4,9 @@ extends RefCounted
 
 const Medals = preload("res://scripts/medals.gd")
 
+# The UI accent (titles, buttons, icons, the tower emblem and its loading ring). The cars keep
+# their amber; gold stays for medals and coins only.
+const C_ACCENT := Color("#4fb6ff")
 const C_AMBER := Color("#f2b134")
 const C_ICE := Color("#e6f1f8")
 const C_ICE_DIM := Color("#9fc0d6")
@@ -29,14 +32,14 @@ class Logo extends Control:
 		draw_circle(c, R, Color(1, 1, 1, 0.08))
 		draw_arc(c, R, 0, TAU, 48, Color(C_ICE, 0.35), 2.0, true)
 		draw_circle(c, h * 0.13, C_TOWER)
-		draw_circle(c, h * 0.1, C_AMBER)
+		draw_circle(c, h * 0.1, C_ACCENT)
 		for k in 3:
 			var a := -t * 3.0 + TAU * k / 3.0
 			draw_line(c, c + Vector2.from_angle(a) * h * 0.085, C_TOWER, maxf(2.0, h * 0.03), true)
-		# the car on its tether, nose along the arc
+		# the car on its tether (both in the car amber), nose along the arc
 		var a := t * 1.6
 		var p := c + Vector2.from_angle(a) * R * 0.78
-		draw_line(c, p, Color(C_AMBER, 0.9), maxf(1.5, h * 0.025), true)
+		draw_line(c, p, Color(C_CAR, 0.9), maxf(1.5, h * 0.025), true)
 		var fwd := Vector2.from_angle(a + PI / 2)
 		var side := Vector2.from_angle(a)
 		var L := h * 0.12; var W := h * 0.07
@@ -52,7 +55,7 @@ class Logo extends Control:
 		for pass_i in 2:
 			var o := Vector2(0, 3) if pass_i == 0 else Vector2.ZERO
 			var sh := Color(0, 0, 0, 0.35)
-			draw_string(font, Vector2(x, base) + o, "TETHER", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, sh if pass_i == 0 else C_AMBER)
+			draw_string(font, Vector2(x, base) + o, "TETHER", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, sh if pass_i == 0 else C_ACCENT)
 			draw_string(font, Vector2(x + w1, base) + o, "RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, sh if pass_i == 0 else C_ICE)
 
 	func min_width() -> float:
@@ -71,7 +74,7 @@ class Icon extends Control:
 		set(v):
 			kind = v
 			queue_redraw()
-	var col := C_AMBER:
+	var col := C_ACCENT:
 		set(v):
 			col = v
 			queue_redraw()
@@ -422,7 +425,7 @@ class Splash extends Control:
 		var x := (w - wt) * 0.5
 		draw_string(font, Vector2(x, base + u * 0.006), "TETHER", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0, 0, 0, 0.4))
 		draw_string(font, Vector2(x + w1, base + u * 0.006), "RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0, 0, 0, 0.4))
-		draw_string(font, Vector2(x, base), "TETHER", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, C_AMBER)
+		draw_string(font, Vector2(x, base), "TETHER", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, C_ACCENT)
 		draw_string(font, Vector2(x + w1, base), "RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, C_ICE)
 
 	# the emblem: tower with its spinning rotor, the car lapping it on its tether, and the ring
@@ -437,25 +440,25 @@ class Splash extends Control:
 		if spin:
 			var a0 := t * 4.2 - PI / 2
 			var a1 := a0 + PI * (0.35 + 0.25 * sin(t * 2.1))
-			ci.draw_arc(c, R * 1.08, a0, a1, 32, C_AMBER, rw, true)
-			ci.draw_circle(c + Vector2.from_angle(a1) * R * 1.08, rw * 0.5, C_AMBER)
-			ci.draw_circle(c + Vector2.from_angle(a0) * R * 1.08, rw * 0.5, C_AMBER)
+			ci.draw_arc(c, R * 1.08, a0, a1, 32, C_ACCENT, rw, true)
+			ci.draw_circle(c + Vector2.from_angle(a1) * R * 1.08, rw * 0.5, C_ACCENT)
+			ci.draw_circle(c + Vector2.from_angle(a0) * R * 1.08, rw * 0.5, C_ACCENT)
 		elif prog >= 0.0:
 			var p := clampf(prog, 0.0, 1.0)
 			var a1 := -PI / 2 + TAU * p
-			ci.draw_arc(c, R * 1.08, -PI / 2, a1, maxi(4, int(64 * p)), C_AMBER, rw, true)
-			ci.draw_circle(c + Vector2.from_angle(-PI / 2) * R * 1.08, rw * 0.5, C_AMBER)
+			ci.draw_arc(c, R * 1.08, -PI / 2, a1, maxi(4, int(64 * p)), C_ACCENT, rw, true)
+			ci.draw_circle(c + Vector2.from_angle(-PI / 2) * R * 1.08, rw * 0.5, C_ACCENT)
 			var head := c + Vector2.from_angle(a1) * R * 1.08
-			ci.draw_circle(head, rw * 0.95, Color(C_AMBER, 0.35 + 0.15 * sin(t * 8.0)))
-			ci.draw_circle(head, rw * 0.6, Color("#fff3d1"))
+			ci.draw_circle(head, rw * 0.95, Color(C_ACCENT, 0.35 + 0.15 * sin(t * 8.0)))
+			ci.draw_circle(head, rw * 0.6, Color("#e6f1f8"))
 		ci.draw_circle(c, R * 0.3, C_TOWER)
-		ci.draw_circle(c, R * 0.23, C_AMBER)
+		ci.draw_circle(c, R * 0.23, C_ACCENT)
 		for k in 3:
 			var ra := -t * 3.0 + TAU * k / 3.0
 			ci.draw_line(c, c + Vector2.from_angle(ra) * R * 0.2, C_TOWER, maxf(2.0, R * 0.06), true)
 		var a := t * 1.6
 		var p := c + Vector2.from_angle(a) * R * 0.78
-		ci.draw_line(c, p, C_AMBER, maxf(2.0, R * 0.045), true)
+		ci.draw_line(c, p, C_CAR, maxf(2.0, R * 0.045), true)
 		var fwd := Vector2.from_angle(a + PI / 2)
 		var side := Vector2.from_angle(a)
 		var L := R * 0.24; var W := R * 0.14

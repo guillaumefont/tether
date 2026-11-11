@@ -34,7 +34,7 @@ DEFAULT_PLAN = {
 TITLE_FONT = os.path.join(ROOT, "fonts/Bungee-Regular.ttf")
 BODY_FONT = os.path.join(ROOT, "fonts/ChakraPetch-Bold.ttf")
 LOGO = os.path.join(ROOT, "icons/splash.png")
-GOLD = "0xf2b134"
+ACCENT = "0x4fb6ff"   # UI accent (ice blue)
 BG = "0x06121b"
 
 
@@ -53,7 +53,7 @@ def caption_filters(text, t0, t1, w, h):
         # small upward slide while it appears
         y = f"{int(h * 0.15) + i * int(size * 1.15)}-20*max(0,1-(t-{t0})/0.2)"
         out.append(
-            f"drawtext=fontfile='{TITLE_FONT}':text='{esc(line)}':fontsize={size}:fontcolor={GOLD}"
+            f"drawtext=fontfile='{TITLE_FONT}':text='{esc(line)}':fontsize={size}:fontcolor={ACCENT}"
             f":borderw=10:bordercolor=0x06121b:shadowx=0:shadowy=8:shadowcolor=0x06121b@0.6"
             f":x=(w-text_w)/2:y='{y}':alpha='{a}':enable='between(t,{t0},{t1})'"
         )
@@ -98,7 +98,7 @@ def main():
     f.append(f"[cardbg][logo]overlay=x=(W-w)/2:y=(H-h)/2-{int(h*0.06)}:shortest=1,"
              f"drawtext=fontfile='{BODY_FONT}':text='{esc(card['tagline'])}':fontsize=64:fontcolor=white"
              f":x=(w-text_w)/2:y={int(h*0.70)}:alpha='min(1,max(0,(t-0.4)/0.3))',"
-             f"drawtext=fontfile='{BODY_FONT}':text='{esc(card['footer'])}':fontsize=50:fontcolor={GOLD}"
+             f"drawtext=fontfile='{BODY_FONT}':text='{esc(card['footer'])}':fontsize=50:fontcolor={ACCENT}"
              f":x=(w-text_w)/2:y={int(h*0.70)+100}:alpha='min(1,max(0,(t-0.8)/0.3))',"
              # a white flash into the card, a fade to black at the very end
              f"fps={fps},format=yuv420p,setsar=1,fade=t=in:d=0.35:color=white,fade=t=out:st={d - 0.4}:d=0.4[vcard]")
