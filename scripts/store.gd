@@ -1,7 +1,7 @@
 # In-app purchases, behind one small interface so each platform can plug in its own
 # billing (Google Play Billing on Android, StoreKit on iOS, Steam) without the menus
-# changing. For now this is a stub: there is no real billing yet. Debug builds (the PR
-# previews and the editor) grant a purchase at once so paid items can be tried; release
+# changing. For now this is a stub: there is no real billing yet. Debug builds (the editor)
+# and preview builds (CI APKs, exported with the "preview" feature) grant a purchase at once so paid items can be tried; release
 # builds report the store as unavailable. Owned products are kept in user://store.cfg
 # (a real backend will restore them from the platform instead).
 extends RefCounted
@@ -28,7 +28,7 @@ static func owns(id: String) -> bool:
 
 # can a purchase be made on this build at all
 static func available() -> bool:
-	return OS.is_debug_build()
+	return OS.is_debug_build() or OS.has_feature("preview")
 
 # buy a product; returns "ok", "owned" or "unavailable". A real backend answers later
 # (a callback), so callers should treat this as "the purchase flow finished".
