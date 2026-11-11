@@ -75,6 +75,7 @@ func _ready() -> void:
 	ui.reset_pressed.connect(_reset_progress)
 	ui.pause_action.connect(_pause_action)
 	ui.menu.start_event.connect(_start_event)
+	ui.menu.vehicle_picked.connect(func(id): sfx.rev(id))
 	ui.again_pressed.connect(new_race)
 	ui.next_pressed.connect(func():
 		var nx: Dictionary = ui.menu.next_event()
@@ -335,6 +336,8 @@ func new_race(built: TrackData = null) -> void:
 	worlds_before = range(Campaign.CHAPTERS.size()).filter(func(c): return Campaign.chapter_done(c))
 	ghost = Records.get_ghost(rec_key()) if mode == "trial" and not tutorial else []
 	view.setup_cars(race, mode == "trial" and not tutorial, _dress(race))
+	# your vehicle in this world sets the engine sound
+	sfx.set_vehicle(WorldView.body_id(Cosmetics.player_look(), String(view.th["kit"])))
 	new_record = false
 	rec_before = Records.get_best(rec_key())
 	start_tier = Medals.trial_tier(cur_def()["name"], variant, rec_before)

@@ -40,6 +40,7 @@ godot --headless --path . --script tests/award_anim_test.gd # every award has a 
 godot --headless --path . --script tests/rivals_test.gd    # rival tiers get harder, stay beatable (~4 min)
 godot --headless --path . --script tests/obstacles_test.gd # the AI's line never touches an Obstacles post
 godot --headless --path . --script tests/camera_test.gd    # low camera shots: off while racing, never inside the land
+godot --headless --path . --script tests/engine_test.gd    # every vehicle has an engine sound that loops cleanly
 ```
 
 After changing a track layout, rerun `tools/gen_obstacles.gd` (posts placed off the AI's racing line,
@@ -54,6 +55,11 @@ hangs instead of failing. Wrap local runs in `timeout`.
 
 Screenshots without a GPU: `xvfb-run -a godot --rendering-driver opengl3 --path . --resolution 1280x720 -- <demo flag>`
 with `SHOT_DIR=<dir>`. Demo flags in `scripts/main.gd`: `--demo=`, `--tutorial-demo`, `--cine-demo=` (camera shots).
+
+Engine sounds: each vehicle has a profile in `scripts/engines.gd` (a new vehicle needs one, the
+test checks). Hear them without a speaker-equipped game: `ENGINE_OUT=<dir> godot --headless --path .
+--script tools/engine_preview.gd` writes a short drive per vehicle as WAV (ffmpeg to mp3 to share).
+Keep every engine small-sounding (no big-V8 boom; phone speakers drop everything under ~150 Hz).
 
 ## Design rules
 
