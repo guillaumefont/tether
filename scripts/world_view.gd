@@ -2844,7 +2844,7 @@ func update_camera(race: Race, phase: String, dt: float, snap := false) -> void:
 # frame with cine(); the camera eases between the two, so a shot can start or end anytime.
 #   intro   countdown: from low in front of the car, swing round behind it and rise into the
 #           gameplay view right on GO (timed on the 3.2 s countdown)
-#   finish  slow low orbit round the car (a finish, and the results backdrop)
+#   finish  slow low swing in front of the car (a finish, and the results backdrop)
 #   win     lower, closer and a touch quicker (a race won, a new record, the tutorial done)
 #   card    tutorial card waiting for a tap: a showroom orbit round the car
 #   freeze  tutorial bend frozen for HOLD / LET GO: low over the car's shoulder at the tower
@@ -2852,8 +2852,8 @@ const CINE_SHOTS := {
 	# pitch (deg) from..to, distance (m) from..to, yaw (deg, 0 = in front of the nose,
 	# 180 = behind) at the start, yaw speed (deg/s), ease in / out (s), look height (m)
 	"intro":  { "pitch": [9.0, 32.0], "dist": [2.5, 4.4], "yaw": 35.0, "spin": 42.0, "in": 0.01, "out": 0.6, "lift": 0.18 },
-	"finish": { "pitch": [16.0, 16.0], "dist": [3.4, 3.4], "yaw": 40.0, "spin": 9.0, "in": 1.3, "out": 0.6, "lift": 0.2 },
-	"win":    { "pitch": [11.0, 11.0], "dist": [2.5, 2.5], "yaw": 30.0, "spin": 14.0, "in": 1.1, "out": 0.6, "lift": 0.18 },
+	"finish": { "pitch": [16.0, 16.0], "dist": [3.4, 3.4], "yaw": 25.0, "spin": 9.0, "sweep": 45.0, "in": 1.3, "out": 0.6, "lift": 0.2 },
+	"win":    { "pitch": [11.0, 11.0], "dist": [2.5, 2.5], "yaw": 25.0, "spin": 14.0, "sweep": 50.0, "in": 1.1, "out": 0.6, "lift": 0.18 },
 	"card":   { "pitch": [13.0, 13.0], "dist": [2.6, 2.6], "yaw": 50.0, "spin": 10.0, "in": 1.0, "out": 0.7, "lift": 0.18 },
 	"freeze": { "pitch": [20.0, 20.0], "dist": [4.2, 4.2], "yaw": 160.0, "spin": 0.0, "in": 0.55, "out": 0.45, "lift": 0.0 },
 }
@@ -2935,7 +2935,14 @@ func _cine_pose(dt := -1.0) -> Array:
 	# portrait: the width is all you get, so step back to keep the car whole
 	var vps := get_viewport().get_visible_rect().size
 	d *= pow(maxf(1.0, vps.y / maxf(1.0, vps.x)), 0.75)
-	var yaw := _cine_yaw + deg_to_rad(float(sh["yaw"]) + float(sh["spin"]) * cine_t)
+	d *= 1.0 + cine_side.length() * 1.1   # beside the results panel: a wider shot
+	var turn := float(sh["spin"]) * cine_t
+	if sh.has("sweep"):
+		# swing to and fro in front of the car instead of circling it: the hero side, and
+		# the start gantry the car just passed stays behind it
+		var amp: float = sh["sweep"]
+		turn = amp * sin(turn / amp)
+	var yaw := _cine_yaw + deg_to_rad(float(sh["yaw"]) + turn)
 	var y: float = (track.height_at(c.last_s) + ROAD_Y + c.air) * U
 	var car3 := Vector3(c.pos.x * U, y, c.pos.y * U)
 	var look := car3 + Vector3(0, float(sh["lift"]), 0)
@@ -2979,6 +2986,13 @@ func _cine_floor(p: Vector2) -> float:
 	if not nr.is_empty() and nr["d"] < TrackData.HW + BANK_OUT:
 		var sv: float = track.seg_s0[nr["i"]] + nr["t"] * track.seg_len[nr["i"]]
 		h = maxf(h, track.height_at(sv) + ROAD_Y + (RAIL_H if nr["d"] > TrackData.HW - 10.0 else 0.0))
+	# start gantry posts (the car often stops just past the line)
+	var sq := track.point_at(track.start_s)
+	var sd: Vector2 = sq["dir"]
+	var span := HW + KERB_W + RAIL_W + 14.0
+	for side in [1.0, -1.0]:
+		if p.distance_squared_to(sq["pos"] + Vector2(-sd.y, sd.x) * span * side) < 45.0 * 45.0:
+			h = maxf(h, track.height_at(track.start_s) + 230.0)
 	# towers: see over the top rather than film the column
 	for k in track.anchors.size():
 		var a: TrackData.Anchor = track.anchors[k]

@@ -495,7 +495,7 @@ func _pick_shot(dt := 0.0) -> void:
 	var side := Vector2.ZERO
 	if phase == "results":
 		var vp := get_viewport().get_visible_rect().size
-		side = Vector2(-0.5, 0.0) if vp.x > vp.y * 1.15 else Vector2(0.0, 0.45)
+		side = Vector2(-0.55, 0.0) if vp.x > vp.y * 1.15 else Vector2(0.0, 0.45)
 	view.cine_side = view.cine_side.lerp(side, 1.0 - exp(-2.5 * dt))
 	if race == null or phase == "menu":
 		view.cine_reset()
