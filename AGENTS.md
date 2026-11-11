@@ -16,6 +16,14 @@
   https://guillaumefont.github.io/tether/ and `.../tether-racing.apk`.
 - All APKs share one app id: installing a PR build replaces the installed `main` build.
 
+## Keeping this file up to date
+
+- When you learn something a future agent would need (a convention, a gotcha, a workflow step, a
+  check to run), add it to this file yourself, in the section where it fits, as part of your PR.
+  Keep entries short and only add lasting facts, not one-off details of the current task.
+- Always tell Guillaume when you do: say what you added under an `## AGENTS.md` heading in the PR
+  body, and mention it in your reply in the project thread.
+
 ## Checks to run before pushing
 
 ```
