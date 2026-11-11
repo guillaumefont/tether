@@ -477,6 +477,19 @@ func _process(delta: float) -> void:
 					_show_results()
 			if phase != "results":
 				_update_hud()
+		"results":
+			# behind the results the cars drive on (the chase cam follows yours); nothing
+			# they do now counts, only the look of it (skids, sparks) is kept
+			if race and view.cine_active():
+				for c in race.cars:
+					if c.human >= 0 and not c.finished:
+						race.ai_think(c, dt)
+						race.inputs[c.human]["held"] = c.hook >= 0
+				race.update(dt)
+				for e in race.events:
+					if e["t"] in ["skid", "wall", "post"]:
+						view.handle_event(e)
+				race.events.clear()
 	var me = race.cars[0] if race and race.cars.size() else null
 	sfx.set_engine(me.vel.length() if me else 0.0, phase == "race")
 	if view.track and view.visible:
@@ -494,8 +507,7 @@ func _pick_shot(dt := 0.0) -> void:
 	# the results panel sits in the middle: frame the car beside it
 	var side := Vector2.ZERO
 	if phase == "results":
-		var vp := get_viewport().get_visible_rect().size
-		side = Vector2(-0.55, 0.0) if vp.x > vp.y * 1.15 else Vector2(0.0, 0.45)
+		side = Vector2(-0.52, 0.0) if not ui.is_portrait() else Vector2(0.0, 0.5)
 	view.cine_side = view.cine_side.lerp(side, 1.0 - exp(-2.5 * dt))
 	if race == null or phase == "menu":
 		view.cine_reset()

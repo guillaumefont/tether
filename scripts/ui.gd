@@ -292,7 +292,19 @@ func layout() -> void:
 	minimap.offset_left = minimap.offset_right - MINIMAP
 	minimap.offset_top = minimap.offset_bottom - MINIMAP
 	var vp := root.get_viewport_rect().size
-	results_panel.custom_minimum_size.x = minf(440.0, vp.x - 40.0)
+	# results sit to one side (right in landscape, bottom in portrait) with a light veil,
+	# so the car the camera follows stays in view
+	var rc: Control = results.get_child(0)
+	if is_portrait():
+		results_panel.custom_minimum_size.x = minf(440.0, vp.x - 40.0)
+		rc.anchor_left = 0.0
+		rc.anchor_top = 0.42
+	else:
+		results_panel.custom_minimum_size.x = minf(420.0, vp.x * 0.5)
+		rc.anchor_left = 1.0 - (results_panel.custom_minimum_size.x + 40.0) / maxf(1.0, vp.x)
+		rc.anchor_top = 0.0
+		rc.offset_right = -ins["r"]
+	rc.offset_bottom = -ins["b"]
 	if res_cup:
 		res_cup.offset_right = -14 - ins["r"]
 		res_cup.offset_left = res_cup.offset_right - 50
@@ -405,6 +417,7 @@ func _tile_look(b: Button, look: String, on: bool) -> void:
 func _build_results() -> void:
 	var r := _overlay()
 	results = r[0]
+	(results as ColorRect).color.a = 0.14   # the car drives on behind: keep it visible
 	var vb: VBoxContainer = r[1]
 	results_panel = r[2]
 	results_panel.custom_minimum_size.x = 440

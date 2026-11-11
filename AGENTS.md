@@ -62,3 +62,5 @@ with `SHOT_DIR=<dir>`. Demo flags in `scripts/main.gd`: `--demo=`, `--tutorial-d
 - The race camera stays fairly top-down (68°) while the player steers, so lines through bends stay
   readable. Low cinematic shots (`WorldView.CINE_SHOTS`, picked in `main.gd` `_pick_shot`) are only
   for moments nobody steers: countdown, finish/results, the tutorial's cards and frozen bends.
+  After a finish the cars drive on behind the results (AI drives the player's car; their events
+  are dropped except skids/sparks) and the results panel sits to one side so the chase cam shows it.
