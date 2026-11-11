@@ -15,6 +15,7 @@ const C_FG := Color("#f3efe6")
 const C_MUTED := Color("#9fb3b0")
 const C_POST := Color("#f2b134")
 const Themes = preload("res://scripts/themes.gd")
+const Settings = preload("res://scripts/settings.gd")
 const TABS := ["body", "paint", "livery", "rope"]
 const TAB_NAMES := { "body": "Vehicle", "paint": "Paint", "livery": "Livery", "rope": "Rope" }
 const TAB_ICONS := { "body": "car", "paint": "paint", "livery": "livery", "rope": "rope" }
@@ -23,6 +24,7 @@ var menu     # the menu (card style, ui helpers)
 var ui
 var tab := "body"
 var home := ""            # the world whose vehicle is on the stage
+var staged := []          # what the stage shows now
 var on_coins: Callable    # the menu's coin counter, refreshed after a purchase
 var trying := {}          # slot -> id of a locked item being tried on
 var scroller              # menu.Scroller holding the grid
@@ -53,7 +55,9 @@ func setup(owner_menu, scroller_class) -> void:
 	stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var vp := SubViewport.new()
 	vp.world_3d = World3D.new()   # its own world: the race view behind the menu stays apart
-	vp.msaa_3d = Viewport.MSAA_4X
+	# the same antialiasing as the race view behind the menu: a different sample count
+	# makes the phone compile every material's pipeline again, which stalls the opening
+	vp.msaa_3d = Viewport.MSAA_DISABLED if int(Settings.get_opt("quality", Settings.default_quality())) == 0 else Viewport.MSAA_2X
 	stage.add_child(vp)
 	view = WorldView.new()
 	vp.add_child(view)
@@ -79,7 +83,10 @@ func setup(owner_menu, scroller_class) -> void:
 	tabs.add_theme_constant_override("separation", 8)
 	home = Campaign.menu_theme()
 	for t in TABS:
-		var b: Button = ui.icon_button(TAB_ICONS[t], TAB_NAMES[t], "card", false, 44)
+		# portrait: icon above the name, so four tabs fit a phone's width
+		var b: Button = ui.icon_button(TAB_ICONS[t], TAB_NAMES[t], "card", tall, 52 if tall else 44)
+		if tall:
+			b.custom_minimum_size.x = 0
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.pressed.connect(_set_tab.bind(t))
 		tabs.add_child(b)
@@ -116,7 +123,11 @@ func _restage() -> void:
 	var w3d: World3D = view.get_viewport().world_3d
 	if w3d.environment != view.env:
 		w3d.environment = view.env
-	view.showroom(Cosmetics.look(shown("paint"), shown("livery"), shown("rope"), shown("body")), home)
+	var key := [shown("paint"), shown("livery"), shown("rope"), shown("body"), home]
+	if key == staged:
+		return   # same car as on the stage: switching tabs needn't rebuild it
+	staged = key
+	view.showroom(Cosmetics.look(key[0], key[1], key[2], key[3]), home)
 
 func _set_tab(t: String) -> void:
 	tab = t
@@ -132,6 +143,10 @@ func _show_tab() -> void:
 		ch.queue_free()
 	for it in Cosmetics.items(tab):
 		grid.add_child(_tile(it))
+	if staged.is_empty():
+		await get_tree().process_frame   # first open: show the screen, then build the stage
+		if not is_inside_tree():
+			return
 	_restage()
 	_update_status()
 
