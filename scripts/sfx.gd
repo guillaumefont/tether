@@ -1,10 +1,12 @@
 # Synthesised sounds, matching the prototype's WebAudio blips: short oscillator
-# notes with an exponential pitch slide and fade, plus a mid-sized engine.
+# notes with an exponential pitch slide and fade, plus the engine of the vehicle being
+# driven (each vehicle has its own, see engines.gd).
 # Also owns the background music. Effects and music play on their own buses
 # ("SFX", "Music"), each with its own volume.
 extends Node
 
 const Music = preload("res://scripts/music.gd")
+const Engines = preload("res://scripts/engines.gd")
 
 const RATE := 22050
 var music: Music
@@ -13,13 +15,15 @@ var _cache := {}
 var _pool: Array[AudioStreamPlayer] = []
 var _next := 0
 var _engine: AudioStreamPlayer
-var _freq := RUMBLE_IDLE
-var _freq_target := RUMBLE_IDLE
+var _engines := {}   # vehicle id -> its rendered loop (AudioStreamWAV)
+var _vehicle := ""
+var _prof: Dictionary = Engines.profile("pickup")
+var _freq := 60.0
+var _freq_target := 60.0
 var _gain := 0.0
 var _gain_target := 0.0
-const RUMBLE_BASE := 80.0  # firing rate (Hz) the engine loop is rendered at
-const RUMBLE_IDLE := 60.0  # firing rate at standstill; revs up with speed
-const RUMBLE_LOOP := 2.0   # seconds; a whole number of firings so it loops seamlessly
+var _rev_t := -1.0   # Garage rev: seconds into it, < 0 when none is playing
+const REV_LEN := 1.6
 
 func _ready() -> void:
 	_bus("SFX")
@@ -31,80 +35,14 @@ func _ready() -> void:
 		p.bus = "SFX"
 		add_child(p)
 		_pool.append(p)
-	# engine: a looping mid-sized engine, re-pitched with the car's speed
-	# (a sample loop rather than a generator, so it also plays on the web build)
-	var w := AudioStreamWAV.new()
-	w.format = AudioStreamWAV.FORMAT_16_BITS
-	w.mix_rate = RATE
-	w.data = _rumble()
-	w.loop_mode = AudioStreamWAV.LOOP_FORWARD
-	w.loop_begin = 0
-	w.loop_end = w.data.size() / 2
+	# engine: a loop re-pitched with the car's speed (a sample loop rather than a
+	# generator, so it also plays on the web build); set_vehicle picks which one
 	_engine = AudioStreamPlayer.new()
 	_engine.bus = "SFX"
-	_engine.stream = w
 	_engine.volume_db = -80.0
 	add_child(_engine)
+	set_vehicle("pickup")
 	_warm()
-
-# One loop of a mid-sized engine: each firing is a short pop (a fast-damped
-# 400-550 Hz ring plus a puff of noise) with small random changes in strength and
-# pitch (every other firing a touch weaker), over a light tone at the firing rate
-# and its second harmonic. Band-limited (~110 Hz-2.2 kHz) so there is neither a
-# bass boom nor a nasal buzz. Seeded, so it's the same every run.
-static func _rumble() -> PackedByteArray:
-	var n := int(RUMBLE_LOOP * RATE)
-	var fires := int(RUMBLE_LOOP * RUMBLE_BASE)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 7
-	var buf := PackedFloat32Array()
-	buf.resize(n)
-	var ring := int(0.01 * RATE)  # each pop has died away within 10 ms
-	for k in fires:
-		var start := int((k + rng.randf_range(-0.05, 0.05)) * RATE / RUMBLE_BASE)
-		var amp := rng.randf_range(0.8, 1.0) * (1.0 if k % 2 == 0 else 0.9)
-		var res := rng.randf_range(400.0, 550.0)
-		var nz := 0.0
-		for j in ring:
-			var t := float(j) / RATE
-			nz += (rng.randf_range(-1.0, 1.0) - nz) * 0.35
-			var v := (sin(TAU * res * t) + nz * 0.8) * exp(-t * 380.0) * amp
-			var i := posmod(start + j, n)
-			buf[i] += v
-	for i in n:
-		var t := float(i) / RATE
-		buf[i] += 0.3 * sin(TAU * RUMBLE_BASE * t) + 0.2 * sin(TAU * RUMBLE_BASE * 2.0 * t)
-	# high-pass ~110 Hz then two low-passes ~2.2 kHz; second pass over the loop so
-	# the filter state wraps cleanly
-	var hp_a := exp(-TAU * 110.0 / RATE)
-	var lp_a := 1.0 - exp(-TAU * 2200.0 / RATE)
-	var hp := 0.0
-	var prev := 0.0
-	var l1 := 0.0
-	var l2 := 0.0
-	var out := PackedFloat32Array()
-	out.resize(n)
-	for pass_i in 2:
-		for i in n:
-			hp = hp_a * (hp + buf[i] - prev)
-			prev = buf[i]
-			l1 += (hp - l1) * lp_a
-			l2 += (l1 - l2) * lp_a
-			out[i] = l2
-	var peak := 0.0
-	for i in n:
-		peak = maxf(peak, absf(out[i]))
-	# gentle soft-clip for a little rasp
-	for i in n:
-		out[i] = tanh(out[i] / peak * 1.6)
-	peak = 0.0
-	for i in n:
-		peak = maxf(peak, absf(out[i]))
-	var data := PackedByteArray()
-	data.resize(n * 2)
-	for i in n:
-		data.encode_s16(i * 2, int(out[i] / peak * 0.9 * 32000.0))
-	return data
 
 # index of a bus; the "SFX" and "Music" buses come from default_bus_layout.tres.
 # They must exist at startup: buses added at runtime are wired into a loop on the
@@ -213,11 +151,50 @@ func blip(f: float, d: float, kind := "square", v := 0.08, slide := 0.0) -> void
 	p.stream = _stream(f, d, kind, v, slide)
 	p.play()
 
+# the vehicle whose engine plays: its loop is rendered the first time (~50 ms on a
+# desktop, more on a phone), so call this while a loading screen is up
+func set_vehicle(id: String) -> void:
+	if not Engines.PROFILES.has(id):
+		id = "pickup"
+	if id == _vehicle:
+		return
+	if not _engines.has(id):
+		var w := Engines.to_wav(Engines.render(Engines.profile(id)))
+		if OS.has_feature("web"):
+			AudioServer.register_stream_as_sample(w)
+		_engines[id] = w
+	_vehicle = id
+	_prof = Engines.profile(id)
+	var was := _engine.playing
+	_engine.stream = _engines[id]
+	if was:
+		_engine.play()
+
 func set_engine(speed: float, on: bool) -> void:
-	_freq_target = RUMBLE_IDLE + speed * 0.09  # ~60 Hz idle, ~140 Hz cruising, ~160 Hz at full swing
+	if _rev_t >= 0.0:
+		return   # a Garage rev is playing
+	_freq_target = Engines.freq(_prof, speed)
 	_gain_target = 0.035 if (on and enabled) else 0.0
 
+# the Garage's taste of a vehicle: a blip of the throttle, up and back to idle
+func rev(id: String) -> void:
+	if not enabled:
+		return
+	set_vehicle(id)
+	_rev_t = 0.0
+	_freq = Engines.freq(_prof, 0.0)
+	_gain = 0.0
+
 func _process(dt: float) -> void:
+	if _rev_t >= 0.0:
+		_rev_t += dt
+		var u := _rev_t / REV_LEN
+		# throttle: quick rise, short hold, slow fall back to idle, then fade
+		var sp := 1000.0 * (smoothstep(0.0, 0.25, u) - smoothstep(0.45, 0.9, u))
+		_freq_target = Engines.freq(_prof, sp)
+		_gain_target = 0.0 if u > 0.92 else 0.035
+		if _rev_t > REV_LEN + 0.4:
+			_rev_t = -1.0
 	_freq += (_freq_target - _freq) * minf(1.0, dt / 0.05)
 	_gain += (_gain_target - _gain) * minf(1.0, dt / 0.1)
 	if _gain < 0.001:
@@ -226,5 +203,5 @@ func _process(dt: float) -> void:
 		return
 	if not _engine.playing:
 		_engine.play()
-	_engine.pitch_scale = clampf(_freq / RUMBLE_BASE, 0.5, 3.0)
-	_engine.volume_db = linear_to_db(_gain * 7.0)
+	_engine.pitch_scale = clampf(_freq / float(_prof["base"]), 0.4, 3.0)
+	_engine.volume_db = linear_to_db(_gain * 7.0 * float(_prof["gain"]))
