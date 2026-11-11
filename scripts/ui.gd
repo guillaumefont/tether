@@ -1,5 +1,5 @@
 # Menus, HUD, big centre text, results and minimap. Built in code so the layout
-# adapts to any phone screen; styled after the prototype (dark panels, amber accent).
+# adapts to any phone screen; styled after the prototype (dark panels, ice-blue accent).
 extends CanvasLayer
 
 const TrackData = preload("res://scripts/track.gd")
@@ -39,7 +39,8 @@ const MINIMAP := 110.0
 const C_PANEL := Color(0.035, 0.075, 0.082, 0.92)
 const C_FG := Color("#f3efe6")
 const C_MUTED := Color("#9fb3b0")
-const C_POST := Color("#f2b134")
+const C_ACCENT := Color("#4fb6ff")   # UI accent, same as Art.C_ACCENT
+const C_COIN := Color("#f2b134")     # coin amounts stay gold
 const C_GAIN := Color("#5fd38d")   # time gained on a record (same green as the lap delta)
 const C_ASPHALT := Color("#393e46")
 
@@ -139,7 +140,7 @@ func _ready() -> void:
 	big.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	big.add_theme_font_override("normal_font", f_display)
 	big.add_theme_font_size_override("normal_font_size", 120)
-	big.add_theme_color_override("default_color", C_POST)
+	big.add_theme_color_override("default_color", C_ACCENT)
 	big.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.35))
 	big.add_theme_constant_override("shadow_offset_y", 6)
 	big.add_theme_constant_override("shadow_offset_x", 0)
@@ -166,7 +167,7 @@ func _ready() -> void:
 	lap_note.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	lap_note.add_theme_font_override("normal_font", f_display)
 	lap_note.add_theme_font_size_override("normal_font_size", 30)
-	lap_note.add_theme_color_override("default_color", C_POST)
+	lap_note.add_theme_color_override("default_color", C_ACCENT)
 	lap_note.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.45))
 	lap_note.add_theme_constant_override("shadow_offset_y", 3)
 	lap_note.add_theme_constant_override("shadow_offset_x", 0)
@@ -207,8 +208,8 @@ func _make_theme() -> Theme:
 		return s
 	t.set_stylebox("normal", "Button", sb.call(C_ASPHALT, Color.TRANSPARENT, 2))
 	t.set_stylebox("hover", "Button", sb.call(C_ASPHALT.lightened(0.08), Color.TRANSPARENT, 2))
-	t.set_stylebox("pressed", "Button", sb.call(C_ASPHALT, C_POST, 2))
-	t.set_stylebox("hover_pressed", "Button", sb.call(C_ASPHALT.lightened(0.08), C_POST, 2))
+	t.set_stylebox("pressed", "Button", sb.call(C_ASPHALT, C_ACCENT, 2))
+	t.set_stylebox("hover_pressed", "Button", sb.call(C_ASPHALT.lightened(0.08), C_ACCENT, 2))
 	t.set_stylebox("focus", "Button", sb.call(Color.TRANSPARENT, C_FG, 2))
 	t.set_font("font", "Button", f_bold)
 	t.set_font_size("font_size", "Button", 16)
@@ -325,12 +326,12 @@ func safe_insets() -> Dictionary:
 	return ins
 
 # ---------------------------------------------------------------- icon buttons
-const C_INK := Color("#1a1408")
+const C_INK := Color("#071827")
 const C_TILE := Color(0.05, 0.11, 0.17, 0.82)
 const C_FROST := Color(0.86, 0.93, 0.98, 0.55)
 
 # A big touch target with a drawn icon and an optional short label: the label sits under
-# the icon (tile) or beside it. look: "go" (amber, the main action) or "card" (frosted).
+# the icon (tile) or beside it. look: "go" (accent colour, the main action) or "card" (frosted).
 func icon_button(icon: String, text := "", look := "card", tile := true, h := 64) -> Button:
 	var b := Button.new()
 	b.custom_minimum_size = Vector2(h, h)
@@ -379,14 +380,14 @@ func _tile_look(b: Button, look: String, on: bool) -> void:
 		sbx.shadow_offset = Vector2(0, 2)
 		var lit: bool = st.begins_with("hover") or st.contains("pressed")
 		if go:
-			sbx.bg_color = C_POST.lightened(0.12) if lit else C_POST
+			sbx.bg_color = C_ACCENT.lightened(0.12) if lit else C_ACCENT
 			sbx.border_color = Color(1, 1, 1, 0.5)
 			sbx.border_width_top = 3
 		else:
 			sbx.bg_color = C_TILE.lightened(0.07) if lit else C_TILE
 			if on:
 				sbx.bg_color = Color(0.25, 0.2, 0.08, 0.9)
-			sbx.border_color = C_POST if (on or st.contains("pressed")) else Color(C_FROST, 0.4)
+			sbx.border_color = C_ACCENT if (on or st.contains("pressed")) else Color(C_FROST, 0.4)
 			sbx.set_border_width_all(3 if on else 2)
 			if not on:
 				sbx.border_width_top = 4   # a rim of frost along the top, like the menu cards
@@ -394,13 +395,13 @@ func _tile_look(b: Button, look: String, on: bool) -> void:
 			sbx.bg_color = Color(sbx.bg_color, 0.45)
 		b.add_theme_stylebox_override(st, sbx)
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	var ink := C_INK if go else C_POST
+	var ink := C_INK if go else C_ACCENT
 	var ic: Art.Icon = b.get_meta("icon")
 	ic.col = ink
 	ic.col2 = C_INK.lightened(0.2) if go else Art.C_ICE
 	if b.has_meta("label"):
 		var l: Label = b.get_meta("label")
-		l.add_theme_color_override("font_color", C_INK if go else (C_POST if on else C_FG))
+		l.add_theme_color_override("font_color", C_INK if go else (C_ACCENT if on else C_FG))
 
 func _build_results() -> void:
 	var r := _overlay()
@@ -408,7 +409,7 @@ func _build_results() -> void:
 	var vb: VBoxContainer = r[1]
 	results_panel = r[2]
 	results_panel.custom_minimum_size.x = 440
-	res_title = _label("Finish", 30, C_POST, f_display)
+	res_title = _label("Finish", 30, C_ACCENT, f_display)
 	vb.add_child(res_title)
 	res_rewards = HFlowContainer.new()
 	res_rewards.add_theme_constant_override("h_separation", 8)
@@ -527,7 +528,7 @@ func _panel_header(vb: VBoxContainer, title: String) -> Label:
 	tv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	tv.add_theme_constant_override("separation", -2)
-	var pt := _label(title, 30, C_POST, f_display)
+	var pt := _label(title, 30, C_ACCENT, f_display)
 	pt.autowrap_mode = TextServer.AUTOWRAP_OFF
 	tv.add_child(pt)
 	var sub := _label("", 13, Art.C_ICE_DIM, f_bold)
@@ -546,7 +547,7 @@ static func _knob_tex() -> Texture2D:
 			for x in n:
 				var d := Vector2(x - c, y - c).length()
 				var a := clampf(c - d + 0.5, 0.0, 1.0)
-				var col := Art.C_ICE if d < c - 3.0 else Art.C_AMBER
+				var col := Art.C_ICE if d < c - 3.0 else Art.C_ACCENT
 				img.set_pixel(x, y, Color(col, a))
 		_knob = ImageTexture.create_from_image(img)
 	return _knob
@@ -640,14 +641,14 @@ func _set_toggle(b: Button, on: bool) -> void:
 	l.text = "%s  %s" % [b.get_meta("name"), "ON" if on else "OFF"]
 	set_tile_on(b, on)
 	var ic: Art.Icon = b.get_meta("icon")
-	ic.col = C_POST if on else Color(C_MUTED, 0.6)
+	ic.col = C_ACCENT if on else Color(C_MUTED, 0.6)
 
 func _set_quality_btn(b: Button, v: int) -> void:
 	b.set_meta("q", v)
 	var l: Label = b.get_meta("label")
 	l.text = "GRAPHICS  %s" % Settings.QUALITY_NAMES[v]
 	var ic: Art.Icon = b.get_meta("icon")
-	ic.col = C_POST if v > 0 else Color(C_MUTED, 0.8)
+	ic.col = C_ACCENT if v > 0 else Color(C_MUTED, 0.8)
 
 func set_options(o: Dictionary, opts: Dictionary) -> void:
 	_set_quality_btn(o["quality"], int(opts.get("quality", 1)))
@@ -776,7 +777,7 @@ func _build_loading() -> void:
 	vb.add_theme_constant_override("separation", 6)
 	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	loading.add_child(vb)
-	_load_title = _label("", 20, C_POST, f_bold)
+	_load_title = _label("", 20, C_ACCENT, f_bold)
 	_load_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(_load_title)
 	_load_tip = _label("", 14, Art.C_ICE, f_med)
@@ -924,7 +925,7 @@ func build_hud(race, gems_total: int, medals: bool, tutorial := false) -> void:
 	var gem_col := Color("#7fe3d0")
 	if tutorial:
 		_timer("time")   # alone: the corner holds SKIP and pause
-		_subline([["Lap", "lap0", C_MUTED, ["3/3"]], ["Target", "rec", C_POST, ["00.0 s"]]])
+		_subline([["Lap", "lap0", C_MUTED, ["3/3"]], ["Target", "rec", C_ACCENT, ["00.0 s"]]])
 		# icon only in portrait, where the corner has no room for the word
 		skip_btn = icon_button("next", "" if is_portrait() else "SKIP", "card", false, 44)
 		skip_btn.focus_mode = Control.FOCUS_NONE
@@ -999,8 +1000,8 @@ func show_streak(n: int) -> void:
 		streak.offset_top += lap_note.get_content_height() + 4.0
 	streak.offset_bottom = streak.offset_top + 40.0
 	streak.text = "CLEAN  ×%d" % n
-	# warmer and bigger as the run of clean bends grows
-	var col: Color = Art.C_ICE.lerp(C_POST, clampf((n - 2) / 6.0, 0.0, 1.0))
+	# bluer and bigger as the run of clean bends grows
+	var col: Color = Art.C_ICE.lerp(C_ACCENT, clampf((n - 2) / 6.0, 0.0, 1.0))
 	streak.add_theme_color_override("font_color", col)
 	streak.pivot_offset = Vector2(streak.size.x * 0.5, 20.0)
 	if _streak_tw:
@@ -1074,7 +1075,7 @@ func _build_coach() -> void:
 	vb.add_theme_constant_override("separation", 4)
 	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	coach.add_child(vb)
-	_coach_title = _label("", 20, C_POST, f_display)
+	_coach_title = _label("", 20, C_ACCENT, f_display)
 	vb.add_child(_coach_title)
 	_coach_body = _label("", 15, C_FG, f_med)
 	vb.add_child(_coach_body)
@@ -1153,7 +1154,7 @@ func show_results(title: String, rows: Array, note: String, has_next := false, c
 		var hl: bool = row.get("hl", false)
 		var cells: Array = row["cells"]
 		for k in cells.size():
-			var l := _label(str(cells[k]), 16, C_POST if hl else C_FG, f_bold if hl else f_med)
+			var l := _label(str(cells[k]), 16, C_ACCENT if hl else C_FG, f_bold if hl else f_med)
 			l.autowrap_mode = TextServer.AUTOWRAP_OFF
 			if k == cells.size() - 1:
 				l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
