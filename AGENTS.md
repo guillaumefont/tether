@@ -63,6 +63,13 @@ with `SHOT_DIR=<dir>`. Demo flags in `scripts/main.gd`: `--demo=`, `--tutorial-d
   `menu.gd`, `garage.gd`); amber `#f2b134` is the player's car and rope; gold is only for medals and
   coins (`C_COIN`). Icons/splash PNGs and the logo PNG inside `web/shell.html` must follow `icon.svg`
   and `menu_art.gd` when these change.
+- Menu look ("Roadbook", chosen by Guillaume 2026-11-11): every menu screen, panel and overlay is a page
+  of a rally co-driver's notebook, built from `scripts/paper.gd` (cream ruled `Sheet`, navy `INK`, white
+  index cards, tape, stamps, tulip bend diagrams, highlighter). On paper, write blue text in
+  `Paper.ACCENT_INK` (the light `#4fb6ff` is for the highlighter, button shadows and tower caps) and
+  coin amounts in `Paper.COIN_INK`; `Paper.ink_of()` darkens a HUD colour for paper. The race HUD and the
+  full-screen award / world-unlock shows stay dark. Containers lay out every child, so tape on a
+  container is drawn with `Paper.draw_tape()` in a `draw` callback, not added as a `Tape` child.
 - The race camera stays fairly top-down (68°) while the player steers, so lines through bends stay
   readable. Low cinematic shots (`WorldView.CINE_SHOTS`, picked in `main.gd` `_pick_shot`) are only
   for moments nobody steers: countdown, finish/results, the tutorial's cards and frozen bends.
