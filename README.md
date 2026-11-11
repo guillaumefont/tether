@@ -77,6 +77,7 @@ Presets for Android, iOS and Web are in `export_presets.cfg`. Install the 4.7.2 
 (Editor > Manage Export Templates) first.
 
 - **Android:** set up the Android SDK and a keystore in Editor Settings, then Project > Export > Android. Package id `io.github.guillaumefont.tetherracing` (change it before publishing if you prefer another).
+  CI test APKs are all signed with the fixed debug key in `.github/android/debug.keystore` and get a growing versionCode (run number), so each new APK installs over the previous one without uninstalling. That key is for test builds only; Play releases need a separate upload key.
 - **iOS:** needs a Mac with Xcode. Fill in your App Store team id in the iOS preset, export, then build the generated Xcode project.
 - **Web (WASM):** single-threaded build, so it runs on any static host without special headers. Uses the Compatibility renderer.
 
