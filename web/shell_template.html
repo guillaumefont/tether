@@ -21,7 +21,7 @@ body { color: #e6f1f8; background-color: #06121b; overflow: hidden; touch-action
 #emblem { width: calc(var(--w) * 0.42); height: auto; overflow: visible; }
 #logo { width: var(--w); margin-top: calc(var(--w) * 0.03); }
 #bottom { width: min(86vw, 420px); margin-bottom: 6vh; text-align: center; }
-#title { color: #f2b134; font-weight: 800; letter-spacing: 0.08em; font-size: 15px; margin-bottom: 6px; }
+#title { color: #4fb6ff; font-weight: 800; letter-spacing: 0.08em; font-size: 15px; margin-bottom: 6px; }
 #tip { font-size: 14px; line-height: 1.35; text-shadow: 0 1px 2px rgba(0,0,0,0.6); min-height: 2.7em; }
 /* emblem parts, in a 240 x 240 box centred on the tower */
 #orbit { animation: orbit 3.927s linear infinite; }           /* 1.6 rad/s, like the game */
@@ -48,11 +48,11 @@ $GODOT_HEAD_INCLUDE
     <svg id="emblem" viewBox="-120 -120 240 240" role="progressbar" aria-label="Loading">
       <circle r="108" fill="rgba(6,18,27,0.55)" stroke="rgba(230,241,248,0.3)" stroke-width="2"/>
       <circle r="78" fill="none" stroke="rgba(230,241,248,0.12)" stroke-width="1.5"/>
-      <circle id="ring" class="spin" r="108" fill="none" stroke="#f2b134" stroke-width="7" stroke-linecap="round"
+      <circle id="ring" class="spin" r="108" fill="none" stroke="#4fb6ff" stroke-width="7" stroke-linecap="round"
         pathLength="100" stroke-dasharray="100 100" stroke-dashoffset="100"/>
-      <g id="head"><circle cx="108" r="6.6" fill="#f2b134"/><circle cx="108" r="4.2" fill="#fff3d1"/></g>
+      <g id="head"><circle cx="108" r="6.6" fill="#4fb6ff"/><circle cx="108" r="4.2" fill="#e6f1f8"/></g>
       <circle r="30" fill="#2a2f36"/>
-      <circle r="23" fill="#f2b134"/>
+      <circle r="23" fill="#4fb6ff"/>
       <g id="rotor" stroke="#2a2f36" stroke-width="6" stroke-linecap="round">
         <line x2="20"/><line x2="20" transform="rotate(120)"/><line x2="20" transform="rotate(240)"/>
       </g>

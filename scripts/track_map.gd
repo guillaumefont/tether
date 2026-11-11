@@ -62,7 +62,7 @@ func _draw() -> void:
 		draw_colored_polygon(PackedVector2Array([p + n * hw, p + n * hw + d * gl, p - n * hw + d * gl, p - n * hw]), Color("#06100f"))
 	if race == null:
 		for a in track.anchors:
-			draw_circle(a.pos * sc + off, 2.5, Color("#f2b134"))
+			draw_circle(a.pos * sc + off, 2.5, Color("#4fb6ff"))
 		var st := track.point_at(track.start_s)
 		var n2 := TrackData.perp(st["dir"]) * TrackData.HW * sc
 		var sp: Vector2 = st["pos"] * sc + off
