@@ -87,6 +87,9 @@ jobs:
           echo "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$ks" >> "$GITHUB_ENV"
           echo "GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey" >> "$GITHUB_ENV"
           echo "GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android" >> "$GITHUB_ENV"
+          echo "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$ks" >> "$GITHUB_ENV"
+          echo "GODOT_ANDROID_KEYSTORE_RELEASE_USER=androiddebugkey" >> "$GITHUB_ENV"
+          echo "GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=android" >> "$GITHUB_ENV"
 
       - name: Import project
         run: $RUNNER_TEMP/godot --headless --path . --import
@@ -100,9 +103,11 @@ jobs:
           $RUNNER_TEMP/godot --headless --path . --export-release Web "$OUT/web/index.html"
           test -s "$OUT/web/index.wasm"
 
+      # Release template (about half the size of the debug one), signed with the fixed test
+      # keystore above. The "preview" feature keeps test purchases working (scripts/store.gd).
       # versionCode must never go down between builds, or Android refuses the update:
       # use the workflow run number (it only grows), and show it in the version name.
-      - name: Export Android (debug-signed APK)
+      - name: Export Android (release APK, preview build)
         env:
           PR: ${{ github.event.pull_request.number }}
         run: |
@@ -111,7 +116,9 @@ jobs:
           sed -i "0,/^version\/code=.*/s//version\/code=$code/; 0,/^version\/name=.*/s//version\/name=\"$name\"/" export_presets.cfg
           grep -m2 '^version/' export_presets.cfg
           mkdir -p "$OUT/android"
-          $RUNNER_TEMP/godot --headless --path . --export-debug Android "$OUT/android/tether-racing.apk"
+          sed -i '/^\[preset.0\]/,/^\[preset.0.options\]/ s/^custom_features=""/custom_features="preview"/' export_presets.cfg
+          grep -q 'custom_features="preview"' export_presets.cfg
+          $RUNNER_TEMP/godot --headless --path . --export-release Android "$OUT/android/tether-racing.apk"
           test -s "$OUT/android/tether-racing.apk"
 
       - uses: actions/upload-artifact@v4
