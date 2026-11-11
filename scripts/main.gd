@@ -96,6 +96,9 @@ func _ready() -> void:
 		elif a.begins_with("--promo="):
 			scripted = true
 			_run_promo(a.substr(8))
+		elif a.begins_with("--cine-demo="):
+			scripted = true
+			_run_cine_demo(a.get_slice("=", 1))
 		elif a.begins_with("--tutorial-demo"):
 			scripted = true
 			_run_tutorial_demo()
@@ -359,6 +362,8 @@ func new_race(built: TrackData = null) -> void:
 		_update_hud()   # zeroes on screen from the countdown on
 	ui.minimap.race = race
 	ui.minimap.set_track(track)
+	view.cine_reset()
+	_pick_shot()
 	view.update_camera(race, "count", 0.0, true)
 
 # ---------------------------------------------------------------- input
@@ -480,7 +485,54 @@ func _process(delta: float) -> void:
 			view.update_camera(attract, "attract", dt)
 		else:
 			view.sync(race, phase, _ghost_sample(), _aims(), dt)
+			_pick_shot(dt)
 			view.update_camera(race if phase != "menu" else null, phase, dt)
+
+# The cinematic camera shot for this moment (see WorldView.CINE_SHOTS): low moves on the
+# countdown, the finish and the tutorial's pauses; none while the player is racing.
+func _pick_shot(dt := 0.0) -> void:
+	# the results panel sits in the middle: frame the car beside it
+	var side := Vector2.ZERO
+	if phase == "results":
+		var vp := get_viewport().get_visible_rect().size
+		side = Vector2(-0.5, 0.0) if vp.x > vp.y * 1.15 else Vector2(0.0, 0.45)
+	view.cine_side = view.cine_side.lerp(side, 1.0 - exp(-2.5 * dt))
+	if race == null or phase == "menu":
+		view.cine_reset()
+		return
+	var hs: Array = race.cars.filter(func(c): return c.human >= 0)
+	if hs.is_empty():
+		view.cine("")
+		return
+	var me = hs[0]
+	if tut:
+		if tut.complete:
+			view.cine("win", me)
+		elif tut.wait == "tap":
+			view.cine("card", me)
+		elif tut.wait in ["hold", "release"]:
+			view.cine("freeze", me, track.anchors[me.hook if me.hook >= 0 else tut._next_bend(me)].pos)
+		else:
+			view.cine("")
+		return
+	match phase:
+		"count":
+			view.cine("intro", me)
+		"done", "results":
+			var st := race.standings()
+			if race.humans > 1:
+				me = st[0] if st[0].human >= 0 else me
+			view.cine("win" if _won(st, me) else "finish", me)
+		_:
+			view.cine("")
+
+# a race won, or a new record / better medal in Time trial: the lower, closer finish shot
+func _won(st: Array, me) -> bool:
+	if not me.finished:
+		return false
+	if mode == "trial":
+		return new_record or Medals.trial_tier(cur_def()["name"], variant, Records.get_best(rec_key())) > start_tier
+	return st[0] == me
 
 func _aims() -> Dictionary:
 	var aims := {}
@@ -1010,7 +1062,7 @@ func _run_tutorial_demo() -> void:
 		var title: String = tut.card.get("title", "")
 		if title != "" and not seen.has(title):
 			seen[title] = true
-			await get_tree().create_timer(0.35).timeout
+			await get_tree().create_timer(2.0).timeout   # the camera settles into its shot
 			await RenderingServer.frame_post_draw
 			n += 1
 			get_viewport().get_texture().get_image().save_png(out.path_join("tut_%02d.png" % n))
@@ -1028,6 +1080,56 @@ func _run_tutorial_demo() -> void:
 	await get_tree().create_timer(0.5).timeout
 	await RenderingServer.frame_post_draw
 	get_viewport().get_texture().get_image().save_png(out.path_join("tut_end.png"))
+	get_tree().quit()
+
+# Cinematic camera frames (SHOT_DIR): the countdown intro, then the race on autopilot to
+# the finish shot and the results backdrop. --cine-demo=<track>,<variant>,<mode>[,<theme>]
+func _run_cine_demo(arg: String) -> void:
+	var parts := arg.split(",")
+	track_idx = int(parts[0])
+	variant = parts[1] if parts.size() > 1 else "standard"
+	mode = parts[2] if parts.size() > 2 else "race"
+	view.theme_override = parts[3] if parts.size() > 3 else ""
+	humans = 1
+	var out := OS.get_environment("SHOT_DIR")
+	if out == "":
+		out = "user://"
+	await get_tree().process_frame
+	ui.menu.visible = false
+	ui.loading.visible = false
+	new_race()
+	race.laps_total = 1   # a short run: the shots are at the start and the finish
+	var marks := [0.05, 0.9, 1.8, 2.5, 3.1]
+	var t := 0.0
+	var n := 0
+	var done_t := -1.0
+	var after := [1.5, 3.0, 4.5]
+	var res_t := -1.0
+	while t < 400.0:
+		await get_tree().process_frame
+		var d := minf(get_process_delta_time(), 1.0 / 30.0)
+		t += d
+		_autopilot()
+		var save := ""
+		if n < marks.size() and t >= marks[n]:
+			save = "cine_intro_%d" % n
+			n += 1
+		if phase in ["done", "results"]:
+			if done_t < 0.0:
+				done_t = t
+			if after.size() and t - done_t >= after[0]:
+				save = "cine_finish_%d" % (3 - after.size())
+				after.pop_front()
+		if phase == "results":
+			if res_t < 0.0:
+				res_t = t
+			elif t - res_t > 1.6 and after.is_empty():
+				save = "cine_results"
+		if save != "":
+			await RenderingServer.frame_post_draw
+			get_viewport().get_texture().get_image().save_png(out.path_join(save + ".png"))
+			if save == "cine_results":
+				break
 	get_tree().quit()
 
 # the AI drives the human cars, so a recording shows a clean lap with the player's camera

@@ -40,3 +40,5 @@ jobs:
         run: ./godot --headless --path . --script tests/rivals_test.gd
       - name: Obstacles stay off the racing line
         run: ./godot --headless --path . --script tests/obstacles_test.gd
+      - name: Cinematic camera test
+        run: ./godot --headless --path . --script tests/camera_test.gd
