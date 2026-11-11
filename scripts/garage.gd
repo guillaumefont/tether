@@ -66,14 +66,19 @@ func setup(owner_menu, scroller_class) -> void:
 	vp.add_child(view)
 	# the stage is a photo taped onto the page: a white border, a strip of tape at the top
 	var photo := PanelContainer.new()
-	var ps := Paper.box(Paper.CARD, Color.TRANSPARENT, 0, 5)
-	ps.set_content_margin_all(8)
+	var ps := Paper.box(Color("#fdfcf8"), Color.TRANSPARENT, 0, 7)
+	ps.set_content_margin_all(10)
 	photo.add_theme_stylebox_override("panel", ps)
 	photo.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	photo.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	photo.add_child(stage)
 	left.add_child(photo)
-	photo.draw.connect(func(): Paper.draw_tape(photo, Vector2(photo.size.x * 0.5, 0), 100, 24, 0.06))
+	photo.draw.connect(func():
+		Paper.draw_tape(photo, Vector2(26, 8), 92, 24, -0.6)
+		Paper.draw_tape(photo, Vector2(photo.size.x - 26, 8), 92, 24, 0.55))
+	# the print lies a little crooked on the page
+	photo.rotation = deg_to_rad(-1.2)
+	photo.resized.connect(func(): photo.pivot_offset = photo.size * 0.5)
 	var bar := HBoxContainer.new()
 	bar.add_theme_constant_override("separation", 10)
 	bar.custom_minimum_size.y = 44

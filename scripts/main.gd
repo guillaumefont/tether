@@ -740,8 +740,8 @@ func _show_results() -> void:
 		var c = race.cars[0]
 		var rec := Records.get_best(rec_key())
 		var rows: Array = []
-		for k in c.laps.size():
-			rows.append({ "cells": ["Lap %d" % (k + 1), "", UI.fmt2(c.laps[k])], "hl": c.laps[k] == c.best_lap })
+		if c.best_lap > 0.0:   # only the fastest lap, not every lap (it is the one that counts)
+			rows.append({ "cells": ["Fastest lap", "", UI.fmt2(c.best_lap)], "hl": true })
 		if track.obstacles.size() > 0:
 			rows.append({ "cells": ["Posts hit", "", "%d (+%d s)" % [c.hits, c.hits]] })
 		if track.tokens.size() > 0:
@@ -995,7 +995,7 @@ func _run_demo(arg: String) -> void:
 		["results_coins", func():
 			ui.hide_settings()
 			ui.menu.visible = false
-			ui.show_results("Time trial", [{ "cells": ["Lap 1", "", "0:12.10"], "hl": true }, { "cells": ["Lap 2", "", "0:12.45"] }], "+400 coins (medal 100, Track of the day 100, Clean triple 150, Smooth operator 100): 1240 in all.", false, 3,
+			ui.show_results("Time trial", [{ "cells": ["Fastest lap", "", "0:12.10"], "hl": true }], "+400 coins (medal 100, Track of the day 100, Clean triple 150, Smooth operator 100): 1240 in all.", false, 3,
 				[{ "text": "+450 COINS", "col": Color("#f2c84a") }, { "text": "GOLD MEDAL", "col": Medals.COLORS[2] }])],
 		["award_play", func(): show_awards_won([Awards.find("clean_laps"), Awards.find("first_pivot")])],
 		["award_done", func(): pass],
@@ -1013,7 +1013,7 @@ func _run_demo(arg: String) -> void:
 			ui.menu.show_event()],
 		["results_pop", func():
 			ui.menu.visible = false
-			ui.show_results("New record", [{ "cells": ["Lap 1", "", "0:42.10"], "hl": true }, { "cells": ["Lap 2", "", "0:43.05"] }], "Record on this track: 0:42.10.", true, 3,
+			ui.show_results("New record", [{ "cells": ["Fastest lap", "", "0:42.10"], "hl": true }], "Record on this track: 0:42.10.", true, 3,
 				[{ "text": "−0.84 S FASTER", "col": UI.C_GAIN }, { "text": "GOLD MEDAL", "col": Medals.COLORS[2] }])],
 		["results", func(): pass]]   # same panel once the badges have popped in
 	for sh in shots:

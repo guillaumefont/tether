@@ -35,8 +35,8 @@ signal settings_pressed
 signal vehicle_picked(id: String)   # Garage: a vehicle tapped, rev its engine
 
 # a light night-blue wash over the live race round the page
-const C_BG_TOP := Color(0.03, 0.09, 0.15, 0.45)
-const C_BG_BOT := Color(0.02, 0.06, 0.10, 0.6)
+const C_BG_TOP := Color(0.03, 0.09, 0.15, 0.22)
+const C_BG_BOT := Color(0.02, 0.06, 0.10, 0.34)
 const C_CARD := Paper.CARD
 const C_FG := Paper.INK
 const C_MUTED := Paper.INK_SOFT
@@ -193,32 +193,94 @@ func _frame() -> VBoxContainer:
 	body.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(body)
-	# the bookmark tabs (Awards, Garage, Settings) stick out of the page's right edge on the
-	# home screen, so the page leaves them room there
+	# the page lies on the desk (the live race) with a little tilt. The home page is a smaller
+	# sheet so the world shows round it, with its bookmark tabs (Awards, Garage, Settings)
+	# sticking out of its right edge and the Track of the day photo beside it.
 	var tabs := screen == "home"
+	var desk := Control.new()   # the page and its tabs, tilted together
+	desk.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	desk.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	body.add_child(desk)
 	var m := MarginContainer.new()
 	m.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	m.add_theme_constant_override("margin_left", (8 if tall else 14) + int(ins["l"]))
-	m.add_theme_constant_override("margin_right", (TAB_W - 6 if tabs else (8 if tall else 14)) + int(ins["r"]))
-	m.add_theme_constant_override("margin_top", 10 + int(ins["t"]))
-	m.add_theme_constant_override("margin_bottom", 10 + int(ins["b"]))
+	# the frame round the page covers the whole screen, tabs included: it must let taps
+	# through to them (only the page and what is on it take taps)
+	m.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var side := (10 if tall else 26) + 0
+	m.add_theme_constant_override("margin_left", side + int(ins["l"]))
+	m.add_theme_constant_override("margin_right", (TAB_W - 6 if tabs and tall else side) + int(ins["r"]))
+	m.add_theme_constant_override("margin_top", (14 if tall else 16) + int(ins["t"]))
+	m.add_theme_constant_override("margin_bottom", (12 if tall else 16) + int(ins["b"]))
+	if tabs:
+		if tall:   # portrait: the page fills the top, the photo lies under it
+			m.anchor_bottom = HOME_PAGE_TALL
+			m.add_theme_constant_override("margin_top", 60 + int(ins["t"]))
+		else:      # landscape: the page on the left, the photo on the right
+			m.anchor_right = HOME_PAGE_W
+			m.add_theme_constant_override("margin_left", 40 + int(ins["l"]))
+			m.add_theme_constant_override("margin_right", 0)
+			m.add_theme_constant_override("margin_top", 26 + int(ins["t"]))
+			m.add_theme_constant_override("margin_bottom", 96 + int(ins["b"]))
 	_tabs = null
 	if tabs:
 		_tabs = VBoxContainer.new()
-		_tabs.anchor_left = 1.0; _tabs.anchor_right = 1.0
-		_tabs.offset_right = -int(ins["r"])
-		_tabs.offset_left = _tabs.offset_right - TAB_W - 8
-		_tabs.offset_top = (96 if tall else 74) + int(ins["t"])
+		if tall:
+			_tabs.anchor_left = 1.0; _tabs.anchor_right = 1.0
+			_tabs.offset_right = -int(ins["r"])
+			_tabs.offset_left = _tabs.offset_right - TAB_W - 8
+			_tabs.offset_top = 130 + int(ins["t"])
+		else:
+			_tabs.anchor_left = HOME_PAGE_W; _tabs.anchor_right = HOME_PAGE_W
+			_tabs.offset_left = -8
+			_tabs.offset_right = TAB_W
+			_tabs.offset_top = 96 + int(ins["t"])
 		_tabs.add_theme_constant_override("separation", 6)
-		body.add_child(_tabs)   # before the page: it lies on top of their inner ends
-	body.add_child(m)
+		desk.add_child(_tabs)   # before the page: it lies on top of their inner ends
+	desk.add_child(m)
 	var sheet := Paper.Sheet.new()
 	sheet.rule_top = 86.0 if not tall else 70.0
 	m.add_child(sheet)
+	if tabs:
+		sheet.margin_x = 26.0
+		sheet.clip_x = 200.0
+		sheet.get_theme_stylebox("panel").content_margin_left = 40
+	# tilt the page round its own middle
+	desk.rotation = deg_to_rad(HOME_TILT if tabs else PAGE_TILT)
+	m.resized.connect(func(): desk.pivot_offset = m.position + m.size * 0.5)
+	_page = sheet
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 10)
 	sheet.add_child(vb)
+	_land(desk)
 	return vb
+
+const HOME_PAGE_W := 0.6      # landscape home: the page's share of the screen width
+const HOME_PAGE_TALL := 0.54  # portrait home: its share of the height
+const HOME_TILT := -1.3       # degrees
+const PAGE_TILT := -0.35
+var _page: Paper.Sheet
+var _last_screen := ""
+
+static func _depth(scr: String) -> int:
+	return { "home": 0, "list": 1, "garage": 1, "awards": 1, "event": 2 }.get(scr, 1)
+
+# the page slides onto the desk and settles (only when the screen changes, not on a rebuild)
+func _land(desk: Control) -> void:
+	if screen == _last_screen or not is_inside_tree():
+		_last_screen = screen
+		return
+	# deeper in (home -> list -> event): the new page comes in from the right, like turning
+	# a page; going back it comes from the left; first show, it slides up onto the desk
+	var dir := signi(_depth(screen) - _depth(_last_screen)) if _last_screen != "" else 0
+	_last_screen = screen
+	var rot := desk.rotation
+	desk.position = Vector2(70.0 * dir, 36.0 if dir == 0 else 0.0)
+	desk.rotation = rot + (0.05 * dir if dir != 0 else -0.035)
+	desk.modulate.a = 0.0
+	var tw := desk.create_tween().set_parallel().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.tween_property(desk, "position", Vector2.ZERO, 0.28)
+	tw.tween_property(desk, "rotation", rot, 0.36).set_trans(Tween.TRANS_BACK)
+	tw.tween_property(desk, "modulate:a", 1.0, 0.16)
 
 const TAB_W := 52
 var _tabs: VBoxContainer
@@ -310,9 +372,17 @@ func _card_style(b: Button, locked := false) -> void:
 		b.add_theme_stylebox_override(st, s)
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 
+# a photo print lying on the desk: white border, a soft shadow; pressed, a blue edge
+func _photo_style(b: Button) -> void:
+	for st in ["normal", "hover", "pressed", "hover_pressed"]:
+		var s := Paper.box(Color("#fdfcf8") if not st.begins_with("hover") else Color("#f4f1ea"), Paper.ACCENT_INK, 3 if st.contains("pressed") else 0, 8)
+		s.shadow_offset = Vector2(2, 5)
+		b.add_theme_stylebox_override(st, s)
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+
 # a line of the roadbook: no card, an ink rule under it; pressed, the line is highlighted
 func _line_style(b: Button) -> void:
-	for st in ["normal", "hover", "pressed", "hover_pressed"]:
+	for st in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
 		var s := StyleBoxFlat.new()
 		s.bg_color = Color(Paper.ACCENT, 0.22) if st.contains("pressed") else (Color(Paper.INK, 0.04) if st.begins_with("hover") else Color(0, 0, 0, 0))
 		s.border_color = Paper.INK
@@ -375,37 +445,50 @@ func show_home() -> void:
 		hop.tween_property(ic, "scale", Vector2.ONE, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_bookmark("car", Paper.CARD, "Garage", show_garage)
 	_bookmark("gear", Color("#c9d1d6"), "Settings", func(): settings_pressed.emit())
-	# the three modes as numbered roadbook lines, the Track of the day taped on beside them
-	var row: BoxContainer = VBoxContainer.new() if tall else HBoxContainer.new()
-	row.add_theme_constant_override("separation", 14 if tall else 26)
-	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vb.add_child(row)
+	# the three modes as numbered roadbook lines
 	var lines := VBoxContainer.new()
 	lines.add_theme_constant_override("separation", 0)
 	lines.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lines.size_flags_vertical = Control.SIZE_SHRINK_BEGIN if tall else Control.SIZE_EXPAND_FILL
-	lines.size_flags_stretch_ratio = 1.55
-	row.add_child(lines)
+	vb.add_child(lines)
 	var cleared := 0
 	for i in Campaign.count():
 		if Campaign.event_medal(i) > 0: cleared += 1
 	var first := _first_open_event()
 	var next_name: String = Themes.get_theme(Campaign.CHAPTERS[Campaign.chapter_of(first)]["theme"])["name"]
 	lines.add_child(_road_line(1, "flag", "CAMPAIGN", "%d / %d events  ·  next: %s, event %d" % [cleared, Campaign.count(), next_name, first - Campaign.chapter_start(Campaign.chapter_of(first)) + 1],
-		func(): kind = "campaign"; world = -1; _list_scroll.erase(_list_key()); focus = Campaign.chapter_of(_first_open_event()); show_list(), true))
+		func(): kind = "campaign"; world = -1; _list_scroll.erase(_list_key()); focus = _first_open_event() - Campaign.chapter_start(Campaign.chapter_of(_first_open_event())); show_list(), true))
 	lines.add_child(_road_line(2, "watch", "TIME ATTACK", "%d tracks  ·  4 variants  ·  chase your ghost" % Defs.TRACKS.size(),
 		func(): kind = "attack"; _list_scroll.erase(kind); show_list()))
 	lines.add_child(_road_line(3, "duel", "2 PLAYERS", "One phone, two thumbs",
 		func(): kind = "versus"; _list_scroll.erase(kind); show_list()))
-	# a line of advice at the foot of the column
-	var tip: Label = ui._label("Hook the tower into the bend, let go when the nose points out.", 13, C_MUTED, ui.f_med)
-	tip.size_flags_vertical = Control.SIZE_SHRINK_END if tall else Control.SIZE_EXPAND_FILL
-	tip.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	# a line of advice, handwritten under the lines
+	var tip := Paper.note("Hook the tower into the bend, let go when the nose points out!", 22 if tall else 25)
+	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tip.rotation = 0.0
+	var tm := MarginContainer.new()
+	tm.add_theme_constant_override("margin_top", 10)
+	tm.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tm.add_child(tip)
+	vb.add_child(tm)
+	# a tick in the margin beside the line to play next
+	var tick := Paper.note("✓", 34, Paper.PEN, 0.0)
+	tick.position = Vector2(-34, 6)
+	lines.get_child(0).add_child(tick)
+	# the Track of the day: a photo lying on the desk beside (landscape) or under (portrait) the page
 	var daily := _daily_banner()
-	daily.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	daily.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	row.add_child(daily)
-	(row if tall else lines).add_child(tip)   # portrait: under the photo, at the foot of the page
+	var ins: Dictionary = ui.safe_insets()
+	if tall:
+		daily.anchor_left = 0.12; daily.anchor_right = 0.88
+		daily.anchor_top = HOME_PAGE_TALL; daily.anchor_bottom = 1.0
+		daily.offset_top = 22; daily.offset_bottom = -44 - int(ins["b"])
+	else:
+		daily.anchor_left = HOME_PAGE_W; daily.anchor_right = 1.0
+		daily.anchor_top = 0.0; daily.anchor_bottom = 1.0
+		daily.offset_left = 92; daily.offset_right = -40 - int(ins["r"])
+		daily.offset_top = 112 + int(ins["t"]); daily.offset_bottom = -110 - int(ins["b"])
+	body.add_child(daily)
+	daily.rotation = deg_to_rad(3.5 if not tall else 2.5)
+	daily.resized.connect(func(): daily.pivot_offset = daily.size * 0.5)
 
 # Track of the day: a photo of its world taped onto the page, its name and what it pays;
 # tap it for its Event screen
@@ -413,11 +496,10 @@ func _daily_banner() -> Button:
 	var p := Daily.current()
 	var tall: bool = ui.is_portrait()
 	var b := Button.new()
-	_card_style(b)
-	b.custom_minimum_size.y = 260 if tall else 0
+	_photo_style(b)
 	var box := VBoxContainer.new()
 	box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	box.offset_left = 10; box.offset_right = -10; box.offset_top = 10; box.offset_bottom = -10
+	box.offset_left = 12; box.offset_right = -12; box.offset_top = 12; box.offset_bottom = -12
 	box.add_theme_constant_override("separation", 8)
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var pic := TextureRect.new()
@@ -472,6 +554,11 @@ func _daily_banner() -> Button:
 	tape.anchor_left = 0.5; tape.anchor_right = 0.5
 	tape.offset_left = -46; tape.offset_right = 46; tape.offset_top = -12; tape.offset_bottom = 12
 	b.add_child(tape)
+	if paid < 0:   # not played yet today: a note in red pen on the photo
+		var today := Paper.note("today!", 28 if not tall else 24, Paper.RED_INK, -0.14)
+		today.anchor_left = 1.0; today.anchor_right = 1.0; today.anchor_top = 1.0; today.anchor_bottom = 1.0
+		today.offset_left = -96; today.offset_top = -48
+		b.add_child(today)
 	b.pressed.connect(func():
 		ev = { "track": p["track"], "variant": p["variant"], "mode": "trial", "humans": 1, "kind": "daily", "idx": 0,
 			"theme": Campaign.track_theme(p["track"]) }
@@ -498,11 +585,6 @@ func _road_line(n: int, icon: String, title: String, sub: String, cb: Callable, 
 	nb.custom_minimum_size = Vector2(40, 40) if tall else Vector2(46, 46)
 	nb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	h.add_child(nb)
-	var tu := Paper.Tulip.new()
-	tu.seed = n * 3 + 1
-	tu.custom_minimum_size = Vector2(34, 46) if tall else Vector2(46, 54)
-	tu.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	h.add_child(tu)
 	var v := VBoxContainer.new()
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -704,18 +786,13 @@ func _award_tile(a: Dictionary, header: HBoxContainer, coins: Button) -> Button:
 
 # ---------------------------------------------------------------- lists (one long scrolling list)
 func show_list() -> void:
+	if kind == "campaign":
+		_show_campaign()
+		return
 	screen = "list"
 	var vb := _frame()
-	var title := "Campaign" if kind == "campaign" else ("Time attack" if kind == "attack" else "2-player race")
-	var sub := ""
-	if kind == "campaign" and world < 0:
-		sub = "%d worlds  ·  finish one to open the next" % Campaign.CHAPTERS.size()
-	elif kind == "campaign":
-		var ch: Dictionary = Campaign.CHAPTERS[world]
-		title = Themes.get_theme(ch["theme"])["name"]
-		sub = "World %d  ·  %s  ·  %d / %d medals" % [world + 1, ch["name"], Campaign.chapter_medals(world), Campaign.chapter_size(world)]
-	else:
-		sub = "%d tracks  ·  pick one" % Defs.TRACKS.size()
+	var title := "Time attack" if kind == "attack" else "2-player race"
+	var sub := "%d tracks  ·  pick one" % Defs.TRACKS.size()
 	var tall: bool = ui.is_portrait()
 	_header(vb, title, sub, func(): go_back())
 	var list := VBoxContainer.new()
@@ -728,29 +805,12 @@ func show_list() -> void:
 		g.add_theme_constant_override("v_separation", 10 if tall else 12)
 		list.add_child(g)
 		return g
-	if kind == "campaign" and world < 0:
-		var g: GridContainer = grid.call()
-		g.columns = 1 if tall else 2
-		for c in Campaign.CHAPTERS.size():
-			var b := _world_card(c)
-			g.add_child(b)
-			cards.append(b)
-	elif kind == "campaign":
-		var g: GridContainer = grid.call()
-		var i0 := Campaign.chapter_start(world)
-		for k in Campaign.chapter_size(world):
-			var b := _event_card(i0 + k)
-			g.add_child(b)
-			cards.append(b)
-	else:
-		var g: GridContainer = grid.call()
-		for i in Defs.TRACKS.size():
-			var b := _track_card(i)
-			g.add_child(b)
-			cards.append(b)
+	var g: GridContainer = grid.call()
+	for i in Defs.TRACKS.size():
+		var b := _track_card(i)
+		g.add_child(b)
+		cards.append(b)
 	var card_h := 92.0 if tall else 132.0
-	if kind == "campaign" and world < 0:
-		card_h = 200.0 if tall else 250.0   # world cards carry a picture
 	for b in cards:
 		b.custom_minimum_size.y = card_h
 	var bottom := Control.new()   # breathing room under the last card
@@ -766,6 +826,238 @@ func show_list() -> void:
 	if focus >= 0 and focus < cards.size():
 		_reveal.call_deferred(_scroller, cards[focus])
 	focus = -1
+
+# The campaign is one roadbook: a tab per world down the side (across the top in portrait),
+# and the open world's 12 events as numbered lines, each with its track's outline and the
+# medal stamped on it.
+const WORLD_TINT := { "snow": Color("#d8e8f2"), "forest": Color("#d3e6c8"), "sand": Color("#eedcb4"), "rock": Color("#d6d0c6") }
+
+func _show_campaign() -> void:
+	screen = "list"
+	if world < 0 or not Campaign.chapter_open(world):
+		world = Campaign.chapter_of(_first_open_event())
+	var vb := _frame()
+	var tall: bool = ui.is_portrait()
+	var cleared := 0
+	for i in Campaign.count():
+		if Campaign.event_medal(i) > 0: cleared += 1
+	_header(vb, "Campaign", "%d / %d events cleared  ·  finish a world to open the next" % [cleared, Campaign.count()] if not tall else "%d / %d events cleared" % [cleared, Campaign.count()], func(): go_back())
+	var split: BoxContainer = VBoxContainer.new() if tall else HBoxContainer.new()
+	split.add_theme_constant_override("separation", 0 if tall else 22)
+	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vb.add_child(split)
+	var tabs: BoxContainer = HBoxContainer.new() if tall else VBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 4 if tall else 8)
+	if not tall:
+		tabs.custom_minimum_size.x = 230
+	split.add_child(tabs)
+	for c in Campaign.CHAPTERS.size():
+		tabs.add_child(_world_tab(c, tall))
+	var right := VBoxContainer.new()
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right.add_theme_constant_override("separation", 4)
+	split.add_child(right)
+	if tall:   # the tabs sit on an ink line, the open one joined to the page under it
+		var ln := ColorRect.new()
+		ln.color = Paper.INK
+		ln.custom_minimum_size.y = 3
+		ln.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		right.add_child(ln)
+	var ch: Dictionary = Campaign.CHAPTERS[world]
+	var head := HBoxContainer.new()
+	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var hv := VBoxContainer.new()
+	hv.add_theme_constant_override("separation", -2)
+	hv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var cap: Label = ui._label("WORLD %d  ·  %s" % [world + 1, String(ch["name"]).to_upper()], 12, C_MUTED, ui.f_bold)
+	cap.autowrap_mode = TextServer.AUTOWRAP_OFF
+	hv.add_child(cap)
+	var wt: Label = ui._label(String(Themes.get_theme(ch["theme"])["name"]).to_upper(), 22 if tall else 26, C_FG, ui.f_display)
+	wt.autowrap_mode = TextServer.AUTOWRAP_OFF
+	hv.add_child(Paper.highlight(wt))
+	head.add_child(hv)
+	var got := Campaign.chapter_medals(world)
+	var hn := Paper.note("%d / %d medals" % [got, Campaign.chapter_size(world)], 22 if tall else 26, Paper.PEN, -0.05)
+	hn.size_flags_vertical = Control.SIZE_SHRINK_END
+	head.add_child(hn)
+	right.add_child(head)
+	var g := GridContainer.new()
+	g.columns = 1 if tall else 2
+	g.add_theme_constant_override("h_separation", 26)
+	g.add_theme_constant_override("v_separation", 0)
+	var lines := []
+	var i0 := Campaign.chapter_start(world)
+	if _seen_medal.is_empty():   # first look this session: nothing to stamp
+		for i in Campaign.count():
+			_seen_medal[i] = Campaign.event_medal(i)
+	for k in Campaign.chapter_size(world):
+		var b := _event_line(i0 + k, tall)
+		g.add_child(b)
+		lines.append(b)
+		_seen_medal[i0 + k] = Campaign.event_medal(i0 + k)
+	var list := VBoxContainer.new()
+	list.add_child(g)
+	var left := Campaign.chapter_size(world) - got
+	if left > 0:
+		var foot := Paper.note("%d more medal%s for the %s stamp" % [left, "s" if left > 1 else "", Themes.get_theme(ch["theme"])["name"]], 21 if tall else 23, Paper.PENCIL, -0.02)
+		var fm := MarginContainer.new()
+		fm.add_theme_constant_override("margin_top", 8)
+		fm.add_theme_constant_override("margin_bottom", 6)
+		fm.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		fm.add_child(foot)
+		list.add_child(fm)
+	_scroller = Scroller.new()
+	_scroller.clip_contents = true
+	_scroller.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_scroller.hold(list)
+	_scroller.set_meta("list", true)
+	right.add_child(_scroller)
+	_scroller.scroll = _list_scroll.get(_list_key(), 0.0)
+	if focus >= 0 and focus < lines.size():
+		_reveal.call_deferred(_scroller, lines[focus])
+	focus = -1
+
+# a world's tab: its picture, name and medals; the open one is joined to the page, a locked
+# one is greyed and can't be tapped
+func _world_tab(c: int, tall: bool) -> Button:
+	var theme: String = Campaign.CHAPTERS[c]["theme"]
+	var open := Campaign.chapter_open(c)
+	var on := c == world
+	var b := Button.new()
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.custom_minimum_size.y = 52 if tall else 66
+	b.disabled = not open
+	var tint: Color = WORLD_TINT.get(theme, Paper.PAPER_DARK)
+	for st in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
+		var sb := Paper.box(tint.darkened(0.05) if st.begins_with("hover") else tint, Paper.INK, 0, 0)
+		if on:
+			sb.border_color = Paper.INK
+			if tall:
+				sb.border_width_left = 3; sb.border_width_right = 3; sb.border_width_top = 3
+			else:   # outlined in ink and sticking out towards the events
+				sb.set_border_width_all(3)
+				sb.expand_margin_right = 12
+		b.add_theme_stylebox_override(st, sb)
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	if not open:
+		b.modulate.a = 0.6
+	var h := HBoxContainer.new()
+	h.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	h.offset_left = 6 if tall else 10; h.offset_right = -4; h.offset_top = 6; h.offset_bottom = -6
+	h.add_theme_constant_override("separation", 8)
+	h.alignment = BoxContainer.ALIGNMENT_CENTER if tall else BoxContainer.ALIGNMENT_BEGIN
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if not tall:
+		var pic := TextureRect.new()
+		pic.texture = WORLD_ART.get(theme, WORLD_ART["snow"])
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		pic.custom_minimum_size = Vector2(66, 0)
+		pic.modulate = Color.WHITE if open else Color(0.6, 0.6, 0.6)
+		pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		h.add_child(pic)
+	var v := VBoxContainer.new()
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.add_theme_constant_override("separation", -2)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var nl: Label = ui._label(String(Themes.get_theme(theme)["name"]).to_upper(), 11 if tall else 17, C_FG, ui.f_display)
+	nl.autowrap_mode = TextServer.AUTOWRAP_OFF
+	if tall: nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(nl)
+	var sl: Label = ui._label("%d / %d" % [Campaign.chapter_medals(c), Campaign.chapter_size(c)] if open else "locked", 11 if tall else 14, C_MUTED, ui.f_bold)
+	sl.autowrap_mode = TextServer.AUTOWRAP_OFF
+	if tall: sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(sl)
+	h.add_child(v)
+	b.add_child(h)
+	if open and Campaign.chapter_medals(c) == Campaign.chapter_size(c) and not tall:
+		var st := Paper.Stamp.new()   # a finished world: a small DONE stamp on its tab
+		st.text = "DONE"
+		st.col = Paper.ACCENT_INK
+		st.font = ui.f_display
+		st.anchor_left = 1.0; st.anchor_right = 1.0
+		st.offset_left = -52; st.offset_right = -6; st.offset_top = 10; st.offset_bottom = 56
+		b.add_child(st)
+	b.pressed.connect(func():
+		if c == world:
+			return
+		_list_scroll[_list_key()] = _scroller.scroll if _scroller else 0.0
+		world = c
+		var first := _first_open_event()
+		focus = first - Campaign.chapter_start(c) if Campaign.chapter_of(first) == c else -1
+		_show_campaign())
+	return b
+
+const MEDAL_STAMP := ["BRZ", "SLV", "GLD", "PVT"]
+var _seen_medal := {}   # event -> medal it had when its line was last shown
+
+# one event as a roadbook line: number, the track's outline in ink, its name and kind, then
+# its medal stamp (or an arrow on the one to play next, a lock on the ones still shut)
+func _event_line(i: int, tall: bool) -> Button:
+	var e := Campaign.event(i)
+	var locked := not Campaign.unlocked(i)
+	var cur := i == _first_open_event()
+	var medal := Campaign.event_medal(i)
+	var n := i - Campaign.chapter_start(Campaign.chapter_of(i))
+	var b := Button.new()
+	_line_style(b)
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.custom_minimum_size.y = 62
+	b.disabled = locked
+	var h := HBoxContainer.new()
+	h.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	h.offset_left = 2; h.offset_right = -6; h.offset_top = 5; h.offset_bottom = -5
+	h.add_theme_constant_override("separation", 12)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.modulate.a = 0.45 if locked else 1.0
+	var nb := Paper.NumBox.new()
+	nb.text = str(n + 1)
+	nb.on = cur
+	nb.font = ui.f_display
+	nb.custom_minimum_size = Vector2(36, 36)
+	nb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(nb)
+	var mp := TrackMap.new()
+	mp.mini = true
+	mp.ink = true
+	mp.set_track(_map(e["track"]))
+	mp.custom_minimum_size = Vector2(64, 0)
+	mp.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(mp)
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.add_theme_constant_override("separation", -1)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var t: Label = ui._label(String(e["name"]).to_upper(), 17, C_FG, ui.f_display)
+	t.autowrap_mode = TextServer.AUTOWRAP_OFF
+	t.clip_text = not cur   # the highlighter needs the word's full width
+	v.add_child(Paper.highlight(t) if cur else t)
+	var tl: Label = ui._label(_tag(e["variant"], e["mode"]), 13, C_MUTED, ui.f_bold)
+	tl.autowrap_mode = TextServer.AUTOWRAP_OFF
+	tl.clip_text = true
+	v.add_child(tl)
+	h.add_child(v)
+	if medal > 0:
+		var st := Paper.Stamp.new()
+		st.text = MEDAL_STAMP[medal - 1]
+		st.col = Paper.ink_of(Medals.COLORS[medal - 1])
+		st.font = ui.f_display
+		st.custom_minimum_size = Vector2(48, 48)
+		st.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		h.add_child(st)
+		if medal > int(_seen_medal.get(i, medal)):   # won since this list was last shown: stamp it now
+			st.thump(0.45)
+	elif locked:
+		h.add_child(_icon("lock", 20))
+	else:
+		h.add_child(_icon("next", 24))
+	b.add_child(h)
+	b.pressed.connect(func():
+		ev = { "track": e["track"], "variant": e["variant"], "mode": e["mode"], "humans": 1, "kind": "campaign", "idx": i, "theme": e.get("theme", "") }
+		show_event())
+	return b
 
 # scroll just enough to show `card` (once the list has been laid out)
 func _reveal(sc: Scroller, card: Control) -> void:
@@ -838,87 +1130,6 @@ func _tag(variant: String, mode: String) -> String:
 
 func _list_key() -> String:
 	return "campaign%d" % world if kind == "campaign" else kind
-
-# a world of the campaign: a picture of its theme, its name, progress, and what opens it
-func _world_card(c: int) -> Button:
-	var ch: Dictionary = Campaign.CHAPTERS[c]
-	var theme: String = ch["theme"]
-	var th: Dictionary = Themes.get_theme(theme)
-	var open := Campaign.chapter_open(c)
-	var line2 := ""
-	if not open:
-		line2 = "Locked: finish %s" % Themes.get_theme(Campaign.CHAPTERS[c - 1]["theme"])["name"]
-	elif Campaign.chapter_medals(c) == Campaign.chapter_size(c):
-		line2 = "%s  ·  done, theme unlocked" % ch["name"]
-	elif Campaign.chapter_done(c):   # finished in an earlier, shorter version of the world
-		line2 = "%s  ·  %d / %d medals  ·  theme unlocked" % [ch["name"], Campaign.chapter_medals(c), Campaign.chapter_size(c)]
-	else:
-		line2 = "%s  ·  %d / %d medals" % [ch["name"], Campaign.chapter_medals(c), Campaign.chapter_size(c)]
-	var b := Button.new()
-	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	b.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	b.clip_contents = true
-	_card_style(b, not open)
-	b.disabled = not open
-	# the world's loading artwork, cropped to fill the card; greyed out while locked
-	var pic := TextureRect.new()
-	pic.texture = WORLD_ART.get(theme, WORLD_ART["snow"])
-	pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	# a photo with a white border and the caption written under it (a polaroid)
-	pic.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	pic.offset_left = 10; pic.offset_top = 10; pic.offset_right = -10; pic.offset_bottom = -64
-	pic.modulate = Color.WHITE if open else Color(0.55, 0.55, 0.55)
-	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	b.add_child(pic)
-	var tape := Paper.Tape.new()
-	tape.tilt = -0.08 if c % 2 == 0 else 0.07
-	tape.anchor_left = 0.5; tape.anchor_right = 0.5
-	tape.offset_left = -48; tape.offset_right = 48; tape.offset_top = -11; tape.offset_bottom = 13
-	b.add_child(tape)
-	var row := HBoxContainer.new()
-	row.anchor_left = 0.0; row.anchor_right = 1.0; row.anchor_top = 1.0; row.anchor_bottom = 1.0
-	row.offset_left = 14; row.offset_right = -14; row.offset_bottom = -8; row.offset_top = -60
-	row.add_theme_constant_override("separation", 10)
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(_icon(theme if open else "lock", 36))
-	var v := VBoxContainer.new()
-	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	v.alignment = BoxContainer.ALIGNMENT_CENTER
-	v.add_theme_constant_override("separation", 0)
-	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var l1: Label = ui._label("%d · %s" % [c + 1, String(th["name"]).to_upper()], 22, C_FG if open else C_MUTED, ui.f_display)
-	v.add_child(l1)
-	var l2: Label = ui._label(line2, 13, C_ACCENT if open else C_MUTED, ui.f_bold)
-	v.add_child(l2)
-	row.add_child(v)
-	if open and Campaign.chapter_medals(c) == Campaign.chapter_size(c):
-		var st := Paper.Stamp.new()   # a finished world gets a DONE stamp across its photo
-		st.text = "DONE"
-		st.col = Paper.ACCENT_INK
-		st.font = ui.f_display
-		st.anchor_left = 1.0; st.anchor_right = 1.0
-		st.offset_left = -96; st.offset_right = -16; st.offset_top = 18; st.offset_bottom = 98
-		b.add_child(st)
-	b.add_child(row)
-	b.pressed.connect(func():
-		world = c
-		_list_scroll.erase(_list_key())
-		var first := _first_open_event()
-		focus = first - Campaign.chapter_start(c) if Campaign.chapter_of(first) == c else 0
-		show_list())
-	return b
-
-func _event_card(i: int) -> Button:
-	var e := Campaign.event(i)
-	var locked := not Campaign.unlocked(i)
-	var n := i - Campaign.chapter_start(Campaign.chapter_of(i))
-	var b := _card(e["track"], String(e["name"]).to_upper(), "Locked: earn a medal in event %d" % n if locked else _tag(e["variant"], e["mode"]), Campaign.event_medal(i), locked, n + 1, i == _first_open_event())
-	b.disabled = locked
-	b.pressed.connect(func():
-		ev = { "track": e["track"], "variant": e["variant"], "mode": e["mode"], "humans": 1, "kind": "campaign", "idx": i, "theme": e.get("theme", "") }
-		show_event())
-	return b
 
 func _track_card(i: int) -> Button:
 	var name: String = Defs.TRACKS[i]["name"]
@@ -1288,11 +1499,6 @@ func go_back() -> bool:
 			show_list()
 			return true
 		"list":
-			if kind == "campaign" and world >= 0:
-				focus = world
-				world = -1
-				show_list()
-			else:
-				show_home()
+			show_home()
 			return true
 	return false

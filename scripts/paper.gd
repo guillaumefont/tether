@@ -17,6 +17,31 @@ const HL := Color(0.31, 0.71, 1.0, 0.5)   # highlighter band behind a word
 const TAPE := Color(0.84, 0.89, 0.91, 0.78)
 const COIN_INK := Color("#a8730c")     # coin amounts written on paper (gold, darkened to read)
 const RED_INK := Color("#c8432f")
+const PEN := Color("#1d5fa8")          # ballpoint blue: handwritten notes
+const PENCIL := Color("#6b6f73")       # pencilled asides
+const MARGIN := Color(0.78, 0.26, 0.18, 0.35)   # the red margin line down a page
+
+static var _hand: Font
+
+# Caveat, the co-driver's handwriting (a variable font, set a little bolder than regular)
+static func hand() -> Font:
+	if _hand == null:
+		var fv := FontVariation.new()
+		fv.base_font = load("res://fonts/Caveat.ttf")
+		fv.variation_opentype = { TextServerManager.get_primary_interface().name_to_tag("wght"): 600 }
+		_hand = fv
+	return _hand
+
+# a handwritten note: Caveat in pen blue, a touch crooked
+static func note(text: String, size := 22, col := PEN, tilt := -0.02) -> Label:
+	var l := Label.new()
+	l.text = text
+	l.add_theme_font_override("font", hand())
+	l.add_theme_font_size_override("font_size", size)
+	l.add_theme_color_override("font_color", col)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	l.rotation = tilt
+	return l
 
 # a flat box: paper-like corners (2 px), an optional ink border and a soft drop shadow
 static func box(bg: Color, border := Color.TRANSPARENT, bw := 0, shadow := 4, radius := 2) -> StyleBoxFlat:
@@ -48,6 +73,8 @@ static func go_box(lit := false, off := 4) -> StyleBoxFlat:
 class Sheet extends PanelContainer:
 	var ruled := true
 	var rule_top := 0.0      # first ruled line (under the title)
+	var margin_x := 0.0      # > 0: a red margin line this far in from the left edge
+	var clip_x := -1.0       # >= 0: a paper clip over the top edge, this far from the right
 
 	func _init() -> void:
 		var s := StyleBoxFlat.new()
@@ -63,13 +90,54 @@ class Sheet extends PanelContainer:
 		if what == NOTIFICATION_RESIZED:
 			queue_redraw()
 
+	# a small tile of paper fibre, drawn repeated over every sheet (made once, no file)
+	static var _grain: Texture2D
+
+	static func grain() -> Texture2D:
+		if _grain == null:
+			var img := Image.create(128, 128, false, Image.FORMAT_LA8)
+			var rng := RandomNumberGenerator.new()
+			rng.seed = 7
+			for y in 128:
+				for x in 128:
+					var v := rng.randf()
+					# mostly clear, a speckle of darker and lighter fibres
+					var a := 0.0
+					if v < 0.10: a = 0.10
+					elif v < 0.16: a = 0.05
+					img.set_pixel(x, y, Color(0.35, 0.35, 0.35, a) if v < 0.13 else Color(1, 1, 1, a))
+			_grain = ImageTexture.create_from_image(img)
+		return _grain
+
+	# a steel paper clip holding the top of a page (`at` = its top end)
+	static func clip(ci: CanvasItem, at: Vector2, angle: float) -> void:
+		var col := Color("#8d99a3")
+		ci.draw_set_transform(at, angle, Vector2.ONE)
+		_round_loop(ci, Rect2(2, 3, 22, 62), Color(0, 0, 0, 0.2), 3.0)   # its shadow
+		_round_loop(ci, Rect2(0, 0, 22, 62), col, 3.0)
+		_round_loop(ci, Rect2(5, 8, 12, 46), col, 3.0)
+		ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+	static func _round_loop(ci: CanvasItem, r: Rect2, col: Color, w: float) -> void:
+		var rad := r.size.x * 0.5
+		var c1 := Vector2(r.position.x + rad, r.position.y + rad)
+		var c2 := Vector2(r.position.x + rad, r.end.y - rad)
+		ci.draw_arc(c1, rad, PI, TAU, 12, col, w, true)
+		ci.draw_arc(c2, rad, 0.0, PI, 12, col, w, true)
+		ci.draw_line(Vector2(r.position.x, c1.y), Vector2(r.position.x, c2.y), col, w, true)
+		ci.draw_line(Vector2(r.end.x, c1.y), Vector2(r.end.x, c2.y), col, w, true)
+
 	func _draw() -> void:
-		if not ruled:
-			return
-		var y := maxf(rule_top, 30.0)
-		while y < size.y - 6.0:
-			draw_line(Vector2(6, y), Vector2(size.x - 6, y), RULE, 1.0)
-			y += 32.0
+		draw_texture_rect(grain(), Rect2(Vector2(2, 2), size - Vector2(4, 4)), true)
+		if ruled:
+			var y := maxf(rule_top, 30.0)
+			while y < size.y - 6.0:
+				draw_line(Vector2(6, y), Vector2(size.x - 6, y), RULE, 1.0)
+				y += 32.0
+		if margin_x > 0.0:
+			draw_line(Vector2(margin_x, 0), Vector2(margin_x, size.y), MARGIN, 2.0)
+		if clip_x >= 0.0:
+			clip(self, Vector2(size.x - clip_x, -18), 0.14)
 
 # a strip of tape holding a photo or a note onto the page (child of the thing it holds)
 class Tape extends Control:
@@ -100,6 +168,10 @@ class Tape extends Control:
 static func draw_tape(ci: CanvasItem, c: Vector2, length: float, width: float, tilt: float) -> void:
 	Tape.paint(ci, c, length, width, tilt)
 
+# a steel paper clip over the top edge of a page (`at` = its top end)
+static func draw_clip(ci: CanvasItem, at: Vector2, angle: float) -> void:
+	Sheet.clip(ci, at, angle)
+
 # a rubber stamp: a double ring with a word across it, slightly crooked
 class Stamp extends Control:
 	var text := "GOLD":
@@ -115,6 +187,19 @@ class Stamp extends Control:
 
 	func _init() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	# stamped on as it appears: down big and fast, then still (after `delay` seconds)
+	func thump(delay := 0.25) -> void:
+		modulate.a = 0.0
+		var tw := create_tween()
+		tw.tween_interval(delay)
+		tw.tween_callback(func():
+			pivot_offset = size * 0.5
+			scale = Vector2.ONE * 2.0
+			modulate.a = 1.0)
+		tw.tween_property(self, "scale", Vector2.ONE, 0.14).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tw.tween_property(self, "scale", Vector2.ONE * 1.06, 0.05)
+		tw.tween_property(self, "scale", Vector2.ONE, 0.12)
 
 	func _draw() -> void:
 		var c := size * 0.5
@@ -170,9 +255,15 @@ static func highlight(l: Label) -> MarginContainer:
 	m.add_theme_constant_override("margin_left", 3)
 	m.add_theme_constant_override("margin_right", 3)
 	m.add_child(l)
+	# the stroke is drawn on when the word appears, left to right, like a real highlighter
+	m.set_meta("t", 0.0)
 	m.draw.connect(func():
 		var h := m.size.y
-		m.draw_rect(Rect2(0, h * 0.42, m.size.x, h * 0.46), HL))
+		m.draw_rect(Rect2(0, h * 0.42, m.size.x * float(m.get_meta("t")), h * 0.46), HL))
+	m.tree_entered.connect(func():
+		var tw := m.create_tween()
+		tw.tween_interval(0.18)
+		tw.tween_method(func(v: float): m.set_meta("t", v); m.queue_redraw(), 0.0, 1.0, 0.32).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT), CONNECT_ONE_SHOT)
 	return m
 
 # a numbered box down the left of a roadbook line (filled in ink on the current one)
