@@ -61,6 +61,19 @@ test checks). Hear them without a speaker-equipped game: `ENGINE_OUT=<dir> godot
 --script tools/engine_preview.gd` writes a short drive per vehicle as WAV (ffmpeg to mp3 to share).
 Keep every engine small-sounding (no big-V8 boom; phone speakers drop everything under ~150 Hz).
 
+## Visuals stay in sync with the game
+
+When a change alters something that shows in the visuals (cars, landscape, track, towers, obstacles,
+menus, HUD...), re-render the affected visuals in the same PR, never "later":
+- loading art `art/loading_*` and world cards `art/world_*`: `tools/gen_loading_art.gd` (commands in its header);
+- web loading page: `tools/gen_web_shell.gd`, after the loading art;
+- store screenshots and feature graphic: `store/` (exact `--demo` commands and frames in `store/README.md`,
+  title overlay `tools/feature_graphic.py`);
+- README screenshots `docs/*.png` (same `--demo` runs).
+
+Only redo the ones where the change is visible, and put before/after images in the PR. A full batch of
+`--demo` runs takes 30+ min on the cloud container, so run it in the background.
+
 ## Design rules
 
 - Original game: track layouts and art must be original, never copied from another game.
