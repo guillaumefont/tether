@@ -104,11 +104,24 @@ func _init() -> void:
 	var r: Rect2 = card.get_global_rect()
 	check(menu.screen == "list" and menu._scroller.get_global_rect().encloses(r), "back: the list shows that track's card (%d)" % t1)
 
+	# the campaign opens on the world of the event in play, its events as lines; a world tab
+	# switches world
 	menu.kind = "campaign"
-	menu.focus = 13
+	menu.world = -1
 	menu.show_list()
 	await frames(4)
-	check(menu._scroller.scroll > 100.0, "campaign opens scrolled to the event in play (%.0f)" % menu._scroller.scroll)
+	var Campaign = preload("res://scripts/campaign.gd")
+	var w0: int = Campaign.chapter_of(menu._first_open_event())
+	check(menu.world == w0 and menu._scroller.content.get_child(0).get_child_count() == Campaign.chapter_size(w0), "campaign opens on the world in play (%d), one line per event" % menu.world)
+	var tabs: Array = menu.body.find_children("*", "Button", true, false).filter(func(b): return b.custom_minimum_size.y == 66)
+	check(tabs.size() == Campaign.CHAPTERS.size(), "a tab per world (%d)" % tabs.size())
+
+	# the home screen's bookmark tabs take taps (the frame round the page must not eat them)
+	menu.show_home()
+	await frames(4)
+	var cup: Button = menu._tabs.get_child(1)
+	await tap(cup.get_global_rect().get_center() + Vector2(10, 0))
+	check(menu.screen == "garage", "a tap on the Garage bookmark opens the Garage (%s)" % menu.screen)
 
 	print("swipe test: %s" % ("PASS" if fails == 0 else "%d failure(s)" % fails))
 	quit(1 if fails else 0)

@@ -89,6 +89,12 @@ Only redo the ones where the change is visible, and put before/after images in t
   coin amounts in `Paper.COIN_INK`; `Paper.ink_of()` darkens a HUD colour for paper. The race HUD and the
   full-screen award / world-unlock shows stay dark. Containers lay out every child, so tape on a
   container is drawn with `Paper.draw_tape()` in a `draw` callback, not added as a `Tape` child.
+  The page lies on the desk: a slight tilt, the live world visible round it (home is a smaller sheet
+  with the Track of the day as a separate photo). Handwritten notes use `Paper.note()` (Caveat, pen
+  blue / pencil grey / red) for asides only, never for something you must read to play. Motion is
+  paper-like: pages slide in (`_land` in `menu.gd`), highlighter strokes draw on, medals are stamped
+  (`Stamp.thump()`). Any full-screen container laid over buttons must have
+  `mouse_filter = MOUSE_FILTER_IGNORE`, or it eats their taps (the home bookmarks broke that way).
 - The race camera stays fairly top-down (68°) while the player steers, so lines through bends stay
   readable. Low cinematic shots (`WorldView.CINE_SHOTS`, picked in `main.gd` `_pick_shot`) are only
   for moments nobody steers: countdown, finish/results, the tutorial's cards and frozen bends.

@@ -1738,14 +1738,19 @@ func _blob_shadow() -> MeshInstance3D:
 
 # ---------------------------------------------------------------- garage
 # The garage stage: one car on a snowy (or the theme's) plinth, tethered to a short post,
-# turning slowly. Lives in its own SubViewport; no track is built.
+# turning slowly, photographed out in its own world (its ground and a ring of the world's
+# trees, cacti or spires behind). Lives in its own SubViewport; no track is built.
 var showroom_rig: Node3D
+var showroom_land: Node3D
 
 func showroom(look: Dictionary, theme: String) -> void:
 	th = Themes.get_theme(theme)
 	if showroom_rig:
 		showroom_rig.queue_free()
-	env.background_color = Color(0.05, 0.11, 0.17)
+	if showroom_land:
+		showroom_land.queue_free()
+	var ground0: Color = th["ground"]
+	env.background_color = ground0.lerp(th["ambient"], 0.35)
 	env.glow_enabled = false   # in a small SubViewport the glow washes the whole frame
 	env.ambient_light_color = th["ambient"]
 	env.ambient_light_energy = 0.75
@@ -1757,6 +1762,25 @@ func showroom(look: Dictionary, theme: String) -> void:
 	var ground: Color = th["ground"]
 	var plinth := ground.darkened(0.12) if ground.get_luminance() < 0.6 else ground.darkened(0.42)
 	rig.add_child(cyl(205, 8, plinth, Vector3(0, -4.5, -102), 215.0, 48))
+	# the land round the plinth: the world's ground, darker spots, and its scenery behind
+	var land := Node3D.new()
+	dyn_root.add_child(land)
+	showroom_land = land
+	land.add_child(cyl(4000, 6, ground, Vector3(0, -9, -102), -1.0, 48))
+	var kit := _prop_kit()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+	for k in 26:
+		var a := deg_to_rad(-170.0 + 160.0 * k / 25.0) + rng.randf_range(-0.05, 0.05)   # the far half, behind the car
+		var r := rng.randf_range(300.0, 620.0)
+		var p := Vector2(cos(a), sin(a)) * r + Vector2(0, -102)
+		if k % 3 == 0:
+			land.add_child(cyl(rng.randf_range(40, 90), 4, th["ground_dots"], Vector3(p.x, -6.5, p.y), -1.0, 10))
+		var mi := MeshInstance3D.new()
+		mi.mesh = kit["a"] if rng.randf() < 0.65 else kit["b"]
+		var sc := rng.randf_range(0.45, 0.75)
+		mi.transform = Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * sc), w3(p, -6.0))
+		land.add_child(mi)
 	var car := _make_car(look["color"], false, look)
 	rig.add_child(car)
 	# the rope: from the car's roof out to a little capstan post on the plinth

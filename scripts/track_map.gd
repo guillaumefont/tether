@@ -89,25 +89,47 @@ func _draw_ink(pts: PackedVector2Array, sc: float, off: Vector2, w: float) -> vo
 	draw_polyline(pts, INK, w + edge * 2.0, true)
 	draw_polyline(pts, PAPER, w, true)
 	for B in track.bridges:
+		# the road over the top, with the same edges as everywhere, drawn over the road below.
+		# It runs on a little past the bridge both ways, so the paper of the lower road never
+		# cuts the upper road's edges where they cross.
 		var seg := PackedVector2Array()
+		var reach := TrackData.HW * 2.5
 		var i: int = B["from"]
+		var back := 0.0
+		while back < reach:
+			var j := (i - 1 + track.n) % track.n
+			back += track.P[i].distance_to(track.P[j])
+			i = j
+		var end := (int(B["to"]) + 1) % track.n
+		var past := -1.0
 		while true:
 			seg.append(track.P[i] * sc + off)
-			if i == (int(B["to"]) + 1) % track.n:
-				break
+			if past < 0.0 and i == end:
+				past = 0.0
+			if past >= 0.0:
+				var k := (i + 1) % track.n
+				past += track.P[i].distance_to(track.P[k])
+				if past > reach:
+					break
 			i = (i + 1) % track.n
-		draw_polyline(seg, INK, w + edge * 4.0)
-		draw_polyline(seg, PAPER, w + edge * 1.0)
+		draw_polyline(seg, INK, w + edge * 2.0)
+		draw_polyline(seg, PAPER, w)
 	for j in track.jumps:
 		var p: Vector2 = j["pos"] * sc + off
 		var d: Vector2 = j["dir"]
 		var n := TrackData.perp(d)
-		var hw := (TrackData.HW + 12) * sc
 		var gl := TrackData.GAP * sc
-		# the gap of a jump: the road stops, two short ink lips either side
-		draw_colored_polygon(PackedVector2Array([p + n * hw, p + n * hw + d * gl, p - n * hw + d * gl, p - n * hw]), PAPER)
-		draw_line(p + n * hw, p - n * hw, INK, edge)
-		draw_line(p + n * hw + d * gl, p - n * hw + d * gl, INK, edge)
+		# the gap of a jump: the road's edges run on unbroken; a thin line across the road at
+		# each lip and light hatching between them
+		var rw := TrackData.HW * sc   # inside the edges only
+		var thin := maxf(1.0, edge * 0.6)
+		draw_line(p + n * rw, p - n * rw, INK, thin)
+		draw_line(p + n * rw + d * gl, p - n * rw + d * gl, INK, thin)
+		var k := 1
+		while k < 6:
+			var t0 := p + d * gl * (k / 6.0)
+			draw_line(t0 + n * rw * 0.8 - d * gl * 0.08, t0 - n * rw * 0.8 + d * gl * 0.08, Color(INK, 0.45), thin)
+			k += 1
 	var tr := clampf(w * 0.24, 2.5, 7.0)
 	for a in track.anchors:
 		draw_circle(a.pos * sc + off, tr, INK)

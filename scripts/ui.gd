@@ -1199,12 +1199,19 @@ func _show_rewards(rewards: Array) -> void:
 		var b := _reward_badge(String(r["text"]), r["col"])
 		b.modulate.a = 0.0
 		res_rewards.add_child(b)
+		# stamped onto the time card: it comes down big and fast, lands a little crooked,
+		# and the card gives a small jolt
+		var tilt := -0.05 if i % 2 == 0 else 0.04
 		_res_tw.tween_callback(func():
 			b.pivot_offset = b.size * 0.5
-			b.scale = Vector2.ONE * 0.3
+			b.scale = Vector2.ONE * 1.9
+			b.rotation = tilt - 0.2
 			b.modulate.a = 1.0
 			reward_popped.emit(i))
-		_res_tw.tween_property(b, "scale", Vector2.ONE, 0.32).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		_res_tw.tween_property(b, "scale", Vector2.ONE, 0.13).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		_res_tw.parallel().tween_property(b, "rotation", tilt, 0.13)
+		_res_tw.tween_property(results_panel, "position:y", results_panel.position.y + 3.0, 0.04)
+		_res_tw.tween_property(results_panel, "position:y", results_panel.position.y, 0.1).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		if i == 0:   # the title answers the first badge with a little bounce
 			_res_tw.parallel().tween_callback(func(): res_title.pivot_offset = Vector2(0, res_title.size.y * 0.5))
 			_res_tw.parallel().tween_property(res_title, "scale", Vector2.ONE * 1.12, 0.12)
