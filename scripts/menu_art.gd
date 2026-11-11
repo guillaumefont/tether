@@ -3,6 +3,7 @@
 extends RefCounted
 
 const Medals = preload("res://scripts/medals.gd")
+const Paper = preload("res://scripts/paper.gd")
 
 # The UI accent (titles, buttons, icons, the tower emblem and its loading ring). The cars keep
 # their amber; gold stays for medals and coins only.
@@ -18,6 +19,7 @@ class Logo extends Control:
 	var font: Font
 	var font_size := 40
 	var t := 0.0
+	var ink := false   # written on the roadbook's paper: ink and dark blue, no shadow
 
 	func _process(dt: float) -> void:
 		if is_visible_in_tree():
@@ -29,8 +31,12 @@ class Logo extends Control:
 		var c := Vector2(h * 0.5, h * 0.5)
 		var R := h * 0.42
 		# frosty disc, tower, rotor
-		draw_circle(c, R, Color(1, 1, 1, 0.08))
-		draw_arc(c, R, 0, TAU, 48, Color(C_ICE, 0.35), 2.0, true)
+		if ink:
+			draw_arc(c, R, 0, TAU, 48, Paper.INK, 2.5, true)
+			draw_arc(c, R * 0.78, 0, TAU, 48, Paper.INK_FAINT, 1.5, true)
+		else:
+			draw_circle(c, R, Color(1, 1, 1, 0.08))
+			draw_arc(c, R, 0, TAU, 48, Color(C_ICE, 0.35), 2.0, true)
 		draw_circle(c, h * 0.13, C_TOWER)
 		draw_circle(c, h * 0.1, C_ACCENT)
 		for k in 3:
@@ -52,6 +58,10 @@ class Logo extends Control:
 		var x := h * 1.12
 		var base := h * 0.5 + font_size * 0.36
 		var w1 := font.get_string_size("TETHER ", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+		if ink:
+			draw_string(font, Vector2(x, base), "TETHER", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Paper.INK)
+			draw_string(font, Vector2(x + w1, base), "RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Paper.ACCENT_INK)
+			return
 		for pass_i in 2:
 			var o := Vector2(0, 3) if pass_i == 0 else Vector2.ZERO
 			var sh := Color(0, 0, 0, 0.35)
@@ -79,6 +89,7 @@ class Icon extends Control:
 			col = v
 			queue_redraw()
 	var col2 := C_ICE   # second tone (hands of the watch, gem facets...)
+	var ink := false    # drawn on paper: holes and flag squares in paper, snowflake in blue ink
 
 	func _chevron(c: Vector2, s: float, dir: float, lw: float) -> void:
 		var d := Vector2(dir, 0)
@@ -93,6 +104,9 @@ class Icon extends Control:
 		var o := (size - Vector2(s, s)) * 0.5
 		var c := o + Vector2(s, s) * 0.5
 		var lw := maxf(2.0, s * 0.07)
+		var hole := Paper.CARD if ink else Color("#0d1a26")
+		var pale := Paper.CARD if ink else C_ICE
+		var flake := Paper.ACCENT_INK if ink else C_ICE
 		match kind:
 			"gear":
 				var r := s * 0.3
@@ -102,7 +116,7 @@ class Icon extends Control:
 					var tooth := fmod(k, 6.0) < 3.0
 					pts.append(c + Vector2.from_angle(a) * (r * 1.3 if tooth else r))
 				draw_colored_polygon(pts, col)
-				draw_circle(c, r * 0.45, Color("#0d1a26"))
+				draw_circle(c, r * 0.45, hole)
 			"back":
 				draw_line(c + Vector2(s * 0.28, 0), c - Vector2(s * 0.2, 0), col, lw * 1.2, true)
 				draw_polyline(PackedVector2Array([c + Vector2(-s * 0.02, -s * 0.22), c - Vector2(s * 0.26, 0), c + Vector2(-s * 0.02, s * 0.22)]), col, lw * 1.2, true)
@@ -123,7 +137,7 @@ class Icon extends Control:
 			"home":
 				draw_colored_polygon(PackedVector2Array([c + Vector2(0, -s * 0.34), c + Vector2(s * 0.36, -s * 0.02), c + Vector2(-s * 0.36, -s * 0.02)]), col)
 				draw_rect(Rect2(c + Vector2(-s * 0.25, -s * 0.06), Vector2(s * 0.5, s * 0.36)), col)
-				draw_rect(Rect2(c + Vector2(-s * 0.07, s * 0.1), Vector2(s * 0.14, s * 0.2)), Color("#0d1a26"))
+				draw_rect(Rect2(c + Vector2(-s * 0.07, s * 0.1), Vector2(s * 0.14, s * 0.2)), hole)
 			"coin":       # a gold coin with a rim and a notch
 				draw_circle(c, s * 0.36, Color("#b8801c"))
 				draw_circle(c + Vector2(-s * 0.02, -s * 0.02), s * 0.31, Color("#f2c84a"))
@@ -150,8 +164,8 @@ class Icon extends Control:
 					var x := c.x + r - 2.0 * r * k / 6.0
 					pts.append(Vector2(x, by - (s * 0.07 if k % 2 == 1 else 0.0)))
 				draw_colored_polygon(pts, Color(col, 0.85))
-				draw_circle(top + Vector2(-r * 0.35, 0), s * 0.05, Color("#0d1a26"))
-				draw_circle(top + Vector2(r * 0.35, 0), s * 0.05, Color("#0d1a26"))
+				draw_circle(top + Vector2(-r * 0.35, 0), s * 0.05, hole)
+				draw_circle(top + Vector2(r * 0.35, 0), s * 0.05, hole)
 			"spark":      # a four-point sparkle
 				var pts := PackedVector2Array()
 				for k in 8:
@@ -198,7 +212,7 @@ class Icon extends Control:
 				var r := Rect2(c + Vector2(-s * 0.12, -s * 0.32), Vector2(s * 0.24, s * 0.6))
 				draw_rect(r, col)
 				for k in 3:
-					draw_rect(Rect2(r.position + Vector2(0, s * (0.08 + k * 0.18)), Vector2(r.size.x, s * 0.07)), Color("#0d1a26"))
+					draw_rect(Rect2(r.position + Vector2(0, s * (0.08 + k * 0.18)), Vector2(r.size.x, s * 0.07)), hole)
 				draw_rect(Rect2(c + Vector2(-s * 0.24, s * 0.26), Vector2(s * 0.48, s * 0.07)), col2)
 			"collect":    # a gem
 				var t := c + Vector2(0, -s * 0.26)
@@ -214,7 +228,7 @@ class Icon extends Control:
 				for gy in 3:
 					for gx in 4:
 						var r := Rect2(pole + Vector2(lw * 0.5 + gx * cell, gy * cell), Vector2(cell, cell))
-						draw_rect(r, col if (gx + gy) % 2 == 0 else Color(C_ICE, 0.9))
+						draw_rect(r, col if (gx + gy) % 2 == 0 else Color(pale, 0.9))
 			"watch":
 				var cw := o + Vector2(s * 0.5, s * 0.56)
 				var r := s * 0.38
@@ -227,10 +241,10 @@ class Icon extends Control:
 				# a six-armed snowflake with little side branches
 				for k in 6:
 					var d := Vector2.from_angle(TAU * k / 6.0 - PI / 2)
-					draw_line(c, c + d * s * 0.36, C_ICE, lw, true)
+					draw_line(c, c + d * s * 0.36, flake, lw, true)
 					var m := c + d * s * 0.22
-					draw_line(m, m + d.rotated(0.8) * s * 0.1, C_ICE, lw * 0.8, true)
-					draw_line(m, m + d.rotated(-0.8) * s * 0.1, C_ICE, lw * 0.8, true)
+					draw_line(m, m + d.rotated(0.8) * s * 0.1, flake, lw * 0.8, true)
+					draw_line(m, m + d.rotated(-0.8) * s * 0.1, flake, lw * 0.8, true)
 			"forest":
 				# a pine: three stacked triangles on a trunk
 				var g := Color("#6fbf5a")
@@ -281,9 +295,10 @@ class Icon extends Control:
 				draw_line(c + Vector2(s * 0.3, 0), c + Vector2(s * 0.42, s * 0.3), col, lw * 0.8, true)
 			"lock":
 				var body_r := Rect2(c + Vector2(-s * 0.22, -s * 0.04), Vector2(s * 0.44, s * 0.34))
-				draw_arc(c + Vector2(0, -s * 0.06), s * 0.15, PI, TAU, 16, Color(C_ICE_DIM, 0.8), lw, true)
-				draw_rect(body_r, Color(C_ICE_DIM, 0.8))
-				draw_circle(c + Vector2(0, s * 0.11), s * 0.04, Color("#0d1a26"))
+				var lc := col if ink else Color(C_ICE_DIM, 0.8)
+				draw_arc(c + Vector2(0, -s * 0.06), s * 0.15, PI, TAU, 16, lc, lw, true)
+				draw_rect(body_r, lc)
+				draw_circle(c + Vector2(0, s * 0.11), s * 0.04, hole)
 			"duel":
 				for k in 2:
 					var cc := o + Vector2(s * (0.33 + 0.34 * k), s * 0.5)
@@ -294,6 +309,7 @@ class Icon extends Control:
 # The player's medal cabinet: one rotor disc per tier with how many they hold.
 class Cabinet extends Control:
 	var counts := [0, 0, 0, 0]
+	var ink := false
 	var font: Font
 	var font_size := 15
 
@@ -310,10 +326,11 @@ class Cabinet extends Control:
 				for k in 3:
 					draw_line(c, c + Vector2.from_angle(TAU * k / 3.0 + 0.4) * r * 0.62, col.darkened(0.45), maxf(2.0, r * 0.22), true)
 			else:
-				draw_arc(c, r * 0.9, 0, TAU, 28, Color(col, 0.45), maxf(1.5, r * 0.12), true)
+				draw_arc(c, r * 0.9, 0, TAU, 28, Color(col.darkened(0.35), 0.7) if ink else Color(col, 0.45), maxf(1.5, r * 0.12), true)
 			var txt := "x%d" % counts[i]
 			if font:
-				draw_string(font, Vector2(x + r + 5, size.y * 0.5 + font_size * 0.36), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, col if lit else Color(C_ICE_DIM, 0.7))
+				var tc: Color = (col.darkened(0.4) if lit else Paper.INK_SOFT) if ink else (col if lit else Color(C_ICE_DIM, 0.7))
+				draw_string(font, Vector2(x + r + 5, size.y * 0.5 + font_size * 0.36), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, tc)
 			x += r * 2 + 12 + (font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x if font else 20)
 
 # The title card shared by the boot splash (tools/gen_splash.gd renders it to a PNG) and the

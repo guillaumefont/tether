@@ -8,6 +8,7 @@ var earned := 0              # 0..4
 var labels: Array = ["", "", "", ""]
 var font: Font
 var font_size := 13
+var ink := false           # on the roadbook paper: darker outlines and labels
 var compact := false       # small dots only, no labels (cards)
 
 func set_state(e: int, l: Array) -> void:
@@ -37,9 +38,9 @@ func _draw() -> void:
 				draw_line(c, c + Vector2.from_angle(a) * r * 0.62, col.darkened(0.45), maxf(2.0, r * 0.22), true)
 			draw_circle(c, r * 0.2, col.lightened(0.4))
 		else:
-			draw_arc(c, r * 0.9, 0, TAU, 32, Color(col, 0.45), maxf(1.5, r * 0.12), true)
+			draw_arc(c, r * 0.9, 0, TAU, 32, Color(col.darkened(0.35), 0.75) if ink else Color(col, 0.45), maxf(1.5, r * 0.12), true)
 		if font and not compact:
 			var t: String = labels[i]
 			var w := font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 			draw_string(font, Vector2(c.x - w * 0.5, r * 2 + 4 + font_size), t, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size,
-				col if lit else Color(0.62, 0.7, 0.69))
+				(col.darkened(0.4) if lit else Color("#56636e")) if ink else (col if lit else Color(0.62, 0.7, 0.69)))

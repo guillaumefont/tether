@@ -11,10 +11,12 @@ const Campaign = preload("res://scripts/campaign.gd")
 const WorldView = preload("res://scripts/world_view.gd")
 const Art = preload("res://scripts/menu_art.gd")
 
-const C_FG := Color("#f3efe6")
-const C_MUTED := Color("#9fb3b0")
-const C_ACCENT := Color("#4fb6ff")   # UI accent, same as Art.C_ACCENT
-const C_COIN := Color("#f2b134")     # coin amounts stay gold
+const Paper = preload("res://scripts/paper.gd")
+# written on the roadbook paper (see paper.gd)
+const C_FG := Paper.INK
+const C_MUTED := Paper.INK_SOFT
+const C_ACCENT := Paper.ACCENT_INK
+const C_COIN := Paper.COIN_INK
 const Themes = preload("res://scripts/themes.gd")
 const Settings = preload("res://scripts/settings.gd")
 const TABS := ["body", "paint", "livery", "rope"]
@@ -62,7 +64,16 @@ func setup(owner_menu, scroller_class) -> void:
 	stage.add_child(vp)
 	view = WorldView.new()
 	vp.add_child(view)
-	left.add_child(stage)
+	# the stage is a photo taped onto the page: a white border, a strip of tape at the top
+	var photo := PanelContainer.new()
+	var ps := Paper.box(Paper.CARD, Color.TRANSPARENT, 0, 5)
+	ps.set_content_margin_all(8)
+	photo.add_theme_stylebox_override("panel", ps)
+	photo.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	photo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	photo.add_child(stage)
+	left.add_child(photo)
+	photo.draw.connect(func(): Paper.draw_tape(photo, Vector2(photo.size.x * 0.5, 0), 100, 24, 0.06))
 	var bar := HBoxContainer.new()
 	bar.add_theme_constant_override("separation", 10)
 	bar.custom_minimum_size.y = 44
@@ -274,6 +285,8 @@ func _tile(it: Dictionary) -> Button:
 	b.add_child(v)
 	if not open:
 		var lk := Art.Icon.new()
+		lk.ink = true
+		lk.col = Paper.INK_SOFT
 		lk.kind = "lock" if not Cosmetics.can_buy_yet(it) or it["unlock"].has("product") else "coin"
 		lk.custom_minimum_size = Vector2(22, 22)
 		lk.position = Vector2(6, 6)

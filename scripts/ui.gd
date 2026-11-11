@@ -1,5 +1,6 @@
 # Menus, HUD, big centre text, results and minimap. Built in code so the layout
-# adapts to any phone screen; styled after the prototype (dark panels, ice-blue accent).
+# adapts to any phone screen. Menus, panels and overlays wear the Roadbook look (paper.gd:
+# cream paper, navy ink, ice-blue highlighter); the race HUD stays dark over the track.
 extends CanvasLayer
 
 const TrackData = preload("res://scripts/track.gd")
@@ -11,6 +12,7 @@ const Art = preload("res://scripts/menu_art.gd")
 const Campaign = preload("res://scripts/campaign.gd")
 const MonoLabel = preload("res://scripts/mono_label.gd")
 const Settings = preload("res://scripts/settings.gd")
+const Paper = preload("res://scripts/paper.gd")
 
 const TIPS := [
 	"Hook the tower as you enter the bend, let go when your nose points down the exit.",
@@ -206,26 +208,26 @@ func _make_theme() -> Theme:
 			s.border_color = border
 			s.set_border_width_all(bw)
 		return s
-	t.set_stylebox("normal", "Button", sb.call(C_ASPHALT, Color.TRANSPARENT, 2))
-	t.set_stylebox("hover", "Button", sb.call(C_ASPHALT.lightened(0.08), Color.TRANSPARENT, 2))
-	t.set_stylebox("pressed", "Button", sb.call(C_ASPHALT, C_ACCENT, 2))
-	t.set_stylebox("hover_pressed", "Button", sb.call(C_ASPHALT.lightened(0.08), C_ACCENT, 2))
-	t.set_stylebox("focus", "Button", sb.call(Color.TRANSPARENT, C_FG, 2))
+	# roadbook: white index-card buttons outlined in ink, cream paper panels
+	t.set_stylebox("normal", "Button", sb.call(Paper.CARD, Paper.INK, 2))
+	t.set_stylebox("hover", "Button", sb.call(Paper.CARD.darkened(0.04), Paper.INK, 2))
+	t.set_stylebox("pressed", "Button", sb.call(Paper.CARD.darkened(0.04), Paper.ACCENT_INK, 3))
+	t.set_stylebox("hover_pressed", "Button", sb.call(Paper.CARD.darkened(0.04), Paper.ACCENT_INK, 3))
+	t.set_stylebox("focus", "Button", StyleBoxEmpty.new())
+	for st in ["normal", "hover", "pressed", "hover_pressed"]:
+		(t.get_stylebox(st, "Button") as StyleBoxFlat).set_corner_radius_all(2)
 	t.set_font("font", "Button", f_bold)
 	t.set_font_size("font_size", "Button", 16)
-	t.set_color("font_color", "Button", C_FG)
-	t.set_color("font_pressed_color", "Button", C_FG)
-	t.set_color("font_hover_color", "Button", C_FG)
-	t.set_color("font_hover_pressed_color", "Button", C_FG)
-	t.set_color("font_focus_color", "Button", C_FG)
-	var panel: StyleBoxFlat = sb.call(C_PANEL)
-	panel.set_corner_radius_all(10)
-	panel.content_margin_left = 20; panel.content_margin_right = 20
-	panel.content_margin_top = 20; panel.content_margin_bottom = 20
-	panel.shadow_color = Color(0, 0, 0, 0.5)
-	panel.shadow_size = 24
+	t.set_color("font_color", "Button", Paper.INK)
+	t.set_color("font_pressed_color", "Button", Paper.INK)
+	t.set_color("font_hover_color", "Button", Paper.INK)
+	t.set_color("font_hover_pressed_color", "Button", Paper.INK)
+	t.set_color("font_focus_color", "Button", Paper.INK)
+	var panel: StyleBoxFlat = Paper.box(Paper.PAPER, Color.TRANSPARENT, 0, 24)
+	panel.shadow_color = Color(0, 0, 0, 0.45)
+	panel.set_content_margin_all(20)
 	t.set_stylebox("panel", "PanelContainer", panel)
-	t.set_color("font_color", "Label", C_FG)
+	t.set_color("font_color", "Label", Paper.INK)
 	return t
 
 func _label(text: String, size := 16, col := C_FG, font: Font = null) -> Label:
@@ -383,37 +385,36 @@ func set_tile_on(b: Button, on: bool) -> void:
 	_tile_look(b, b.get_meta("look"), on)
 
 func _tile_look(b: Button, look: String, on: bool) -> void:
+	# roadbook: "go" is solid ink with an ice-blue block shadow, "card" a white index card
+	# outlined in ink, and a selected card is filled in ink like a ticked box
 	var go := look == "go"
+	var filled := go or on
 	for st in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
-		var sbx := StyleBoxFlat.new()
-		sbx.set_corner_radius_all(12)
-		sbx.shadow_color = Color(0, 0, 0, 0.25)
-		sbx.shadow_size = 5
-		sbx.shadow_offset = Vector2(0, 2)
 		var lit: bool = st.begins_with("hover") or st.contains("pressed")
-		if go:
-			sbx.bg_color = C_ACCENT.lightened(0.12) if lit else C_ACCENT
-			sbx.border_color = Color(1, 1, 1, 0.5)
-			sbx.border_width_top = 3
+		var down: bool = st.contains("pressed")
+		var sbx: StyleBoxFlat
+		if filled:
+			# pressed into the paper: the shadow closes up
+			sbx = Paper.go_box(lit, 1 if down else (4 if go else 3))
 		else:
-			sbx.bg_color = C_TILE.lightened(0.07) if lit else C_TILE
-			if on:
-				sbx.bg_color = Color(0.25, 0.2, 0.08, 0.9)
-			sbx.border_color = C_ACCENT if (on or st.contains("pressed")) else Color(C_FROST, 0.4)
-			sbx.set_border_width_all(3 if on else 2)
-			if not on:
-				sbx.border_width_top = 4   # a rim of frost along the top, like the menu cards
+			sbx = Paper.box(Paper.CARD.darkened(0.05) if lit else Paper.CARD, Paper.ACCENT_INK if down else Paper.INK, 3 if down else 2, 3)
 		if st == "disabled":
-			sbx.bg_color = Color(sbx.bg_color, 0.45)
+			sbx.bg_color = Color(Paper.PAPER_DARK, 0.7)
+			sbx.border_color = Paper.INK_FAINT
+			sbx.shadow_size = 0
+			sbx.shadow_offset = Vector2.ZERO
 		b.add_theme_stylebox_override(st, sbx)
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	var ink := C_INK if go else C_ACCENT
+	var ink := Paper.CARD if filled else Paper.INK
 	var ic: Art.Icon = b.get_meta("icon")
+	ic.ink = not filled   # on a filled (ink) button the icon keeps its night-time tones
 	ic.col = ink
-	ic.col2 = C_INK.lightened(0.2) if go else Art.C_ICE
+	ic.col2 = Paper.ACCENT if filled else Paper.ACCENT_INK
+	if b.disabled:
+		ic.col = Paper.INK_FAINT
 	if b.has_meta("label"):
 		var l: Label = b.get_meta("label")
-		l.add_theme_color_override("font_color", C_INK if go else (C_ACCENT if on else C_FG))
+		l.add_theme_color_override("font_color", ink if not b.disabled else Paper.INK_SOFT)
 
 func _build_results() -> void:
 	var r := _overlay()
@@ -422,7 +423,8 @@ func _build_results() -> void:
 	var vb: VBoxContainer = r[1]
 	results_panel = r[2]
 	results_panel.custom_minimum_size.x = 440
-	res_title = _label("Finish", 30, C_ACCENT, f_display)
+	vb.add_child(_label("TIME CARD  ·  ROADBOOK", 12, Paper.INK_SOFT, f_bold))
+	res_title = _label("Finish", 30, Paper.INK, f_display)
 	vb.add_child(res_title)
 	res_rewards = HFlowContainer.new()
 	res_rewards.add_theme_constant_override("h_separation", 8)
@@ -431,7 +433,7 @@ func _build_results() -> void:
 	res_table = _grid(3)
 	res_table.add_theme_constant_override("h_separation", 16)
 	vb.add_child(res_table)
-	res_note = _label("", 14, C_MUTED)
+	res_note = _label("", 14, Paper.INK_SOFT)
 	vb.add_child(res_note)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
@@ -482,7 +484,7 @@ func _build_pause() -> void:
 		row.add_child(b)
 	_pause_o = _make_options()
 	vb.add_child(_pause_o["box"])
-	vb.add_child(_label("Esc or the back button also resumes.", 12, C_MUTED))
+	vb.add_child(_label("Esc or the back button also resumes.", 12, Paper.INK_SOFT))
 	pause_ov.visible = false
 
 	pause_btn = Button.new()
@@ -517,21 +519,19 @@ func set_pause_opts(opts: Dictionary) -> void:
 # ---------------------------------------------------------------- shared option controls
 # the frosted night-blue panel used by the pause and settings screens
 func _frost_panel(panel: PanelContainer) -> void:
-	var ps := StyleBoxFlat.new()
-	ps.bg_color = Color(0.05, 0.11, 0.17, 0.94)
-	ps.set_corner_radius_all(14)
-	ps.border_color = Color(0.86, 0.93, 0.98, 0.45)
-	ps.set_border_width_all(2)
+	# a page torn out of the roadbook, with a double ink rule along the top
+	var ps := Paper.box(Paper.PAPER, Paper.INK, 0, 24)
 	ps.border_width_top = 5
+	ps.border_color = Paper.INK
 	ps.set_content_margin_all(20)
-	ps.shadow_color = Color(0, 0, 0, 0.5)
-	ps.shadow_size = 24
+	ps.shadow_color = Color(0, 0, 0, 0.45)
 	panel.add_theme_stylebox_override("panel", ps)
 
 # logo + big amber title + a small subtitle line (returned so it can be set later)
 func _panel_header(vb: VBoxContainer, title: String) -> Label:
 	var top := HBoxContainer.new()
 	var logo := Art.Logo.new()
+	logo.ink = true
 	logo.custom_minimum_size = Vector2(52, 52)
 	logo.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -541,10 +541,10 @@ func _panel_header(vb: VBoxContainer, title: String) -> Label:
 	tv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	tv.add_theme_constant_override("separation", -2)
-	var pt := _label(title, 30, C_ACCENT, f_display)
+	var pt := _label(title, 30, Paper.INK, f_display)
 	pt.autowrap_mode = TextServer.AUTOWRAP_OFF
 	tv.add_child(pt)
-	var sub := _label("", 13, Art.C_ICE_DIM, f_bold)
+	var sub := _label("", 13, Paper.INK_SOFT, f_bold)
 	tv.add_child(sub)
 	top.add_child(tv)
 	vb.add_child(top)
@@ -560,7 +560,7 @@ static func _knob_tex() -> Texture2D:
 			for x in n:
 				var d := Vector2(x - c, y - c).length()
 				var a := clampf(c - d + 0.5, 0.0, 1.0)
-				var col := Art.C_ICE if d < c - 3.0 else Art.C_ACCENT
+				var col := Paper.CARD if d < c - 3.0 else Paper.INK
 				img.set_pixel(x, y, Color(col, a))
 		_knob = ImageTexture.create_from_image(img)
 	return _knob
@@ -570,11 +570,12 @@ func _volume_row(key: String, title: String) -> Array:
 	row.add_theme_constant_override("separation", 10)
 	var ic := Art.Icon.new()
 	ic.kind = "music" if key == "music_vol" else "sound"
+	ic.col = Paper.INK
 	ic.custom_minimum_size = Vector2(28, 28)
 	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(ic)
-	var l := _label(title, 15, C_FG, f_bold)
+	var l := _label(title, 15, Paper.INK, f_bold)
 	l.custom_minimum_size.x = 54
 	l.autowrap_mode = TextServer.AUTOWRAP_OFF
 	row.add_child(l)
@@ -587,20 +588,20 @@ func _volume_row(key: String, title: String) -> Array:
 	sl.custom_minimum_size = Vector2(120, 36)
 	sl.focus_mode = Control.FOCUS_NONE
 	var track := StyleBoxFlat.new()
-	track.bg_color = Color(0.86, 0.93, 0.98, 0.16)
+	track.bg_color = Paper.INK_FAINT
 	track.set_corner_radius_all(4)
 	track.content_margin_top = 4; track.content_margin_bottom = 4
 	var fill := track.duplicate()
-	fill.bg_color = Art.C_ICE_DIM
+	fill.bg_color = Paper.INK
 	var fill_hi := track.duplicate()
-	fill_hi.bg_color = Art.C_ICE
+	fill_hi.bg_color = Paper.ACCENT_INK
 	sl.add_theme_stylebox_override("slider", track)
 	sl.add_theme_stylebox_override("grabber_area", fill)
 	sl.add_theme_stylebox_override("grabber_area_highlight", fill_hi)
 	sl.add_theme_icon_override("grabber", _knob_tex())
 	sl.add_theme_icon_override("grabber_highlight", _knob_tex())
 	row.add_child(sl)
-	var v := _label("", 14, Art.C_ICE_DIM, f_bold)
+	var v := _label("", 14, Paper.INK_SOFT, f_bold)
 	v.custom_minimum_size.x = 46
 	v.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	v.autowrap_mode = TextServer.AUTOWRAP_OFF
@@ -654,14 +655,14 @@ func _set_toggle(b: Button, on: bool) -> void:
 	l.text = "%s  %s" % [b.get_meta("name"), "ON" if on else "OFF"]
 	set_tile_on(b, on)
 	var ic: Art.Icon = b.get_meta("icon")
-	ic.col = C_ACCENT if on else Color(C_MUTED, 0.6)
+	ic.col = Paper.CARD if on else Paper.INK_FAINT
 
 func _set_quality_btn(b: Button, v: int) -> void:
 	b.set_meta("q", v)
 	var l: Label = b.get_meta("label")
 	l.text = "GRAPHICS  %s" % Settings.QUALITY_NAMES[v]
 	var ic: Art.Icon = b.get_meta("icon")
-	ic.col = C_ACCENT if v > 0 else Color(C_MUTED, 0.8)
+	ic.col = Paper.ACCENT_INK if v > 0 else Paper.INK_FAINT
 
 func set_options(o: Dictionary, opts: Dictionary) -> void:
 	_set_quality_btn(o["quality"], int(opts.get("quality", 1)))
@@ -740,7 +741,7 @@ func _reset_arm(on: bool) -> void:
 	_reset_armed_ms = Time.get_ticks_msec() if on else -1
 	var l: Label = _reset_btn.get_meta("label")
 	l.text = "TAP AGAIN TO ERASE ALL PROGRESS" if on else "RESET PROGRESS"
-	l.add_theme_color_override("font_color", Color("#ff6a5c") if on else C_FG)
+	l.add_theme_color_override("font_color", Paper.RED_INK if on else Paper.INK)
 
 func hide_pause() -> void:
 	pause_ov.visible = false
@@ -1088,11 +1089,11 @@ func _build_coach() -> void:
 	vb.add_theme_constant_override("separation", 4)
 	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	coach.add_child(vb)
-	_coach_title = _label("", 20, C_ACCENT, f_display)
+	_coach_title = _label("", 20, Paper.INK, f_display)
 	vb.add_child(_coach_title)
-	_coach_body = _label("", 15, C_FG, f_med)
+	_coach_body = _label("", 15, Paper.INK, f_med)
 	vb.add_child(_coach_body)
-	_coach_foot = _label("", 14, Art.C_ICE, f_bold)
+	_coach_foot = _label("", 14, Paper.ACCENT_INK, f_bold)
 	_coach_foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	vb.add_child(_coach_foot)
 	coach.visible = false
@@ -1167,13 +1168,13 @@ func show_results(title: String, rows: Array, note: String, has_next := false, c
 		var hl: bool = row.get("hl", false)
 		var cells: Array = row["cells"]
 		for k in cells.size():
-			var l := _label(str(cells[k]), 16, C_ACCENT if hl else C_FG, f_bold if hl else f_med)
+			var l := _label(str(cells[k]), 16, Paper.ACCENT_INK if hl else Paper.INK, f_bold if hl else f_med)
 			l.autowrap_mode = TextServer.AUTOWRAP_OFF
 			if k == cells.size() - 1:
 				l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 				l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			if row.has("color") and k == 1:
-				l.add_theme_color_override("font_color", row["color"])
+				l.add_theme_color_override("font_color", Paper.ink_of(row["color"]))
 			res_table.add_child(l)
 	res_note.text = note
 	results.visible = true
@@ -1214,10 +1215,12 @@ func _show_rewards(rewards: Array) -> void:
 func _reward_badge(text: String, col: Color) -> PanelContainer:
 	var p := PanelContainer.new()
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(col.darkened(0.75), 0.9)
-	sb.border_color = col
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(18)
+	# a rubber stamp on the time card: the reward colour, inked dark enough to read on paper
+	var inkc := Paper.ink_of(col)
+	sb.bg_color = Color(col, 0.14)
+	sb.border_color = inkc
+	sb.set_border_width_all(3)
+	sb.set_corner_radius_all(4)
 	sb.content_margin_left = 10; sb.content_margin_right = 14
 	sb.content_margin_top = 4; sb.content_margin_bottom = 4
 	p.add_theme_stylebox_override("panel", sb)
@@ -1232,7 +1235,7 @@ func _reward_badge(text: String, col: Color) -> PanelContainer:
 		disc.draw_circle(c, 6.0, col.lightened(0.45))
 		disc.draw_circle(c + Vector2(-2.5, -2.5), 2.0, Color(1, 1, 1, 0.8)))
 	hb.add_child(disc)
-	var l := _label(text, 17, col.lightened(0.25), f_display)
+	var l := _label(text, 17, inkc, f_display)
 	l.autowrap_mode = TextServer.AUTOWRAP_OFF
 	hb.add_child(l)
 	p.add_child(hb)
