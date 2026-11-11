@@ -2842,23 +2842,24 @@ func update_camera(race: Race, phase: String, dt: float, snap := false) -> void:
 # the results backdrop, and the tutorial's cards and frozen bends. While the player races,
 # the camera stays the fairly top-down gameplay view above. main.gd picks the shot each
 # frame with cine(); the camera eases between the two, so a shot can start or end anytime.
-#   intro   countdown: from low in front of the car, swing round behind it and rise into the
-#           gameplay view right on GO (timed on the 3.2 s countdown)
-#   finish  slow low swing in front of the car (a finish, and the results backdrop)
-#   win     lower, closer and a touch quicker (a race won, a new record, the tutorial done)
+#   intro   countdown: low behind the car, a slow drift, then a rise into the gameplay view
+#           right on GO (timed on the 3.2 s countdown)
+#   finish  low chase cam close behind the car, which drives on by itself (a finish, and the
+#           results backdrop)
+#   win     lower and closer (a race won, a new record, the tutorial done)
 #   card    tutorial card waiting for a tap: a showroom orbit round the car
 #   freeze  tutorial bend frozen for HOLD / LET GO: low over the car's shoulder at the tower
 const CINE_SHOTS := {
 	# pitch (deg) from..to, distance (m) from..to, yaw (deg, 0 = in front of the nose,
 	# 180 = behind) at the start, yaw speed (deg/s), ease in / out (s), look height (m)
-	"intro":  { "pitch": [9.0, 32.0], "dist": [2.5, 4.4], "yaw": 35.0, "spin": 42.0, "in": 0.01, "out": 0.6, "lift": 0.18 },
-	"finish": { "pitch": [16.0, 16.0], "dist": [3.4, 3.4], "yaw": 25.0, "spin": 9.0, "sweep": 45.0, "in": 1.3, "out": 0.6, "lift": 0.2 },
-	"win":    { "pitch": [11.0, 11.0], "dist": [2.5, 2.5], "yaw": 25.0, "spin": 14.0, "sweep": 50.0, "in": 1.1, "out": 0.6, "lift": 0.18 },
+	"intro":  { "pitch": [22.0, 34.0], "dist": [3.4, 4.4], "yaw": 155.0, "spin": 5.0, "in": 0.01, "out": 0.6, "lift": 0.18 },
+	"finish": { "pitch": [15.0, 15.0], "dist": [2.6, 2.6], "yaw": 180.0, "spin": 0.0, "chase": 18.0, "in": 1.0, "out": 0.6, "lift": 0.2 },
+	"win":    { "pitch": [11.0, 11.0], "dist": [2.2, 2.2], "yaw": 180.0, "spin": 0.0, "chase": 24.0, "in": 0.9, "out": 0.6, "lift": 0.18 },
 	"card":   { "pitch": [13.0, 13.0], "dist": [2.6, 2.6], "yaw": 50.0, "spin": 10.0, "in": 1.0, "out": 0.7, "lift": 0.18 },
 	"freeze": { "pitch": [20.0, 20.0], "dist": [4.2, 4.2], "yaw": 160.0, "spin": 0.0, "in": 0.55, "out": 0.45, "lift": 0.0 },
 }
-const INTRO_HOLD := 1.4   # s the intro stays fully low before rising
-const INTRO_RISE := 1.4   # s to blend into the gameplay view (GO comes 3.0 s in)
+const INTRO_HOLD := 1.0   # s the intro stays fully low before rising
+const INTRO_RISE := 1.8   # s to blend into the gameplay view (GO comes 3.0 s in)
 
 var cine_shot := ""        # current shot ("" = gameplay)
 var cine_t := 0.0          # s since the shot began (real time: runs while the tutorial is frozen)
@@ -2868,6 +2869,7 @@ var cine_aim = null        # freeze: the tower (prototype space) to keep in fram
 var cine_side := Vector2.ZERO  # where the car sits on screen (-1..1 of the half width / height)
 var _cine_last := ""       # shot being blended out
 var _cine_yaw := 0.0       # world yaw the orbit started from
+var _chase_h := 0.0        # chase cam: smoothed heading it trails
 var _cine_lift := 0.0      # m the eye is raised to see over the land / a tower (smoothed)
 
 # Picks the shot; call every frame. car = the Race car to frame, aim = a point to look past.
@@ -2881,6 +2883,7 @@ func cine(shot: String, car = null, aim = null) -> void:
 		_cine_last = shot
 		cine_t = 0.0
 		_cine_yaw = car.h if car else 0.0
+		_chase_h = car.vel.angle() if car and car.vel.length() > 50.0 else _cine_yaw
 		# a shot that follows another one picks up from where the camera already is
 		if cine_shot != "" and car and shot != "intro":
 			_cine_yaw = _cine_cur_yaw() - deg_to_rad(CINE_SHOTS[shot]["yaw"])
@@ -2935,8 +2938,17 @@ func _cine_pose(dt := -1.0) -> Array:
 	# portrait: the width is all you get, so step back to keep the car whole
 	var vps := get_viewport().get_visible_rect().size
 	d *= pow(maxf(1.0, vps.y / maxf(1.0, vps.x)), 0.75)
-	d *= 1.0 + cine_side.length() * 1.1   # beside the results panel: a wider shot
+	d *= 1.0 + cine_side.length() * 0.7   # beside the results panel: a wider shot
 	var turn := float(sh["spin"]) * cine_t
+	if sh.has("chase"):
+		# follow the car: behind it along where it is heading (smoothed on screen), a little
+		# off to one side for a three-quarter view
+		var head: float = c.vel.angle() if c.vel.length() > 50.0 else c.h
+		if dt >= 0.0:
+			_chase_h = lerp_angle(_chase_h, head, 1.0 - exp(-2.5 * dt))
+			head = _chase_h
+		_cine_yaw = head
+		turn = float(sh["chase"])
 	if sh.has("sweep"):
 		# swing to and fro in front of the car instead of circling it: the hero side, and
 		# the start gantry the car just passed stays behind it
@@ -2946,6 +2958,8 @@ func _cine_pose(dt := -1.0) -> Array:
 	var y: float = (track.height_at(c.last_s) + ROAD_Y + c.air) * U
 	var car3 := Vector3(c.pos.x * U, y, c.pos.y * U)
 	var look := car3 + Vector3(0, float(sh["lift"]), 0)
+	if sh.has("chase"):
+		look += Vector3(cos(_cine_yaw), 0, sin(_cine_yaw)) * 0.5   # a little room ahead of the car
 	if key == "freeze" and cine_aim != null:
 		# over the car's outside shoulder, the tower beyond it: look between the two
 		var a: Vector2 = cine_aim
@@ -2982,10 +2996,19 @@ func _cine_pose(dt := -1.0) -> Array:
 # Highest solid thing under a point (prototype space -> world metres): ground or road + rails.
 func _cine_floor(p: Vector2) -> float:
 	var h := ground_h(p)
-	var nr := track.nearest_raw(p)
-	if not nr.is_empty() and nr["d"] < TrackData.HW + BANK_OUT:
-		var sv: float = track.seg_s0[nr["i"]] + nr["t"] * track.seg_len[nr["i"]]
-		h = maxf(h, track.height_at(sv) + ROAD_Y + (RAIL_H if nr["d"] > TrackData.HW - 10.0 else 0.0))
+	# every road nearby, not just the nearest: a bridge deck above the car's road counts too
+	var cx := floori(p.x / TrackData.CELL)
+	var cy := floori(p.y / TrackData.CELL)
+	for gx in range(cx - 1, cx + 2):
+		for gy in range(cy - 1, cy + 2):
+			var key := Vector2i(gx, gy)
+			if not track._grid.has(key):
+				continue
+			for i in track._grid[key]:
+				var nr: Dictionary = track.seg_near(i, p, {})
+				if nr["d"] < TrackData.HW + BANK_OUT:
+					var sv: float = track.seg_s0[i] + nr["t"] * track.seg_len[i]
+					h = maxf(h, track.height_at(sv) + ROAD_Y + (RAIL_H if nr["d"] > TrackData.HW - 10.0 else 0.0))
 	# start gantry posts (the car often stops just past the line)
 	var sq := track.point_at(track.start_s)
 	var sd: Vector2 = sq["dir"]
