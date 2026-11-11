@@ -39,6 +39,7 @@ godot --headless --path . --script tests/economy_test.gd    # coins, Track of th
 godot --headless --path . --script tests/award_anim_test.gd # every award has a medallion scene that draws
 godot --headless --path . --script tests/rivals_test.gd    # rival tiers get harder, stay beatable (~4 min)
 godot --headless --path . --script tests/obstacles_test.gd # the AI's line never touches an Obstacles post
+godot --headless --path . --script tests/camera_test.gd    # low camera shots: off while racing, never inside the land
 ```
 
 After changing a track layout, rerun `tools/gen_obstacles.gd` (posts placed off the AI's racing line,
@@ -47,7 +48,17 @@ Also bump `LAYOUT_VERSION` in `scripts/records.gd`, so players' best times and g
 road are dropped (medals and campaign progress stay). `tools/tighten_layout.gd` searches for a
 layout with short links (about one lane between bends) that still passes the layout check.
 
+Writing a `SceneTree` test: a node added to `root` only gets `_ready()` after `await process_frame`
+(see `tests/camera_test.gd`), and a runtime error stops the test function before `quit()`, so the run
+hangs instead of failing. Wrap local runs in `timeout`.
+
+Screenshots without a GPU: `xvfb-run -a godot --rendering-driver opengl3 --path . --resolution 1280x720 -- <demo flag>`
+with `SHOT_DIR=<dir>`. Demo flags in `scripts/main.gd`: `--demo=`, `--tutorial-demo`, `--cine-demo=` (camera shots).
+
 ## Design rules
 
 - Original game: track layouts and art must be original, never copied from another game.
 - Targets Android and iOS (web build via WASM).
+- The race camera stays fairly top-down (68°) while the player steers, so lines through bends stay
+  readable. Low cinematic shots (`WorldView.CINE_SHOTS`, picked in `main.gd` `_pick_shot`) are only
+  for moments nobody steers: countdown, finish/results, the tutorial's cards and frozen bends.

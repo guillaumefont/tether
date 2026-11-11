@@ -2823,6 +2823,191 @@ func update_camera(race: Race, phase: String, dt: float, snap := false) -> void:
 		snowfall.visible = snowfall.emitting
 		snowfall.position = focus + Vector3(0, 5.0 if th["weather"] in ["snow", "leaves"] else 1.2, 0)
 		snowfall.emission_box_extents = Vector3(cam_vis * U * 1.1, 0.2, cam_vis * U * 0.7)
-	camera.position = focus + off + jitter
-	camera.look_at(focus + jitter, Vector3.UP)
+	var eye := focus + off + jitter
+	var look := focus + jitter
+	# a cinematic shot takes over, blended in and out of the gameplay view
+	var w := _cine_step(dt, snap)
+	if w > 0.0:
+		var pose := _cine_pose(dt)
+		eye = eye.lerp(pose[0], w)
+		look = look.lerp(pose[1], w)
+		dist = lerpf(dist, eye.distance_to(look), w)
+	_cine_fog(w)
+	camera.position = eye
+	camera.look_at(look, Vector3.UP)
 	light.directional_shadow_max_distance = clampf(dist * 2.2, 30.0, 200.0)
+
+# ---------------------------------------------------------------- cinematic shots
+# Low-angle camera moves for the moments nobody is steering: the countdown, the finish and
+# the results backdrop, and the tutorial's cards and frozen bends. While the player races,
+# the camera stays the fairly top-down gameplay view above. main.gd picks the shot each
+# frame with cine(); the camera eases between the two, so a shot can start or end anytime.
+#   intro   countdown: from low in front of the car, swing round behind it and rise into the
+#           gameplay view right on GO (timed on the 3.2 s countdown)
+#   finish  slow low swing in front of the car (a finish, and the results backdrop)
+#   win     lower, closer and a touch quicker (a race won, a new record, the tutorial done)
+#   card    tutorial card waiting for a tap: a showroom orbit round the car
+#   freeze  tutorial bend frozen for HOLD / LET GO: low over the car's shoulder at the tower
+const CINE_SHOTS := {
+	# pitch (deg) from..to, distance (m) from..to, yaw (deg, 0 = in front of the nose,
+	# 180 = behind) at the start, yaw speed (deg/s), ease in / out (s), look height (m)
+	"intro":  { "pitch": [9.0, 32.0], "dist": [2.5, 4.4], "yaw": 35.0, "spin": 42.0, "in": 0.01, "out": 0.6, "lift": 0.18 },
+	"finish": { "pitch": [16.0, 16.0], "dist": [3.4, 3.4], "yaw": 25.0, "spin": 9.0, "sweep": 45.0, "in": 1.3, "out": 0.6, "lift": 0.2 },
+	"win":    { "pitch": [11.0, 11.0], "dist": [2.5, 2.5], "yaw": 25.0, "spin": 14.0, "sweep": 50.0, "in": 1.1, "out": 0.6, "lift": 0.18 },
+	"card":   { "pitch": [13.0, 13.0], "dist": [2.6, 2.6], "yaw": 50.0, "spin": 10.0, "in": 1.0, "out": 0.7, "lift": 0.18 },
+	"freeze": { "pitch": [20.0, 20.0], "dist": [4.2, 4.2], "yaw": 160.0, "spin": 0.0, "in": 0.55, "out": 0.45, "lift": 0.0 },
+}
+const INTRO_HOLD := 1.4   # s the intro stays fully low before rising
+const INTRO_RISE := 1.4   # s to blend into the gameplay view (GO comes 3.0 s in)
+
+var cine_shot := ""        # current shot ("" = gameplay)
+var cine_t := 0.0          # s since the shot began (real time: runs while the tutorial is frozen)
+var cine_k := 0.0          # 0 = gameplay view .. 1 = the shot (eased when used)
+var cine_car = null        # the Race car the shot frames
+var cine_aim = null        # freeze: the tower (prototype space) to keep in frame
+var cine_side := Vector2.ZERO  # where the car sits on screen (-1..1 of the half width / height)
+var _cine_last := ""       # shot being blended out
+var _cine_yaw := 0.0       # world yaw the orbit started from
+var _cine_lift := 0.0      # m the eye is raised to see over the land / a tower (smoothed)
+
+# Picks the shot; call every frame. car = the Race car to frame, aim = a point to look past.
+func cine(shot: String, car = null, aim = null) -> void:
+	if shot != "":
+		cine_car = car
+		cine_aim = aim
+	if shot == cine_shot:
+		return
+	if shot != "":
+		_cine_last = shot
+		cine_t = 0.0
+		_cine_yaw = car.h if car else 0.0
+		# a shot that follows another one picks up from where the camera already is
+		if cine_shot != "" and car and shot != "intro":
+			_cine_yaw = _cine_cur_yaw() - deg_to_rad(CINE_SHOTS[shot]["yaw"])
+	cine_shot = shot
+
+# straight back to the gameplay view (menus, a new track)
+func cine_reset() -> void:
+	cine_shot = ""
+	_cine_last = ""
+	cine_car = null
+	cine_k = 0.0
+	_cine_lift = 0.0
+	cine_side = Vector2.ZERO
+	if env:
+		env.fog_enabled = false
+
+func cine_active() -> bool:
+	return cine_k > 0.001
+
+func _cine_cur_yaw() -> float:
+	var flat := Vector2(camera.position.x, camera.position.z) - Vector2(cine_car.pos.x, cine_car.pos.y) * U
+	return flat.angle()
+
+func _cine_step(dt: float, snap: bool) -> float:
+	if cine_car == null or not is_instance_valid(camera):
+		cine_k = 0.0
+		return 0.0
+	cine_t += dt
+	var key := cine_shot if cine_shot != "" else _cine_last
+	if key == "":
+		cine_k = 0.0
+		return 0.0
+	var sh: Dictionary = CINE_SHOTS[key]
+	if cine_shot == "intro":
+		# scripted on the countdown clock rather than eased
+		cine_k = 1.0 - clampf((cine_t - INTRO_HOLD) / INTRO_RISE, 0.0, 1.0)
+	elif cine_shot != "":
+		cine_k = 1.0 if snap else minf(1.0, cine_k + dt / float(sh["in"]))
+	else:
+		cine_k = 0.0 if snap else maxf(0.0, cine_k - dt / float(sh["out"]))
+	return smoothstep(0.0, 1.0, cine_k)
+
+# dt >= 0: a frame on screen (the lift over obstacles is smoothed); < 0: the raw pose (tests)
+func _cine_pose(dt := -1.0) -> Array:
+	var key := cine_shot if cine_shot != "" else _cine_last
+	var sh: Dictionary = CINE_SHOTS[key]
+	var c = cine_car
+	var u := clampf(cine_t / (INTRO_HOLD + INTRO_RISE), 0.0, 1.0) if key == "intro" else 0.0
+	u = smoothstep(0.0, 1.0, u)
+	var pitch := deg_to_rad(lerpf(sh["pitch"][0], sh["pitch"][1], u))
+	var d: float = lerpf(sh["dist"][0], sh["dist"][1], u)
+	# portrait: the width is all you get, so step back to keep the car whole
+	var vps := get_viewport().get_visible_rect().size
+	d *= pow(maxf(1.0, vps.y / maxf(1.0, vps.x)), 0.75)
+	d *= 1.0 + cine_side.length() * 1.1   # beside the results panel: a wider shot
+	var turn := float(sh["spin"]) * cine_t
+	if sh.has("sweep"):
+		# swing to and fro in front of the car instead of circling it: the hero side, and
+		# the start gantry the car just passed stays behind it
+		var amp: float = sh["sweep"]
+		turn = amp * sin(turn / amp)
+	var yaw := _cine_yaw + deg_to_rad(float(sh["yaw"]) + turn)
+	var y: float = (track.height_at(c.last_s) + ROAD_Y + c.air) * U
+	var car3 := Vector3(c.pos.x * U, y, c.pos.y * U)
+	var look := car3 + Vector3(0, float(sh["lift"]), 0)
+	if key == "freeze" and cine_aim != null:
+		# over the car's outside shoulder, the tower beyond it: look between the two
+		var a: Vector2 = cine_aim
+		var to_a: Vector2 = a - c.pos
+		look = car3.lerp(Vector3(a.x * U, y, a.y * U), 0.35)
+		yaw = to_a.angle() + PI + deg_to_rad(28.0) * (1.0 if to_a.cross(Vector2.from_angle(c.h)) > 0.0 else -1.0)
+		d = maxf(d, to_a.length() * U * 1.3)
+	var eye := look + Vector3(cos(yaw) * cos(pitch), sin(pitch), sin(yaw) * cos(pitch)) * d
+	# keep the land (hills, road banks, bridges) out of the lens: lift the eye until the
+	# sight line clears it
+	var lift := 0.0
+	for f in [1.0, 0.8, 0.6, 0.45, 0.3]:
+		var q := car3.lerp(eye, f)
+		var need := _cine_floor(Vector2(q.x, q.z) / U) + 0.3 - q.y
+		lift = maxf(lift, need / f)
+	if dt >= 0.0:
+		# on screen: rise quickly, settle back slowly, so passing a tower is a crane move, not a cut
+		_cine_lift = lerpf(_cine_lift, lift, 1.0 - exp(-(7.0 if lift > _cine_lift else 1.2) * dt))
+		lift = _cine_lift
+	eye.y += lift
+	# results backdrop: slide the car out from behind the panel (left in landscape, up in portrait)
+	if cine_side != Vector2.ZERO:
+		var fwd := (look - eye).normalized()
+		var right := fwd.cross(Vector3.UP).normalized()
+		var up := right.cross(fwd)
+		var half := tan(deg_to_rad(camera.fov) * 0.5) * eye.distance_to(look)
+		var vp := get_viewport().get_visible_rect().size
+		var asp := vp.x / maxf(1.0, vp.y)
+		var shift := -right * cine_side.x * half * asp - up * cine_side.y * half
+		eye += shift
+		look += shift
+	return [eye, look]
+
+# Highest solid thing under a point (prototype space -> world metres): ground or road + rails.
+func _cine_floor(p: Vector2) -> float:
+	var h := ground_h(p)
+	var nr := track.nearest_raw(p)
+	if not nr.is_empty() and nr["d"] < TrackData.HW + BANK_OUT:
+		var sv: float = track.seg_s0[nr["i"]] + nr["t"] * track.seg_len[nr["i"]]
+		h = maxf(h, track.height_at(sv) + ROAD_Y + (RAIL_H if nr["d"] > TrackData.HW - 10.0 else 0.0))
+	# start gantry posts (the car often stops just past the line)
+	var sq := track.point_at(track.start_s)
+	var sd: Vector2 = sq["dir"]
+	var span := HW + KERB_W + RAIL_W + 14.0
+	for side in [1.0, -1.0]:
+		if p.distance_squared_to(sq["pos"] + Vector2(-sd.y, sd.x) * span * side) < 45.0 * 45.0:
+			h = maxf(h, track.height_at(track.start_s) + 230.0)
+	# towers: see over the top rather than film the column
+	for k in track.anchors.size():
+		var a: TrackData.Anchor = track.anchors[k]
+		if p.distance_squared_to(a.pos) < 80.0 * 80.0:
+			var top: float = rotor_h[k] if rotor_h.size() == track.anchors.size() and rotor_h[k] > 0.0 \
+				else track.arc_level[k] * TrackData.LEVEL_H + TOWER_H
+			h = maxf(h, top + 30.0)
+	return h * U
+
+# Low shots see the edge of the world: fade the distance into the sky colour.
+func _cine_fog(w: float) -> void:
+	env.fog_enabled = w > 0.01
+	if env.fog_enabled:
+		env.fog_light_color = env.background_color
+		env.fog_light_energy = 1.0
+		env.fog_sun_scatter = 0.0
+		env.fog_density = 0.03 * w
+		env.fog_sky_affect = 0.0
