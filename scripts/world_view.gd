@@ -1706,72 +1706,6 @@ static func pcyl(r: float, h: float, m: Material, pos: Vector3, axis := "z", seg
 		mi.rotation.z = PI / 2
 	return mi
 
-# The artwork car (detail 2): the game car's exact silhouette (one shell with the sloped
-# bonnet, one tinted glasshouse, roof, spoiler) as rounded smooth panels, with panel
-# lines, door handles, mirrors, a grille, lamp lenses, exhausts and seats seen through
-# the glass.
-func _car_body_hd(parts_list: Array, col: Color, top: Material, low: Material) -> void:
-	var dark := paint(Color("#15191f"), 0.5)
-	var chrome := paint(Color("#c9ced4"), 0.18)
-	chrome.metallic = 0.85
-	parts_list.append(soft_prism(rounded(PackedVector2Array([Vector2(-58, 12), Vector2(46, 12),
-			Vector2(46, 22), Vector2(-58, 22)]), 4.0), 54.0, 4.0, low))   # belly
-	parts_list.append(soft_prism(rounded(PackedVector2Array([Vector2(-58, 21), Vector2(67, 21),
-			Vector2(67, 28), Vector2(30, 36), Vector2(-58, 36)]), 3.0), 60.0, 5.0, top))   # shell, bonnet flush
-	var glass := paint(Color(0.07, 0.10, 0.14, 0.88), 0.2)
-	glass.metallic = 0.0
-	glass.metallic_specular = 0.35
-	glass.rim_enabled = false
-	glass.clearcoat_enabled = false
-	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	parts_list.append(soft_prism(rounded(PackedVector2Array([Vector2(-32, 35), Vector2(30, 35),
-			Vector2(12, 51), Vector2(-26, 51)]), 2.5), 50.0, 4.0, glass))   # glasshouse
-	parts_list.append(soft_prism(rounded(PackedVector2Array([Vector2(-27, 50.5), Vector2(11, 50.5),
-			Vector2(11, 53.5), Vector2(-27, 53.5)]), 1.2), 52.0, 1.5, top))   # roof
-	# inside: two seats, dashboard, steering wheel
-	var seat := paint(Color("#2b3038"), 0.8)
-	for sz in [-11.0, 11.0]:
-		parts_list.append(pbox(Vector3(5, 13, 15), seat, Vector3(-16, 43, sz)))
-		parts_list.append(pbox(Vector3(14, 4, 15), seat, Vector3(-9, 37.5, sz)))
-	parts_list.append(pbox(Vector3(8, 4, 44), dark, Vector3(19, 38, 0)))
-	var sw := MeshInstance3D.new()
-	var tm := TorusMesh.new()
-	tm.inner_radius = 3.6 * U; tm.outer_radius = 5.0 * U; tm.rings = 24; tm.ring_segments = 8
-	tm.material = dark
-	sw.mesh = tm
-	sw.position = Vector3(13, 42, 11) * U
-	sw.rotation.z = PI / 2 - 0.5
-	parts_list.append(sw)
-	# panel lines, door handles, a lighter side stripe, mirrors
-	var seam := paint(col.darkened(0.55), 0.6)
-	var stripe := paint(col.lightened(0.45), 0.3)
-	for side: float in [1.0, -1.0]:
-		var zs := 30.15 * side
-		for sx in [-22.0, 24.0]:
-			parts_list.append(pbox(Vector3(0.8, 12, 0.6), seam, Vector3(sx, 28.5, zs)))
-		parts_list.append(pbox(Vector3(6, 1.4, 0.9), chrome, Vector3(-12, 33, zs)))
-		parts_list.append(pbox(Vector3(108, 2.2, 0.5), stripe, Vector3(4, 25.5, 30.05 * side)))
-		parts_list.append(pbox(Vector3(4, 3.5, 6), top, Vector3(25, 40, 27.5 * side)))
-		parts_list.append(pbox(Vector3(0.6, 2.6, 4.5), chrome, Vector3(22.8, 40, 27.5 * side)))
-	# rear wing on two struts
-	parts_list.append(soft_prism(PackedVector2Array([Vector2(-63, 40), Vector2(-49, 40.5),
-			Vector2(-49, 43), Vector2(-63, 45)]), 66.0, 1.2, low))
-	for sz in [-22.0, 22.0]:
-		parts_list.append(pbox(Vector3(5, 6, 4), low, Vector3(-56, 37, sz)))
-	# front: grille, lamp lenses in chrome bezels; back: tail lamps and exhausts
-	parts_list.append(pbox(Vector3(1.6, 5.5, 20), dark, Vector3(67.2, 24.5, 0)))
-	for gy in [23.0, 25.0, 27.0]:
-		parts_list.append(pbox(Vector3(0.6, 0.6, 18), chrome, Vector3(68.0, gy, 0)))
-	var lamp := mat(Color("#fff4c8"), true)
-	for lz in [-18.0, 18.0]:
-		parts_list.append(pcyl(4.6, 1.6, chrome, Vector3(67.0, 24.8, lz), "x"))
-		parts_list.append(pcyl(3.6, 1.8, lamp, Vector3(67.4, 24.8, lz), "x"))
-	var tail := mat(Color("#ff4a3a"), false, 1.2)
-	for lz in [-21.0, 21.0]:
-		parts_list.append(pbox(Vector3(1.6, 4.5, 13), tail, Vector3(-58.6, 29, lz)))
-	for lz in [-10.0, -5.0]:
-		parts_list.append(pcyl(2.0, 6.0, chrome, Vector3(-59, 16, lz), "x", 16))
-
 var _blob_tex: Texture2D
 
 func _blob_shadow() -> MeshInstance3D:
@@ -1919,35 +1853,12 @@ func _make_car(col: Color, ghost := false, look := {}) -> Node3D:
 			(low as StandardMaterial3D).roughness = 0.5
 		var glass := paint(Color("#1a2330"), 0.08)
 		glass.metallic = 0.4
-		# a low painted racer body with a bubble cab; the theme kit adds the rest
-		var dark := paint(Color("#1d2229"), 0.6)
-		if detail > 1:
-			_car_body_hd(parts_list, col, top, low)
-		else:
-			parts_list.append(pbox(Vector3(104, 10, 54), low, Vector3(-6, 17, 0)))     # belly
-			parts_list.append(pbox(Vector3(88, 14, 60), top, Vector3(-14, 29, 0)))     # body
-			# nose: the bonnet slopes down from the windscreen to the lamps
-			parts_list.append(pprism(PackedVector2Array([Vector2(30, 20), Vector2(67, 20),
-					Vector2(67, 28), Vector2(30, 36)]), 60.0, top))   # flush with the body
-			# one tinted glasshouse: the windscreen is its sloped front face
-			parts_list.append(pprism(PackedVector2Array([Vector2(-32, 35), Vector2(30, 35),
-					Vector2(12, 51), Vector2(-26, 51)]), 50.0, glass))   # rear window slopes too
-			parts_list.append(pbox(Vector3(36, 3, 50), top, Vector3(-8, 52, 0)))      # roof
-			parts_list.append(pbox(Vector3(14, 5, 66), low, Vector3(-56, 41, 0)))     # rear spoiler
-			parts_list.append(pbox(Vector3(5, 6, 5), low, Vector3(-56, 36, 22)))
-			parts_list.append(pbox(Vector3(5, 6, 5), low, Vector3(-56, 36, -22)))
-			var lamp := mat(Color("#fff4c8"), true)
-			for lz in [-17.0, 17.0]:
-				parts_list.append(pbox(Vector3(3, 5, 12), lamp, Vector3(67.5, 25, lz)))
-			var tail := mat(Color("#ff4a3a"), false, 1.2)
-			parts_list.append(pbox(Vector3(3, 5, 12), tail, Vector3(-59, 28, 22)))
-			parts_list.append(pbox(Vector3(3, 5, 12), tail, Vector3(-59, 28, -22)))
-		match String(th["kit"]):
-			"forest": _car_kit_forest(chassis, parts_list, top, dark)
-			"rock": _car_kit_rock(chassis, parts_list, top, dark)
-			"sand": _car_kit_sand(chassis, parts_list, top, dark)
-			"snow": _car_kit_snow(chassis, parts_list, top, dark)
-		_livery(parts_list, look, col)
+		var steel := paint(Color("#9aa3ad"), 0.3)
+		steel.metallic = 0.6
+		var k := { "top": top, "low": low, "glass": glass, "dark": paint(Color("#1d2229"), 0.6),
+			"steel": steel, "lamp": mat(Color("#fff4c8"), true), "tail": mat(Color("#ff4a3a"), false, 1.2) }
+		var lay := _vehicle(body_id(look, String(th["kit"])), chassis, parts_list, k)
+		_livery(parts_list, look, col, lay)
 	for p in parts_list:
 		if ghost:
 			p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -1956,13 +1867,139 @@ func _make_car(col: Color, ghost := false, look := {}) -> Node3D:
 	root.set_meta("chassis", chassis)
 	return root
 
-# Snow: a triangular crawler pod at each corner, where the other kits put their wheels:
-# flat along the snow, peaked up at the axle, between the road (y 0) and the belly.
-const POD_X := [-40.0, 42.0]
-const POD_Z := 36.0
-const POD_W := 14.0
+# ---------------------------------------------------------------- vehicles
+# Each world drives its own kind of vehicle, three to pick from in the Garage (Cosmetics
+# BODIES); the first of each world is its default and what the rivals drive. Units as the
+# rest of the car: about 128 long (x -60..68, nose +x), y up from the road, z across.
+# Each builder returns where a livery can go (see _livery):
+#   "side"  [x0, x1, y0, y1, z]   a flat panel on both flanks (at +z and -z)
+#   "tops"  [[x0, x1, y at x0, y at x1, width], ...]   flat or sloped upper faces
+#   "main"  the top that carries the number roundel, "front" the one the chequers cross
+#   "door"  [x, y, r] (optional) where the side roundel goes
+const BODIES := ["sled", "snowcat", "van", "pickup", "jeep", "hauler",
+	"buggy", "rally", "bug", "monster", "crawler", "expedition"]
+const BODY_DEFAULT := { "snow": "sled", "forest": "pickup", "sand": "buggy", "rock": "monster" }
 
-func _car_kit_snow(chassis: Node3D, parts_list: Array, top: Material, dark: Material) -> void:
+# the vehicle a look drives in a world: an explicit "body" (the Garage stage), else the
+# player's pick for that world ("bodies"), else the world's default
+static func body_id(look: Dictionary, kit: String) -> String:
+	var b := String(look.get("body", ""))
+	if b == "":
+		b = String(look.get("bodies", {}).get(kit, ""))
+	return b if b in BODIES else String(BODY_DEFAULT.get(kit, "sled"))
+
+func _vehicle(id: String, ch: Node3D, P: Array, k: Dictionary) -> Dictionary:
+	match id:
+		"snowcat": return _v_snowcat(ch, P, k)
+		"van": return _v_van(ch, P, k)
+		"pickup": return _v_pickup(ch, P, k)
+		"jeep": return _v_jeep(ch, P, k)
+		"hauler": return _v_hauler(ch, P, k)
+		"buggy": return _v_buggy(ch, P, k)
+		"rally": return _v_rally(ch, P, k)
+		"bug": return _v_bug(ch, P, k)
+		"monster": return _v_monster(ch, P, k)
+		"crawler": return _v_crawler(ch, P, k)
+		"expedition": return _v_expedition(ch, P, k)
+	return _v_sled(ch, P, k)
+
+func _lamps(P: Array, k: Dictionary, x: float, y: float, zs: Array, size := Vector3(3, 6, 10), rear := false) -> void:
+	for z: float in zs:
+		P.append(pbox(size, k["tail"] if rear else k["lamp"], Vector3(x, y, z)))
+
+func _four(ch: Node3D, xs: Array, z: float, r: float, w: float, tyre: Material, hub: Material) -> void:
+	for x: float in xs:
+		for s: float in [-1.0, 1.0]:
+			_wheel(ch, x, z * s, r, w, tyre, hub)
+
+# a log lying along the car, with its cut ends showing
+func _log(P: Array, len_: float, r: float, pos: Vector3) -> void:
+	var lg := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = r * U; cm.bottom_radius = r * U; cm.height = len_ * U
+	cm.radial_segments = 8 if detail == 1 else 24; cm.rings = 1
+	cm.material = paint(Color("#6b4a2e"), 0.85)
+	lg.mesh = cm
+	lg.position = pos * U
+	lg.rotation.z = PI / 2
+	P.append(lg)
+	for e: float in [-1.0, 1.0]:
+		P.append(pbox(Vector3(1, r * 1.6, r * 1.6), paint(Color("#d8b47a"), 0.7), pos + Vector3(e * len_ * 0.5, 0, 0)))
+
+# a square tube from a to b (roll cages, struts)
+static func _bar(P: Array, a: Vector3, b: Vector3, t: float, m: Material) -> void:
+	var mi := pbox(Vector3((b - a).length(), t, t), m, (a + b) * 0.5)
+	var d := b - a
+	mi.rotation = Vector3(0, -atan2(d.z, d.x), atan2(d.y, Vector2(d.x, d.z).length()))
+	P.append(mi)
+
+static func _ski(ch: Node3D, x: float, z: float, l: float, ski: Material) -> void:
+	ch.add_child(pbox(Vector3(l, 3, 12), ski, Vector3(x, 1.5, z)))
+	var tip := pbox(Vector3(12, 3, 12), ski, Vector3(x + l * 0.5 + 4, 5.0, z))
+	tip.rotation.z = 0.6
+	ch.add_child(tip)
+
+# --- Snowfield
+# snowmobile: two skis up front, one wide track behind, the rider's seat under a glass canopy
+func _v_sled(ch: Node3D, P: Array, k: Dictionary) -> Dictionary:
+	var ski := paint(Color("#e9eef2"), 0.4)
+	for s: float in [1.0, -1.0]:
+		_ski(ch, 44, 30.0 * s, 36, ski)
+		_bar(P, Vector3(44, 3, 30.0 * s), Vector3(36, 22, 14.0 * s), 3.0, k["dark"])
+	var prof := rounded(PackedVector2Array([Vector2(-60, 0), Vector2(-4, 0), Vector2(4, 14),
+			Vector2(-64, 14)]), 4.0, 8)
+	ch.add_child(pprism(prof, 40.0, paint(Color("#22262c"), 0.85)))
+	_pod_lugs(ch, prof, -30.0, paint(Color("#59636e"), 0.7), 0.0, 40.0, 8)
+	P.append(pprism(PackedVector2Array([Vector2(-62, 16), Vector2(20, 16), Vector2(66, 22),
+			Vector2(58, 34), Vector2(-62, 34)]), 46.0, k["top"]))   # hull
+	P.append(pbox(Vector3(84, 4, 48), k["low"], Vector3(-20, 18, 0)))   # running boards
+	P.append(soft_prism(rounded(PackedVector2Array([Vector2(-48, 32), Vector2(30, 34),
+			Vector2(10, 52), Vector2(-26, 54), Vector2(-46, 44)]), 5.0, 3), 36.0, 4.0, k["glass"], 2, false))
+	P.append(pbox(Vector3(28, 2, 2), k["top"], Vector3(-8, 53.5, 0)))   # spine over the canopy
+	P.append(pbox(Vector3(3, 5, 10), k["lamp"], Vector3(62, 28, 0)))
+	P.append(pbox(Vector3(3, 4, 14), k["tail"], Vector3(-62.5, 26, 0)))
+	return { "side": [-58, 40, 20, 33, 23], "tops": [[-62, -47, 34, 34, 44], [31, 57, 34, 34, 44]],
+		"main": 1, "front": 1 }
+
+# snowcat: a tall glass cabin on four crawler pods, beacon on the roof
+func _v_snowcat(ch: Node3D, P: Array, k: Dictionary) -> Dictionary:
+	_pods(ch, P, k)
+	P.append(pbox(Vector3(124, 8, 58), k["low"], Vector3(4, 18, 0)))
+	P.append(pbox(Vector3(124, 12, 62), k["top"], Vector3(4, 28, 0)))
+	P.append(pprism(PackedVector2Array([Vector2(-44, 34), Vector2(46, 34), Vector2(38, 62),
+			Vector2(-42, 62)]), 54.0, k["glass"]))
+	P.append(pbox(Vector3(86, 4, 60), k["top"], Vector3(-2, 64, 0)))
+	for px: float in [-42.0, 0.0, 41.0]:
+		for pz: float in [-27.5, 27.5]:
+			P.append(pbox(Vector3(4, 28, 3), k["top"], Vector3(px, 48, pz)))
+	P.append(pbox(Vector3(8, 6, 8), mat(Color("#ff9a2a"), true), Vector3(-36, 69, 0)))   # beacon
+	_lamps(P, k, 66.5, 28, [-20.0, 20.0])
+	_lamps(P, k, -58.5, 28, [-20.0, 20.0], Vector3(3, 6, 10), true)
+	return { "side": [-56, 64, 23, 33, 31],
+		"tops": [[-58, -44, 34, 34, 60], [46, 66, 34, 34, 60], [-45, 41, 66, 66, 58]], "main": 2, "front": 1 }
+
+# arctic van: a rounded box on crawler pods, skis on the roof rack
+func _v_van(ch: Node3D, P: Array, k: Dictionary) -> Dictionary:
+	_pods(ch, P, k)
+	P.append(pbox(Vector3(124, 8, 58), k["low"], Vector3(4, 18, 0)))
+	P.append(soft_prism(rounded(PackedVector2Array([Vector2(-60, 22), Vector2(66, 22),
+			Vector2(66, 36), Vector2(44, 62), Vector2(-60, 62)]), 6.0, 3), 62.0, 2.0, k["top"], 2, false))
+	P.append(pprism(PackedVector2Array([Vector2(48, 37), Vector2(64, 37), Vector2(46, 58),
+			Vector2(40, 58)]), 56.0, k["glass"]))   # windscreen
+	for wx: float in [-40.0, -14.0, 12.0]:
+		for wz: float in [-31.2, 31.2]:
+			P.append(pbox(Vector3(20, 12, 0.6), k["glass"], Vector3(wx, 48, wz)))
+	for rz: float in [-21.0, 21.0]:
+		P.append(pbox(Vector3(90, 3, 3), k["dark"], Vector3(-6, 64, rz)))
+	for kz: float in [-19.0, -14.0, 14.0, 19.0]:
+		P.append(pbox(Vector3(80, 2, 4), mat(Color("#e8503a")), Vector3(-6, 66.5, kz)))
+	_lamps(P, k, 66.5, 30, [-20.0, 20.0])
+	_lamps(P, k, -60.5, 40, [-20.0, 20.0], Vector3(3, 6, 8), true)
+	return { "side": [-54, 60, 25, 40, 31], "tops": [[-53, 38, 62, 62, 56]], "main": 0, "front": 0 }
+
+# triangular crawler pods at the four corners (snowcat, van), plus a dark lower front and a
+# small steel plough under the nose
+func _pods(ch: Node3D, P: Array, k: Dictionary) -> void:
 	var tread := paint(Color("#22262c"), 0.85)
 	var lug := paint(Color("#59636e"), 0.7)
 	for px: float in POD_X:
@@ -1975,19 +2012,238 @@ func _car_kit_snow(chassis: Node3D, parts_list: Array, top: Material, dark: Mate
 			else:
 				pod = pprism(prof, POD_W, tread)
 			pod.position.z = z * U
-			chassis.add_child(pod)
-			_pod_lugs(chassis, prof, px, lug, z)
-			chassis.add_child(pbox(Vector3(9, 9, 2), dark, Vector3(px, 13, z + (POD_W * 0.5 + 1.0) * side)))   # hub
-			chassis.add_child(pbox(Vector3(8, 10, 8), dark, Vector3(px, 19, z - 9.0 * side)))   # mount up to the body
-	# under the nose, between the front pods: a dark lower front and a small steel plough
-	var steel := paint(Color("#9aa3ad"), 0.3)
-	steel.metallic = 0.6
-	parts_list.append(pbox(Vector3(24, 10, 50), dark, Vector3(56, 15, 0)))
-	var blade := pbox(Vector3(3, 13, 56), steel, Vector3(71, 9, 0))
+			ch.add_child(pod)
+			_pod_lugs(ch, prof, px, lug, z)
+			ch.add_child(pbox(Vector3(9, 9, 2), k["dark"], Vector3(px, 13, z + (POD_W * 0.5 + 1.0) * side)))   # hub
+			ch.add_child(pbox(Vector3(8, 10, 8), k["dark"], Vector3(px, 19, z - 9.0 * side)))   # mount
+	P.append(pbox(Vector3(24, 10, 50), k["dark"], Vector3(56, 15, 0)))
+	var blade := pbox(Vector3(3, 13, 56), k["steel"], Vector3(71, 9, 0))
 	blade.rotation.z = 0.35   # leans back, scoop forward
-	parts_list.append(blade)
-	for bz in [-16.0, 16.0]:   # arms from the blade to the frame
-		parts_list.append(pbox(Vector3(8, 3, 3), dark, Vector3(66, 12, bz)))
+	P.append(blade)
+	for bz in [-16.0, 16.0]:
+		P.append(pbox(Vector3(8, 3, 3), k["dark"], Vector3(66, 12, bz)))
+
+const POD_X := [-40.0, 42.0]
+const POD_Z := 36.0
+const POD_W := 14.0
+
+# --- Pinewood
+# pickup truck: bonnet, cab, and logs in the open bed
+func _v_pickup(ch: Node3D, P: Array, k: Dictionary) -> Dictionary:
+	_four(ch, [-38.0, 40.0], 36.0, 18.0, 16.0, paint(Color("#1b1d1a"), 0.85), k["top"])
+	P.append(pbox(Vector3(128, 8, 58), k["low"], Vector3(2, 20, 0)))
+	P.append(pbox(Vector3(42, 12, 60), k["top"], Vector3(5, 30, 0)))   # cab sides
+	P.append(pprism(PackedVector2Array([Vector2(26, 24), Vector2(68, 24), Vector2(68, 32),
+			Vector2(26, 38)]), 60.0, k["top"]))   # bonnet
+	P.append(pprism(PackedVector2Array([Vector2(-16, 36), Vector2(28, 36), Vector2(16, 58),
+			Vector2(-14, 58)]), 54.0, k["glass"]))
+	P.append(pbox(Vector3(32, 3, 56), k["top"], Vector3(1, 59, 0)))   # cab roof
+	P.append(pbox(Vector3(46, 4, 60), k["top"], Vector3(-39, 26, 0)))   # bed floor, walls, tailgate
+	for wz: float in [-28.5, 28.5]:
+		P.append(pbox(Vector3(46, 14, 3), k["top"], Vector3(-39, 35, wz)))
+	P.append(pbox(Vector3(3, 14, 60), k["top"], Vector3(-60.5, 35, 0)))
+	for lz: float in [-15.0, 0.0, 15.0]:
+		_log(P, 50.0, 7.0, Vector3(-36, 35, lz))
+	_log(P, 46.0, 6.0, Vector3(-36, 46, -7.5))
+	_log(P, 46.0, 6.0, Vector3(-36, 46, 7.5))
+	P.append(pbox(Vector3(1.6, 6, 26), k["dark"], Vector3(68.2, 28, 0)))   # grille
+	_lamps(P, k, 68.5, 28, [-21.0, 21.0], Vector3(3, 6, 10))
+	_lamps(P, k, -62.5, 36, [-21.0, 21.0], Vector3(3, 6, 8), true)
+	return { "side": [-60, 66, 24.5, 31.5, 30], "tops": [[27, 67, 37.86, 32.14, 56], [-15, 17, 60.5, 60.5, 54]],
+		"main": 0, "front": 0, "door": [5, 30.5, 5.5] }
+
+# open-top 4x4: flat bonnet, upright screen, roll bar, spare wheel on the tail
+func _v_jeep(ch: Node3D, P: Array, k: Dictionary) -> Dictionary:
+	var tyre := paint(Color("#1b1d1a"), 0.85)
+	_four(ch, [-38.0, 40.0], 36.0, 18.0, 16.0, tyre, k["top"])
+	for gx: float in [40.0, -38.0]:   # flat mudguards over the wheels
+		for gz: float in [-30.0, 30.0]:
+			P.append(pbox(Vector3(40, 3, 14), k["top"], Vector3(gx, 38, gz)))
+	P.append(pbox(Vector3(124, 18, 48), k["top"], Vector3(4, 29, 0)))
+	P.append(pbox(Vector3(124, 6, 50), k["low"], Vector3(4, 18, 0)))
+	P.append(pbox(Vector3(4, 16, 46), k["glass"], Vector3(20, 46, 0)))   # upright screen
+	for sz: float in [-23.0, 23.0]:
+		P.append(pbox(Vector3(5, 18, 3), k["dark"], Vector3(20, 46, sz)))
+	for cz: float in [-21.0, 21.0]:
+		_bar(P, Vector3(-30, 38, cz), Vector3(-30, 62, cz), 3.0, k["dark"])
+	_bar(P, Vector3(-30, 62, -21), Vector3(-30, 62, 21), 3.0, k["dark"])
+	var seat := paint(Color("#2b3038"), 0.8)
+	for sz: float in [-11.0, 11.0]:
+		P.append(pbox(Vector3(5, 14, 14), seat, Vector3(-14, 44, sz)))
+	var spare := Node3D.new()   # upright on the tail, facing back
+	_wheel(spare, 0, 0, 14.0, 9.0, tyre, k["top"])
+	spare.rotation.y = PI / 2
+	spare.position = Vector3(-63, 20, 0) * U
+	P.append(spare)
+	P.append(pbox(Vector3(4, 10, 40), k["dark"], Vector3(66.5, 30, 0)))   # grille
+	_lamps(P, k, 67, 32, [-17.0, 17.0], Vector3(4, 7, 7))
+	_lamps(P, k, -58.5, 32, [-19.0, 19.0], Vector3(3, 5, 6), true)
+	return { "side": [-56, 64, 22, 35, 24], "tops": [[23, 65, 38, 38, 40], [-57, -33, 38, 38, 40]],
+		"main": 0, "front": 0 }
+
+# timber hauler: a cab-over front and a long bed of logs between stakes
+func _v_hauler(ch: Node3D, P: Array, k: Dictionary) -> Dictionary:
+	var tyre := paint(Color("#1b1d1a"), 0.85)
+	for wx: float in [-44.0, -24.0, 44.0]:
+		for wz: float in [-34.0, 34.0]:
+			_wheel(ch, wx, wz, 15.0, 14.0, tyre, k["top"])
+	P.append(pbox(Vector3(130, 6, 44), k["dark"], Vector3(0, 20, 0)))   # frame
+	P.append(pbox(Vector3(36, 40, 62), k["top"], Vector3(50, 42, 0)))   # cab
+	P.append(pbox(Vector3(36, 6, 58), k["low"], Vector3(50, 19, 0)))
+	P.append(pprism(PackedVector2Array([Vector2(56, 44), Vector2(68.5, 44), Vector2(68.5, 58),
+			Vector2(58, 58)]), 56.0, k["glass"]))
+	P.append(pbox(Vector3(10, 6, 50), k["dark"], Vector3(64, 26, 0)))   # bumper
+	P.append(pbox(Vector3(84, 4, 60), k["dark"], Vector3(-22, 26, 0)))   # bed
+	for sx: float in [-60.0, -36.0, -12.0, 12.0]:
+		for sz: float in [-28.0, 28.0]:
+			P.append(pbox(Vector3(3, 28, 3), k["dark"], Vector3(sx, 42, sz)))
+	for lz: float in [-17.0, 0.0, 17.0]:
+		_log(P, 84.0, 8.0, Vector3(-22, 36, lz))
+	for lz: float in [-8.5, 8.5]:
+		_log(P, 80.0, 8.0, Vector3(-22, 50, lz))
+	P.append(pbox(Vector3(3, 4, 30), mat(Color("#ff9a2a"), true), Vector3(34, 64, 0)))   # beacon bar
+	_lamps(P, k, 68.5, 34, [-22.0, 22.0])
+	_lamps(P, k, -64, 28, [-24.0, 24.0], Vector3(3, 5, 8), true)
+	return { "side": [33, 67, 26, 50, 31], "tops": [[33, 67, 62, 62, 60]], "main": 0, "front": 0 }
+
+# --- Dunes
+# open-top buggy: a narrow tub with two seats in a roll cage, engine out the back
+func _v_buggy(ch: Node3D, P: Array, k: Dictionary) -> Dictionary:
+	_four(ch, [-40.0, 42.0], 38.0, 18.0, 24.0, paint(Color("#2a2622"), 0.9), paint(Color("#e9e2d4"), 0.4))
+	P.append(pbox(Vector3(96, 8, 40), k["low"], Vector3(-2, 18, 0)))
+	P.append(pbox(Vector3(70, 12, 44), k["top"], Vector3(-12, 28, 0)))   # tub
+	P.append(pprism(PackedVector2Array([Vector2(23, 14), Vector2(66, 18), Vector2(66, 24),
+			Vector2(23, 34)]), 44.0, k["top"]))   # nose
+	var seat := paint(Color("#2b3038"), 0.8)
+	for sz: float in [-10.0, 10.0]:
+		P.append(pbox(Vector3(5, 16, 14), seat, Vector3(-14, 40, sz)))
+		P.append(pbox(Vector3(12, 3, 14), seat, Vector3(-9, 35.5, sz)))
+	for cz: float in [-19.0, 19.0]:   # roll cage: main hoop behind the seats, bars down to the dash
+		_bar(P, Vector3(-22, 34, cz), Vector3(-22, 62, cz), 3.0, k["dark"])
+		_bar(P, Vector3(-22, 62, cz), Vector3(14, 56, cz), 3.0, k["dark"])
+		_bar(P, Vector3(14, 56, cz), Vector3(22, 34, cz), 3.0, k["dark"])
+	_bar(P, Vector3(-22, 62, -19), Vector3(-22, 62, 19), 3.0, k["dark"])
+	_bar(P, Vector3(14, 56, -19), Vector3(14, 56, 19), 3.0, k["dark"])
+	P.append(pbox(Vector3(22, 12, 30), k["dark"], Vector3(-38, 39, 0)))   # engine
+	for ez: float in [-8.0, 8.0]:
+		_bar(P, Vector3(-46, 42, ez), Vector3(-56, 50, ez), 3.0, k["steel"])
+	P.append(pbox(Vector3(2, 70, 2), k["dark"], Vector3(-48, 72, 16)))   # whip flag
+	P.append(pbox(Vector3(18, 12, 1.5), k["top"], Vector3(-39, 100, 16)))
+	_lamps(P, k, 66.5, 21, [-13.0, 13.0], Vector3(3, 5, 8))
+	_lamps(P, k, -47.5, 28, [-16.0, 16.0], Vector3(3, 4, 8), true)
+	return { "side": [-46, 22, 23, 33, 22], "tops": [[-6, 23, 34, 34, 40], [24, 64, 33.77, 24.47, 40]],
+		"main": 1, "front": 1 }
+
+# desert rally truck: a tall cab-over, a cargo box with sand ladders, a roof scoop
+func _v_rally(ch: Node3D, P: Array, k: Dictionary) -> Dictionary:
+	_four(ch, [-40.0, 42.0], 36.0, 20.0, 18.0, paint(Color("#2a2622"), 0.9), paint(Color("#e9e2d4"), 0.4))
+	P.append(pbox(Vector3(124, 6, 48), k["dark"], Vector3(2, 24, 0)))
+	P.append(soft_prism(rounded(PackedVector2Array([Vector2(16, 28), Vector2(68, 28), Vector2(68, 52),
+			Vector2(56, 72), Vector2(16, 72)]), 4.0, 3), 62.0, 1.5, k["top"], 2, false))   # cab
+	P.append(pprism(PackedVector2Array([Vector2(58, 54), Vector2(67.5, 54), Vector2(57, 70),
+			Vector2(50, 70)]), 56.0, k["glass"]))
+	P.append(pbox(Vector3(76, 32, 60), k["top"], Vector3(-24, 46, 0)))   # cargo box
+	P.append(pbox(Vector3(76, 3, 61), k["low"], Vector3(-24, 31.5, 0)))
+	P.append(pbox(Vector3(16, 8, 26), k["dark"], Vector3(26, 76, 0)))   # roof scoop
+	for lz: float in [-18.0, 18.0]:   # sand ladders
+		P.append(pbox(Vector3(60, 2, 12), mat(Color("#e8503a")), Vector3(-24, 63, lz)))
+	_lamps(P, k, 68.5, 40, [-20.0, 0.0, 20.0])
+	_lamps(P, k, -62.5, 40, [-22.0, 22.0], Vector3(3, 6, 8), true)
+	return { "side": [-60, 12, 35, 59, 30], "tops": [[-61, 13, 62, 62, 60], [18, 54, 72, 72, 56]],
+		"main": 0, "front": 1 }
+
+# beach bug: a round little bubble car with a surfboard on the roof rack
+func _v_bug(ch: Node3D, P: Array, k: Dictionary) -> Dictionary:
+	_four(ch, [-38.0, 40.0], 36.0, 17.0, 22.0, paint(Color("#2a2622"), 0.9), paint(Color("#e9e2d4"), 0.4))
+	P.append(pprism(rounded(PackedVector2Array([Vector2(-58, 16), Vector2(64, 16), Vector2(66, 26),
+			Vector2(40, 38), Vector2(20, 56), Vector2(-20, 58), Vector2(-50, 44), Vector2(-60, 28)]), 8.0, 4),
+			58.0, k["top"]))
+	P.append(pbox(Vector3(118, 5, 54), k["low"], Vector3(4, 16, 0)))
+	P.append(pprism(PackedVector2Array([Vector2(-34, 40), Vector2(28, 40), Vector2(16, 54),
+			Vector2(-18, 55)]), 60.0, k["glass"]))
+	for rz: float in [-18.0, 18.0]:
+		P.append(pbox(Vector3(44, 3, 3), k["dark"], Vector3(-2, 62, rz)))
+	var board := soft_prism(rounded(PackedVector2Array([Vector2(-40, 0), Vector2(40, 0), Vector2(48, 2),
+			Vector2(40, 4), Vector2(-40, 4)]), 1.5, 2), 18.0, 1.0, mat(Color("#2ab0c8")), 2, false)
+	board.position = Vector3(0, 64, 0) * U
+	P.append(board)
+	_lamps(P, k, 62, 30, [-20.0, 20.0], Vector3(4, 8, 8))
+	_lamps(P, k, -59, 30, [-18.0, 18.0], Vector3(3, 6, 8), true)
+	return { "side": [-48, 40, 20, 36, 29], "tops": [[46, 60, 35.2, 28.8, 48]], "main": 0, "front": 0 }
+
+# --- Highlands
+# monster truck: huge tyres, the body lifted high on struts, light bar on the roof
+func _v_monster(ch: Node3D, P: Array, k: Dictionary) -> Dictionary:
+	_four(ch, [-42.0, 46.0], 40.0, 26.0, 22.0, paint(Color("#1b1b1d"), 0.9), k["dark"])
+	for wx: float in [-42.0, 46.0]:   # suspension struts
+		for wz: float in [-24.0, 24.0]:
+			_bar(P, Vector3(wx, 26, wz * 1.3), Vector3(wx + 6, 44, wz), 4.0, k["steel"])
+	P.append(pbox(Vector3(80, 4, 36), k["dark"], Vector3(2, 26, 0)))   # frame
+	P.append(pbox(Vector3(124, 6, 58), k["low"], Vector3(4, 44, 0)))
+	P.append(pbox(Vector3(124, 12, 62), k["top"], Vector3(4, 53, 0)))
+	P.append(pprism(PackedVector2Array([Vector2(-30, 58), Vector2(26, 58), Vector2(16, 76),
+			Vector2(-28, 76)]), 54.0, k["glass"]))
+	P.append(pbox(Vector3(46, 4, 58), k["top"], Vector3(-6, 78, 0)))   # roof
+	P.append(pbox(Vector3(28, 6, 58), k["top"], Vector3(-44, 62, 0)))   # rear deck cover
+	P.append(pbox(Vector3(5, 5, 50), k["dark"], Vector3(12, 82.5, 0)))   # light bar
+	_lamps(P, k, 15, 82.5, [-18.0, -6.0, 6.0, 18.0], Vector3(3, 6, 8))
+	P.append(pbox(Vector3(3, 4, 56), k["steel"], Vector3(69, 50, 0)))   # bull bar
+	P.append(pbox(Vector3(3, 4, 56), k["steel"], Vector3(69, 38, 0)))
+	for bz in [-24.0, 24.0]:
+		P.append(pbox(Vector3(4, 16, 4), k["steel"], Vector3(69, 44, bz)))
+	_lamps(P, k, 66.5, 53, [-20.0, 20.0])
+	_lamps(P, k, -58.5, 53, [-20.0, 20.0], Vector3(3, 6, 10), true)
+	return { "side": [-56, 64, 48, 58, 31],
+		"tops": [[26, 66, 59, 59, 60], [-29, 17, 80, 80, 56], [-58, -30, 65, 65, 56]], "main": 0, "front": 0 }
+
+# rock crawler: a bare tube frame on huge tyres, two seats, a winch on the nose
+func _v_crawler(ch: Node3D, P: Array, k: Dictionary) -> Dictionary:
+	_four(ch, [-44.0, 46.0], 38.0, 24.0, 20.0, paint(Color("#1b1b1d"), 0.9), k["dark"])
+	P.append(pbox(Vector3(100, 6, 34), k["low"], Vector3(0, 30, 0)))   # belly pan
+	for cz: float in [-20.0, 20.0]:
+		_bar(P, Vector3(-50, 34, cz), Vector3(56, 34, cz), 4.0, k["top"])
+		_bar(P, Vector3(-30, 34, cz), Vector3(-26, 66, cz), 4.0, k["top"])
+		_bar(P, Vector3(-26, 66, cz), Vector3(14, 64, cz), 4.0, k["top"])
+		_bar(P, Vector3(14, 64, cz), Vector3(40, 36, cz), 4.0, k["top"])
+		_bar(P, Vector3(-50, 34, cz), Vector3(-30, 54, cz), 4.0, k["top"])
+		P.append(pbox(Vector3(56, 10, 2), k["top"], Vector3(-6, 40, 21.0 * signf(cz))))   # side panel
+	_bar(P, Vector3(-26, 66, -20), Vector3(-26, 66, 20), 4.0, k["top"])
+	_bar(P, Vector3(14, 64, -20), Vector3(14, 64, 20), 4.0, k["top"])
+	P.append(pbox(Vector3(40, 2, 42), k["top"], Vector3(-6, 67, 0)))   # roof panel
+	P.append(pbox(Vector3(22, 12, 26), k["dark"], Vector3(36, 40, 0)))   # engine
+	P.append(pbox(Vector3(34, 3, 36), k["top"], Vector3(38, 47.5, 0)))   # bonnet over it
+	var seat := paint(Color("#2b3038"), 0.8)
+	for sz: float in [-9.0, 9.0]:
+		P.append(pbox(Vector3(5, 16, 14), seat, Vector3(-16, 42, sz)))
+	P.append(pbox(Vector3(8, 8, 20), k["steel"], Vector3(62, 36, 0)))   # winch
+	P.append(pbox(Vector3(4, 4, 46), k["dark"], Vector3(16, 70, 0)))
+	_lamps(P, k, 18.5, 70, [-15.0, -5.0, 5.0, 15.0], Vector3(3, 5, 7))
+	_lamps(P, k, -52, 36, [-14.0, 14.0], Vector3(3, 5, 6), true)
+	return { "side": [-32, 20, 36, 44, 22], "tops": [[22, 54, 49, 49, 34], [-25, 13, 68, 68, 40]],
+		"main": 0, "front": 0 }
+
+# six-wheel expedition truck: a cab and a boxy camper with a tent on the roof
+func _v_expedition(ch: Node3D, P: Array, k: Dictionary) -> Dictionary:
+	var tyre := paint(Color("#1b1b1d"), 0.9)
+	for wx: float in [-46.0, -20.0, 46.0]:
+		for wz: float in [-36.0, 36.0]:
+			_wheel(ch, wx, wz, 18.0, 16.0, tyre, k["dark"])
+	P.append(pbox(Vector3(130, 6, 46), k["dark"], Vector3(0, 24, 0)))
+	P.append(pbox(Vector3(36, 30, 60), k["top"], Vector3(48, 42, 0)))   # cab
+	P.append(pprism(PackedVector2Array([Vector2(52, 44), Vector2(66.5, 44), Vector2(62, 56),
+			Vector2(52, 56)]), 54.0, k["glass"]))
+	P.append(pbox(Vector3(80, 42, 62), k["top"], Vector3(-22, 48, 0)))   # camper
+	for wx: float in [-44.0, -8.0]:
+		for wz: float in [-31.3, 31.3]:
+			P.append(pbox(Vector3(16, 10, 0.6), k["glass"], Vector3(wx, 56, wz)))
+	P.append(pbox(Vector3(44, 8, 50), mat(Color("#3f6b3a")), Vector3(-24, 73, 0)))   # roof tent
+	for ly: float in [34.0, 44.0, 54.0, 64.0]:
+		P.append(pbox(Vector3(1.5, 2, 12), k["steel"], Vector3(-62.5, ly, 18)))
+	P.append(pbox(Vector3(3, 4, 56), k["steel"], Vector3(68, 32, 0)))
+	_lamps(P, k, 66.5, 36, [-20.0, 20.0])
+	_lamps(P, k, -62.5, 34, [-24.0, 24.0], Vector3(3, 6, 8), true)
+	return { "side": [-60, 16, 29, 49, 31],
+		"tops": [[31, 65, 57, 57, 58], [-61, -47, 69, 69, 60], [-1, 17, 69, 69, 60]], "main": 0, "front": 0 }
 
 # pod side: a triangle with a flat bottom and its peak over the axle, corners rounded
 static func _pod_side(px: float, segs: int) -> PackedVector2Array:
@@ -1995,9 +2251,9 @@ static func _pod_side(px: float, segs: int) -> PackedVector2Array:
 			6.0, segs * 2, PackedFloat32Array([6.0, 6.0, 7.0]))
 
 # tread stripes across a pod, each trimmed to the side profile so none pokes out
-static func _pod_lugs(chassis: Node3D, prof: PackedVector2Array, px: float, lug: Material, z: float) -> void:
-	for k in 5:
-		var lx := px - 16.0 + k * 8.0
+static func _pod_lugs(chassis: Node3D, prof: PackedVector2Array, px: float, lug: Material, z: float, w := POD_W, n := 5) -> void:
+	for k in n:
+		var lx := px - (n - 1) * 4.0 + k * 8.0
 		var lo := INF
 		var hi := -INF
 		for i in prof.size():   # where the vertical line x = lx crosses the outline
@@ -2008,7 +2264,7 @@ static func _pod_lugs(chassis: Node3D, prof: PackedVector2Array, px: float, lug:
 				lo = minf(lo, y)
 				hi = maxf(hi, y)
 		if hi - lo > 4.0:
-			chassis.add_child(pbox(Vector3(3, hi - lo + 1.0, POD_W + 1.0), lug, Vector3(lx, (lo + hi) * 0.5, z)))
+			chassis.add_child(pbox(Vector3(3, hi - lo + 1.0, w + 1.0), lug, Vector3(lx, (lo + hi) * 0.5, z)))
 
 # artwork wheel (detail 2): a tyre with rounded shoulders and tread blocks, a dished
 # rim with five spokes and a hub cap on the outer face
@@ -2060,148 +2316,114 @@ func _wheel(chassis: Node3D, x: float, z: float, r: float, w: float, tyre: Mater
 		mi.rotation.x = PI / 2
 		chassis.add_child(mi)
 
-# Forest: chunky knobbly wheels and a couple of logs strapped on the roof
-func _car_kit_forest(chassis: Node3D, parts_list: Array, top: Material, dark: Material) -> void:
-	var tyre := paint(Color("#1b1d1a"), 0.85)
-	for wx in [-38.0, 40.0]:
-		for wz in [-36.0, 36.0]:
-			_wheel(chassis, wx, wz, 17.0, 16.0, tyre, top)
-	var bark := paint(Color("#6b4a2e"), 0.85)
-	var cut := paint(Color("#d8b47a"), 0.7)
-	for lz in [-10.0, 10.0]:
-		var lg := MeshInstance3D.new()
-		var cm := CylinderMesh.new()
-		cm.top_radius = 7.0 * U; cm.bottom_radius = 7.0 * U; cm.height = 70.0 * U
-		cm.radial_segments = 8 if detail == 1 else 24; cm.rings = 1
-		cm.material = bark
-		lg.mesh = cm
-		lg.position = Vector3(-10, 61, lz) * U
-		lg.rotation.z = PI / 2
-		parts_list.append(lg)
-		parts_list.append(pbox(Vector3(1, 11, 11), cut, Vector3(25.5, 61, lz)))
-	parts_list.append(pbox(Vector3(4, 4, 34), dark, Vector3(-30, 55, 0)))
-	parts_list.append(pbox(Vector3(4, 4, 34), dark, Vector3(10, 55, 0)))
-
-# Rock: big crawler tyres, a bull bar and roof spotlights
-func _car_kit_rock(chassis: Node3D, parts_list: Array, top: Material, dark: Material) -> void:
-	var tyre := paint(Color("#1b1b1d"), 0.9)
-	for wx in [-40.0, 44.0]:
-		for wz in [-38.0, 38.0]:
-			_wheel(chassis, wx, wz, 21.0, 19.0, tyre, dark)
-	var steel := paint(Color("#9aa0a6"), 0.35)
-	steel.metallic = 0.6
-	parts_list.append(pbox(Vector3(3, 4, 54), steel, Vector3(71, 33, 0)))   # bull bar
-	parts_list.append(pbox(Vector3(3, 4, 54), steel, Vector3(71, 22, 0)))
-	for bz in [-24.0, 24.0]:
-		parts_list.append(pbox(Vector3(4, 15, 4), steel, Vector3(71, 27.5, bz)))
-	parts_list.append(pbox(Vector3(60, 3, 8), dark, Vector3(0, 12, 0)))       # skid plate
-	var lamp := mat(Color("#fff4c8"), true)
-	parts_list.append(pbox(Vector3(5, 5, 44), dark, Vector3(8, 56, 0)))
-	for lz in [-14.0, 0.0, 14.0]:
-		parts_list.append(pbox(Vector3(3, 6, 9), lamp, Vector3(11, 56, lz)))
-
-# Sand: wide balloon tyres, a roll bar and a whip flag in the car's colour
-func _car_kit_sand(chassis: Node3D, parts_list: Array, top: Material, dark: Material) -> void:
-	var tyre := paint(Color("#2a2622"), 0.9)
-	var rim := paint(Color("#e9e2d4"), 0.4)
-	for wx in [-40.0, 42.0]:
-		for wz in [-38.0, 38.0]:
-			_wheel(chassis, wx, wz, 17.0, 24.0, tyre, rim)
-	parts_list.append(pbox(Vector3(5, 26, 5), dark, Vector3(-30, 50, 26)))
-	parts_list.append(pbox(Vector3(5, 26, 5), dark, Vector3(-30, 50, -26)))
-	parts_list.append(pbox(Vector3(5, 5, 57), dark, Vector3(-30, 62, 0)))
-	parts_list.append(pbox(Vector3(2, 70, 2), dark, Vector3(-52, 72, -24)))  # whip
-	parts_list.append(pbox(Vector3(18, 12, 1.5), top, Vector3(-43, 100, -24)))  # flag
-	var sand := pbox(Vector3(22, 3, 40), paint(Color("#e6c891"), 0.95), Vector3(46, 32.5, 4))  # sand on the bonnet
-	sand.rotation.z = -0.21   # follows the bonnet slope
-	sand.set_meta("bonnet", true)   # a livery on the bonnet sweeps it off
-	parts_list.append(sand)
-
 # ---------------------------------------------------------------- liveries
-# Thin painted panels laid just proud of the body (same shape for every theme kit).
-# The body: rear deck y 36 (x -58..-32), glasshouse x -32..30 (rear window sloped), roof top y 53.5
-# (x -26..10), bonnet sloping from (30, 36) to (67, 28), sides at z ±30 (y 22..36).
-const BONNET_A := -0.2129   # the bonnet's slope (radians about z)
-const BONNET_LIVERIES := ["stripes", "checker", "glow"]
+# Thin painted panels laid just proud of the body, fitted to each vehicle's layout (the
+# flat flanks and the tops its builder returns; see the vehicles above).
 
-static func _bonnet_at(x: float) -> float:
-	return 36.0 - (x - 30.0) * 8.0 / 37.0
+# a thin strip lying on a top face t, from x a to x b along it, centred across at z
+static func _strip(t: Array, a: float, b: float, z: float, wz: float, m: Material, h := 0.6) -> MeshInstance3D:
+	var s := (float(t[3]) - float(t[2])) / (float(t[1]) - float(t[0]))
+	var ang := atan(s)
+	var xm := (a + b) * 0.5
+	var y := float(t[2]) + (xm - float(t[0])) * s
+	var p := pbox(Vector3((b - a) / cos(ang), h, wz), m, Vector3(xm, y + h * 0.5 + 0.05, z))
+	p.rotation.z = ang
+	return p
 
-# a flat strip lying on the bonnet slope, centred at x along the car
-static func _on_bonnet(size: Vector3, m: Material, x: float, z: float) -> MeshInstance3D:
-	var b := pbox(size, m, Vector3(x, _bonnet_at(x) + 0.35, z))
-	b.rotation.z = BONNET_A
-	return b
+static func _top_y(t: Array, x: float) -> float:
+	return float(t[2]) + (x - float(t[0])) * (float(t[3]) - float(t[2])) / (float(t[1]) - float(t[0]))
 
-func _livery(parts_list: Array, look: Dictionary, col: Color) -> void:
+static func _top_angle(t: Array) -> float:
+	return atan((float(t[3]) - float(t[2])) / (float(t[1]) - float(t[0])))
+
+func _livery(parts_list: Array, look: Dictionary, col: Color, lay: Dictionary) -> void:
 	var lv := String(look.get("livery", "none"))
 	if lv == "none" or lv == "":
 		return
-	if lv in BONNET_LIVERIES:
-		for p in parts_list.duplicate():
-			if p.has_meta("bonnet"):
-				parts_list.erase(p)
-				p.queue_free()
 	var ac: Color = look.get("accent", Color("#f4f1ea"))
 	var am := finish_paint(ac, "gloss")
+	var sd: Array = lay["side"]
+	var tops: Array = lay["tops"]
+	var mt: Array = tops[int(lay.get("main", 0))]
+	var ft: Array = tops[int(lay.get("front", 0))]
+	var x0 := float(sd[0])
+	var x1 := float(sd[1])
+	var y0 := float(sd[2])
+	var y1 := float(sd[3])
+	var zs := float(sd[4]) + 0.3
+	var L := x1 - x0
+	var H := y1 - y0
+	var xm := (x0 + x1) * 0.5
 	match lv:
-		"stripes":   # two stripes nose to tail over the bonnet, roof, deck and wing
-			for z in [-7.5, 7.5]:
-				parts_list.append(_on_bonnet(Vector3(37.8, 0.6, 7), am, 48.5, z))
-				parts_list.append(pbox(Vector3(36.4, 0.6, 7), am, Vector3(-8, 53.8, z)))
-				parts_list.append(pbox(Vector3(32, 0.6, 7), am, Vector3(-42, 36.3, z)))
-				parts_list.append(pbox(Vector3(14.4, 0.6, 7), am, Vector3(-56, 43.8, z)))
-				parts_list.append(pbox(Vector3(0.6, 14, 7), am, Vector3(-58.3, 29, z)))  # down the tail
-		"number":   # a roundel with a number on the deck and on both doors
+		"stripes":   # two stripes nose to tail over every top
+			for t: Array in tops:
+				var w := float(t[4])
+				var off := minf(7.5, w * 0.17)
+				for z: float in [-off, off]:
+					parts_list.append(_strip(t, float(t[0]) + 0.5, float(t[1]) - 0.5, z, minf(7.0, w * 0.14), am))
+		"number":   # a roundel with a number on the main top and on both flanks
 			var disc := mat(ac)
 			var num := mat(col.darkened(0.2) if ac.get_luminance() > 0.5 else Color("#f4f1ea"))
-			parts_list.append(_roundel(Vector3(-42, 36.0, 0), "y", 12.0, disc, num))
+			var tx := (float(mt[0]) + float(mt[1])) * 0.5
+			var r := minf(12.0, minf(float(mt[1]) - float(mt[0]), float(mt[4])) * 0.4)
+			var rn := _roundel(Vector3(tx, _top_y(mt, tx) + 0.1, 0), "y", r, disc, num)
+			rn.rotation.z = _top_angle(mt)
+			parts_list.append(rn)
+			var door: Array = lay.get("door", [xm, (y0 + y1) * 0.5, minf(6.2, minf(H * 0.42, L * 0.2))])
 			for side: float in [1.0, -1.0]:
-				parts_list.append(_roundel(Vector3(-8, 29, 30.0 * side), "z" if side > 0 else "-z", 6.2, disc, num))
-		"flash":   # speed lines down both sides
+				parts_list.append(_roundel(Vector3(door[0], door[1], (zs - 0.2) * side), "z" if side > 0 else "-z",
+						float(door[2]), disc, num))
+		"flash":   # speed lines down both flanks and a pair along the front top
+			var th_ := clampf(H / 14.0, 0.6, 1.4)
 			for side: float in [1.0, -1.0]:
-				var zs := 30.3 * side
-				parts_list.append(pbox(Vector3(98, 3, 0.6), am, Vector3(-7, 32.5, zs)))
-				parts_list.append(pbox(Vector3(78, 1.6, 0.6), am, Vector3(0, 28.5, zs)))
-				parts_list.append(pbox(Vector3(52, 1.0, 0.6), am, Vector3(10, 25.5, zs)))
-			for z in [-24.0, 24.0]:   # and a short pair on the bonnet edges
-				parts_list.append(_on_bonnet(Vector3(30, 0.6, 3), am, 46.0, z))
-		"twotone":   # roof, wing and deck in the accent colour
-			parts_list.append(pbox(Vector3(36.6, 3.4, 50.6), am, Vector3(-8, 52, 0)))
-			parts_list.append(pbox(Vector3(14.6, 5.4, 66.6), am, Vector3(-56, 41, 0)))
-			parts_list.append(pbox(Vector3(26, 0.6, 60.4), am, Vector3(-45, 36.3, 0)))
-			for side: float in [1.0, -1.0]:   # and a sill along the bottom of each side
-				parts_list.append(pbox(Vector3(124, 4, 0.6), am, Vector3(4, 24, 30.3 * side)))
-		"checker":   # a chequered band across the bonnet and the wing
+				for ln: Array in [[0.78, 0.41, 0.75, 3.0], [0.62, 0.46, 0.46, 1.6], [0.42, 0.54, 0.25, 1.0]]:
+					parts_list.append(pbox(Vector3(L * ln[0], ln[3] * th_, 0.6), am,
+							Vector3(x0 + L * ln[1], y0 + H * ln[2], zs * side)))
+			var fl := float(ft[1]) - float(ft[0])
+			for z: float in [-1.0, 1.0]:
+				parts_list.append(_strip(ft, float(ft[0]) + fl * 0.15, float(ft[1]) - fl * 0.1,
+						z * (float(ft[4]) * 0.5 - 5.0), 3.0, am))
+		"twotone":   # the upper half of the flanks and the other tops in the accent colour
+			for i in tops.size():
+				if i != int(lay.get("main", 0)):
+					var t: Array = tops[i]
+					parts_list.append(_strip(t, float(t[0]), float(t[1]), 0.0, float(t[4]) + 0.6, am))
+			for side: float in [1.0, -1.0]:
+				parts_list.append(pbox(Vector3(L, H * 0.45, 0.6), am, Vector3(xm, y1 - H * 0.225, zs * side)))
+		"checker":   # a chequered band across the front of the front top
 			var wht := finish_paint(Color("#f4f1ea"), "gloss")
 			var blk := finish_paint(Color("#1d2229"), "gloss")
-			var sq := 7.5
+			var sq := float(ft[4]) / 8.0
 			for r in 2:
-				for k in 8:
-					var z := -26.25 + k * sq
-					var m := wht if (r + k) % 2 == 0 else blk
-					parts_list.append(_on_bonnet(Vector3(sq, 0.6, sq), m, 52.0 + r * sq * 0.978, z))
-					if r == 0:
-						parts_list.append(pbox(Vector3(14.4, 0.6, sq + 0.25), m if k % 2 else (blk if m == wht else wht), Vector3(-56, 43.8, -29.0 + k * 8.28)))
-		"bolt":   # a lightning bolt along each side and one over the roof
+				var b := float(ft[1]) - 1.0 - r * sq
+				for c in 8:
+					var z := -float(ft[4]) * 0.5 + (c + 0.5) * sq
+					parts_list.append(_strip(ft, b - sq, b, z, sq, wht if (r + c) % 2 == 0 else blk))
+		"bolt":   # a lightning bolt along each flank and one on the main top
 			for side: float in [1.0, -1.0]:
-				for q in _bolt_quads():
-					var bp := pprism(q, 0.6, am)
-					bp.position.z = 30.3 * side * U
+				for q: PackedVector2Array in _bolt_quads():
+					var mq := PackedVector2Array()
+					for p in q:   # drawn for a flank x -56..58, y 25.5..34.5: fit it to this one
+						mq.append(Vector2(x0 + 2.0 + (p.x + 56.0) / 114.0 * (L - 4.0), y0 + H * (0.1 + (p.y - 25.5) / 9.0 * 0.8)))
+					var bp := pprism(mq, 0.6, am)
+					bp.position.z = zs * side * U
 					parts_list.append(bp)
-			var rb := _flat_bolt(am)
+			var tx := (float(mt[0]) + float(mt[1])) * 0.5
+			var s := minf((float(mt[1]) - float(mt[0]) - 4.0) / 32.0, (float(mt[4]) - 6.0) / 18.0)
+			var rb := _flat_bolt(am, clampf(s, 0.3, 1.4))
+			rb.position = Vector3(tx, _top_y(mt, tx) + 0.4, 0) * U
+			rb.rotation.z = _top_angle(mt)
 			parts_list.append(rb)
-		"glow":   # neon strips along the body edges and under the sills
+		"glow":   # neon strips along the flanks' edges and down the main top
 			var nc: Color = col if String(look.get("finish", "")) == "neon" else Color("#3ff2ff")
 			var nm := mat(nc, true)
 			nm.emission_enabled = true
 			nm.emission = nc
 			nm.emission_energy_multiplier = 2.0
 			for side: float in [1.0, -1.0]:
-				parts_list.append(pbox(Vector3(88, 1.2, 1.2), nm, Vector3(-14, 36.2, 29.8 * side)))
-				parts_list.append(_on_bonnet(Vector3(37.8, 1.2, 1.2), nm, 48.5, 29.8 * side))
-				parts_list.append(pbox(Vector3(108, 2, 1.2), nm, Vector3(-4, 13, 27.5 * side)))
-			parts_list.append(pbox(Vector3(36.4, 1.0, 1.2), nm, Vector3(-8, 53.9, 0)))
+				parts_list.append(pbox(Vector3(L, 1.2, 1.2), nm, Vector3(xm, y1 + 0.2, (zs - 0.2) * side)))
+				parts_list.append(pbox(Vector3(L - 6.0, 1.6, 1.2), nm, Vector3(xm, y0 + 0.6, (zs + 0.2) * side)))
+			parts_list.append(_strip(mt, float(mt[0]) + 1.0, float(mt[1]) - 1.0, 0.0, 1.4, nm, 1.0))
 
 # a round badge with a number (Label3D) on top of it
 func _roundel(pos: Vector3, facing: String, r: float, disc: Material, num: Material) -> Node3D:
@@ -2246,17 +2468,19 @@ static func _bolt_quads() -> Array:
 	]
 
 # a bolt lying on the roof, pointing forward
-func _flat_bolt(m: Material) -> Node3D:
+func _flat_bolt(m: Material, s := 1.0) -> Node3D:
 	var n := Node3D.new()
 	for q: PackedVector2Array in [
 			PackedVector2Array([Vector2(-24, -9), Vector2(-2, -3), Vector2(-2, 3), Vector2(-24, -5)]),
 			PackedVector2Array([Vector2(-6, -3), Vector2(2, -3), Vector2(-2, 5), Vector2(-10, 5)]),
 			PackedVector2Array([Vector2(-2, 3), Vector2(8, 5), Vector2(8, 9), Vector2(-2, 5)])]:
 		# profile drawn in (x, z): build it as a thin prism then lay it flat
-		var p := pprism(q, 0.6, m)
+		var sq := PackedVector2Array()
+		for v in q:
+			sq.append((v + Vector2(8, 0)) * s)   # centred on the origin
+		var p := pprism(sq, 0.6, m)
 		p.rotation.x = PI / 2
 		n.add_child(p)
-	n.position = Vector3(0, 54.0, 0) * U
 	return n
 
 # the AI rivals each wear a livery of their own so the field looks like a team grid

@@ -1,7 +1,7 @@
 extends SceneTree
 # Garage items: every item is free, priced in coins (maybe behind a campaign world) or in a
 # real Store product; ids are unique; every old medal rule has an item; every look builds a
-# car on every theme kit; cosmetics never reach the race sim (a painted car laps in the same time).
+# car on every theme kit and every vehicle; cosmetics never reach the race sim (a painted car laps in the same time).
 const Cosmetics = preload("res://scripts/cosmetics.gd")
 const Store = preload("res://scripts/store.gd")
 const WorldView = preload("res://scripts/world_view.gd")
@@ -43,8 +43,42 @@ func _init() -> void:
 		var p: PackedStringArray = k.split(":")
 		if Cosmetics.find(p[0], p[1])["id"] != p[1]:
 			fail("old unlock rule %s has no item" % k)
-	# every paint x livery builds on every theme kit
+	# vehicles: the same ids as the 3D builders, three per world, the first of each free
+	var homes := {}
+	for it in Cosmetics.BODIES:
+		if not it["id"] in WorldView.BODIES:
+			fail("vehicle %s: WorldView cannot build it" % it["id"])
+		if not homes.has(it["home"]):
+			homes[it["home"]] = 0
+			if not it["unlock"].is_empty():
+				fail("vehicle %s: a world's first vehicle must be free" % it["id"])
+			if WorldView.BODY_DEFAULT.get(it["home"], "") != it["id"]:
+				fail("vehicle %s: not the 3D view's default for %s" % [it["id"], it["home"]])
+		homes[it["home"]] += 1
+	for h in ["snow", "forest", "sand", "rock"]:
+		if homes.get(h, 0) != 3:
+			fail("world %s: %d vehicles, want 3" % [h, homes.get(h, 0)])
+		if Cosmetics.equipped_body(h) != WorldView.BODY_DEFAULT[h]:
+			fail("world %s: a new save should drive the default vehicle" % h)
+	if Cosmetics.equip("body", "snowcat"):
+		fail("a vehicle not bought yet was equipped")
+	# every vehicle x livery builds, with its livery on it
 	var view := WorldView.new()
+	view.th = preload("res://scripts/themes.gd").get_theme("snow")
+	for it in Cosmetics.BODIES:
+		var plain := 0
+		for l in Cosmetics.LIVERIES:
+			var lk := Cosmetics.look("signal", l["id"], "hemp", it["id"])
+			var car: Node3D = view._make_car(lk["color"], false, lk)
+			var n: int = car.get_meta("body").get_child_count()
+			if l["id"] == "none":
+				plain = n
+				if n < 5:
+					fail("vehicle %s: no body" % it["id"])
+			elif n <= plain:
+				fail("vehicle %s: livery %s added nothing" % [it["id"], l["id"]])
+			car.free()
+	# every paint x livery builds on every theme kit
 	for theme in ["snow", "forest", "sand", "rock"]:
 		view.th = preload("res://scripts/themes.gd").get_theme(theme)
 		for p in Cosmetics.PAINTS:

@@ -1,5 +1,5 @@
-# The Garage: pick the car's paint, livery and rope colour. Visual only.
-# A 3D stage shows the car turning on a plinth; below or beside it, three tabs and a
+# The Garage: pick the vehicle for each world, the paint, livery and rope colour. Visual
+# only. A 3D stage shows the car turning on a plinth; below or beside it, four tabs and a
 # scrolling grid of swatches. Items not owned yet can be tried on (the stage shows them);
 # the bar under the stage offers to buy them with coins, or offers the paid pack.
 extends BoxContainer
@@ -14,11 +14,15 @@ const Art = preload("res://scripts/menu_art.gd")
 const C_FG := Color("#f3efe6")
 const C_MUTED := Color("#9fb3b0")
 const C_POST := Color("#f2b134")
-const TAB_NAMES := { "paint": "Paint", "livery": "Livery", "rope": "Rope" }
+const Themes = preload("res://scripts/themes.gd")
+const TABS := ["body", "paint", "livery", "rope"]
+const TAB_NAMES := { "body": "Vehicle", "paint": "Paint", "livery": "Livery", "rope": "Rope" }
+const TAB_ICONS := { "body": "car", "paint": "paint", "livery": "livery", "rope": "rope" }
 
 var menu     # the menu (card style, ui helpers)
 var ui
-var tab := "paint"
+var tab := "body"
+var home := ""            # the world whose vehicle is on the stage
 var on_coins: Callable    # the menu's coin counter, refreshed after a purchase
 var trying := {}          # slot -> id of a locked item being tried on
 var scroller              # menu.Scroller holding the grid
@@ -73,8 +77,9 @@ func setup(owner_menu, scroller_class) -> void:
 	add_child(right)
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 8)
-	for t in ["paint", "livery", "rope"]:
-		var b: Button = ui.icon_button(t, TAB_NAMES[t], "card", false, 44)
+	home = Campaign.menu_theme()
+	for t in TABS:
+		var b: Button = ui.icon_button(TAB_ICONS[t], TAB_NAMES[t], "card", false, 44)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.pressed.connect(_set_tab.bind(t))
 		tabs.add_child(b)
@@ -101,6 +106,8 @@ func _process(dt: float) -> void:
 
 # ---------------------------------------------------------------- state
 func shown(slot: String) -> String:
+	if slot == "body":
+		return trying.get(slot, Cosmetics.equipped_body(home))
 	return trying.get(slot, Cosmetics.equipped(slot))
 
 func _restage() -> void:
@@ -109,7 +116,7 @@ func _restage() -> void:
 	var w3d: World3D = view.get_viewport().world_3d
 	if w3d.environment != view.env:
 		w3d.environment = view.env
-	view.showroom(Cosmetics.look(shown("paint"), shown("livery"), shown("rope")), Campaign.menu_theme())
+	view.showroom(Cosmetics.look(shown("paint"), shown("livery"), shown("rope"), shown("body")), home)
 
 func _set_tab(t: String) -> void:
 	tab = t
@@ -129,6 +136,9 @@ func _show_tab() -> void:
 	_update_status()
 
 func _pick(it: Dictionary) -> void:
+	if tab == "body" and it["home"] != home:
+		home = it["home"]   # the stage moves to that vehicle's world
+		trying.erase("body")
 	if Cosmetics.owned(tab, it):
 		Cosmetics.equip(tab, it["id"])
 		trying.erase(tab)
@@ -141,6 +151,8 @@ func _update_status() -> void:
 	var it := Cosmetics.find(tab, shown(tab))
 	if not trying.has(tab):
 		status.text = "%s  ·  equipped" % it["name"]
+		if tab == "body":
+			status.text = "%s  ·  driven in %s" % [it["name"], Themes.get_theme(it["home"])["name"]]
 		status.add_theme_color_override("font_color", C_FG)
 		return
 	status.add_theme_color_override("font_color", C_POST)
@@ -223,8 +235,11 @@ func _tile(it: Dictionary) -> Button:
 	var sub := ""
 	var sub_col := C_MUTED
 	if open:
-		sub = "Equipped" if it["id"] == Cosmetics.equipped(tab) else ""
+		sub = "Equipped" if Cosmetics.is_equipped(tab, it) else ""
 		sub_col = C_POST
+		if tab == "body" and sub == "":
+			sub = Themes.get_theme(it["home"])["name"]
+			sub_col = C_MUTED
 	elif it["unlock"].has("product"):
 		sub = Store.product(it["unlock"]["product"])["price"]
 		sub_col = C_POST
@@ -287,6 +302,8 @@ class Swatch extends Control:
 						draw_circle(c + Vector2(-r * 0.3, -r * 0.45), r * 0.15, Color(1, 1, 1, 0.8 * a))
 					"neon":
 						draw_arc(c, r * 1.06, 0, TAU, 40, Color(col, 0.5 * a), r * 0.14, true)
+			"body":
+				_draw_vehicle(String(item["id"]), a)
 			"rope":
 				var col: Color = item["color"]
 				if col.a == 0.0:
@@ -339,3 +356,133 @@ class Swatch extends Control:
 				elif lv == "stripes":
 					for z in [0.36, 0.56]:
 						draw_rect(Rect2(Vector2(x0 + w * 0.3, y0 + h * z), Vector2(w * 0.23, h * 0.09)), Color(acc, a))
+
+	# The vehicles from the side, nose to the right, in the car's own units (WorldView):
+	# [kind, points] with kind body (the paint), low (darker paint), glass, dark, light,
+	# wood, accent (a fixed colour given as the third entry); a wheel is ["wheel", x, r] and
+	# a tube is ["line", points].
+	const SIDES := {
+		"sled": [["dark", [Vector2(-60, 0), Vector2(-4, 0), Vector2(4, 14), Vector2(-64, 14)]],
+			["light", [Vector2(24, 0), Vector2(62, 0), Vector2(70, 9), Vector2(64, 9), Vector2(60, 3), Vector2(24, 3)]],
+			["line", [Vector2(44, 3), Vector2(36, 22)]],
+			["body", [Vector2(-62, 16), Vector2(20, 16), Vector2(66, 22), Vector2(58, 34), Vector2(-62, 34)]],
+			["glass", [Vector2(-48, 33), Vector2(30, 34), Vector2(10, 52), Vector2(-26, 54), Vector2(-46, 44)]]],
+		"snowcat": [["dark", [Vector2(-62, 0), Vector2(-18, 0), Vector2(-40, 24)]],
+			["dark", [Vector2(20, 0), Vector2(64, 0), Vector2(42, 24)]],
+			["body", [Vector2(-58, 16), Vector2(66, 16), Vector2(66, 34), Vector2(-58, 34)]],
+			["glass", [Vector2(-44, 34), Vector2(46, 34), Vector2(38, 62), Vector2(-42, 62)]],
+			["body", [Vector2(-45, 62), Vector2(41, 62), Vector2(41, 66), Vector2(-45, 66)]],
+			["accent", [Vector2(-40, 66), Vector2(-32, 66), Vector2(-32, 72), Vector2(-40, 72)], Color("#ff9a2a")]],
+		"van": [["dark", [Vector2(-62, 0), Vector2(-18, 0), Vector2(-40, 24)]],
+			["dark", [Vector2(20, 0), Vector2(64, 0), Vector2(42, 24)]],
+			["body", [Vector2(-60, 16), Vector2(66, 16), Vector2(66, 36), Vector2(44, 62), Vector2(-60, 62)]],
+			["glass", [Vector2(-50, 42), Vector2(22, 42), Vector2(22, 54), Vector2(-50, 54)]],
+			["glass", [Vector2(46, 40), Vector2(62, 40), Vector2(46, 58)]],
+			["accent", [Vector2(-46, 65), Vector2(34, 65), Vector2(34, 68), Vector2(-46, 68)], Color("#e8503a")]],
+		"pickup": [["wheel", -38, 18], ["wheel", 40, 18],
+			["low", [Vector2(-62, 16), Vector2(66, 16), Vector2(66, 24), Vector2(-62, 24)]],
+			["wood", [Vector2(-60, 28), Vector2(-12, 28), Vector2(-12, 52), Vector2(-60, 52)]],
+			["body", [Vector2(-62, 24), Vector2(-16, 24), Vector2(-16, 42), Vector2(-62, 42)]],
+			["body", [Vector2(-16, 24), Vector2(26, 24), Vector2(26, 36), Vector2(-16, 36)]],
+			["body", [Vector2(26, 24), Vector2(68, 24), Vector2(68, 32), Vector2(26, 38)]],
+			["glass", [Vector2(-16, 36), Vector2(28, 36), Vector2(16, 58), Vector2(-14, 58)]],
+			["body", [Vector2(-15, 58), Vector2(17, 58), Vector2(17, 61), Vector2(-15, 61)]]],
+		"jeep": [["wheel", -38, 18], ["wheel", 40, 18],
+			["dark", [Vector2(-67, 20), Vector2(-58, 20), Vector2(-58, 48), Vector2(-67, 48)]],
+			["low", [Vector2(-58, 15), Vector2(66, 15), Vector2(66, 21), Vector2(-58, 21)]],
+			["body", [Vector2(-58, 20), Vector2(66, 20), Vector2(66, 38), Vector2(-58, 38)]],
+			["body", [Vector2(-58, 36), Vector2(-18, 36), Vector2(-18, 40), Vector2(-58, 40)]],
+			["body", [Vector2(20, 36), Vector2(60, 36), Vector2(60, 40), Vector2(20, 40)]],
+			["dark", [Vector2(-17, 38), Vector2(-11, 38), Vector2(-11, 51), Vector2(-17, 51)]],
+			["glass", [Vector2(18, 38), Vector2(22, 38), Vector2(22, 54), Vector2(18, 54)]],
+			["line", [Vector2(-30, 38), Vector2(-30, 62)]]],
+		"hauler": [["wheel", -44, 15], ["wheel", -24, 15], ["wheel", 44, 15],
+			["dark", [Vector2(-65, 17), Vector2(65, 17), Vector2(65, 28), Vector2(-65, 28)]],
+			["wood", [Vector2(-64, 28), Vector2(20, 28), Vector2(20, 58), Vector2(-64, 58)]],
+			["line", [Vector2(-60, 28), Vector2(-60, 56)]], ["line", [Vector2(-12, 28), Vector2(-12, 56)]],
+			["body", [Vector2(32, 22), Vector2(68, 22), Vector2(68, 62), Vector2(32, 62)]],
+			["glass", [Vector2(56, 44), Vector2(68.5, 44), Vector2(68.5, 58), Vector2(58, 58)]]],
+		"buggy": [["wheel", -40, 18], ["wheel", 42, 18],
+			["line", [Vector2(-48, 37), Vector2(-48, 107)]],
+			["body", [Vector2(-48, 94), Vector2(-30, 94), Vector2(-30, 106), Vector2(-48, 106)]],
+			["low", [Vector2(-50, 14), Vector2(46, 14), Vector2(46, 22), Vector2(-50, 22)]],
+			["dark", [Vector2(-49, 33), Vector2(-27, 33), Vector2(-27, 45), Vector2(-49, 45)]],
+			["dark", [Vector2(-17, 32), Vector2(-11, 32), Vector2(-11, 48), Vector2(-17, 48)]],
+			["body", [Vector2(-47, 22), Vector2(23, 22), Vector2(23, 34), Vector2(-47, 34)]],
+			["body", [Vector2(23, 14), Vector2(66, 18), Vector2(66, 24), Vector2(23, 34)]],
+			["line", [Vector2(-22, 34), Vector2(-22, 62), Vector2(14, 56), Vector2(22, 34)]]],
+		"rally": [["wheel", -40, 20], ["wheel", 42, 20],
+			["dark", [Vector2(-60, 21), Vector2(64, 21), Vector2(64, 30), Vector2(-60, 30)]],
+			["body", [Vector2(16, 28), Vector2(68, 28), Vector2(68, 52), Vector2(56, 72), Vector2(16, 72)]],
+			["glass", [Vector2(58, 54), Vector2(67.5, 54), Vector2(57, 70), Vector2(50, 70)]],
+			["body", [Vector2(-62, 30), Vector2(14, 30), Vector2(14, 62), Vector2(-62, 62)]],
+			["accent", [Vector2(-54, 62), Vector2(6, 62), Vector2(6, 64), Vector2(-54, 64)], Color("#e8503a")],
+			["dark", [Vector2(18, 72), Vector2(34, 72), Vector2(34, 80), Vector2(18, 80)]]],
+		"bug": [["wheel", -38, 17], ["wheel", 40, 17],
+			["body", [Vector2(-58, 16), Vector2(64, 16), Vector2(66, 26), Vector2(40, 38), Vector2(20, 56),
+				Vector2(-20, 58), Vector2(-50, 44), Vector2(-60, 28)]],
+			["glass", [Vector2(-34, 40), Vector2(28, 40), Vector2(16, 54), Vector2(-18, 55)]],
+			["line", [Vector2(-24, 58), Vector2(-24, 63)]], ["line", [Vector2(20, 56), Vector2(20, 63)]],
+			["accent", [Vector2(-40, 63), Vector2(40, 63), Vector2(48, 65), Vector2(40, 67), Vector2(-40, 67)], Color("#2ab0c8")]],
+		"monster": [["wheel", -42, 26], ["wheel", 46, 26],
+			["line", [Vector2(-42, 26), Vector2(-36, 44)]], ["line", [Vector2(46, 26), Vector2(52, 44)]],
+			["low", [Vector2(-58, 41), Vector2(66, 41), Vector2(66, 47), Vector2(-58, 47)]],
+			["body", [Vector2(-58, 47), Vector2(66, 47), Vector2(66, 59), Vector2(-58, 59)]],
+			["body", [Vector2(-58, 59), Vector2(-30, 59), Vector2(-30, 65), Vector2(-58, 65)]],
+			["glass", [Vector2(-30, 58), Vector2(26, 58), Vector2(16, 76), Vector2(-28, 76)]],
+			["body", [Vector2(-29, 76), Vector2(17, 76), Vector2(17, 80), Vector2(-29, 80)]],
+			["dark", [Vector2(9, 80), Vector2(15, 80), Vector2(15, 85), Vector2(9, 85)]]],
+		"crawler": [["wheel", -44, 24], ["wheel", 46, 24],
+			["low", [Vector2(-50, 27), Vector2(50, 27), Vector2(50, 33), Vector2(-50, 33)]],
+			["dark", [Vector2(25, 34), Vector2(47, 34), Vector2(47, 46), Vector2(25, 46)]],
+			["body", [Vector2(21, 46), Vector2(55, 46), Vector2(55, 49), Vector2(21, 49)]],
+			["dark", [Vector2(-19, 34), Vector2(-13, 34), Vector2(-13, 50), Vector2(-19, 50)]],
+			["body", [Vector2(-34, 35), Vector2(22, 35), Vector2(22, 45), Vector2(-34, 45)]],
+			["body", [Vector2(-26, 66), Vector2(14, 66), Vector2(14, 68), Vector2(-26, 68)]],
+			["paint", [Vector2(-50, 34), Vector2(56, 34)]],
+			["paint", [Vector2(-50, 34), Vector2(-30, 54)]],
+			["paint", [Vector2(-30, 34), Vector2(-26, 66), Vector2(14, 64), Vector2(40, 36)]]],
+		"expedition": [["wheel", -46, 18], ["wheel", -20, 18], ["wheel", 46, 18],
+			["dark", [Vector2(-65, 21), Vector2(65, 21), Vector2(65, 27), Vector2(-65, 27)]],
+			["body", [Vector2(30, 27), Vector2(66, 27), Vector2(66, 57), Vector2(30, 57)]],
+			["glass", [Vector2(52, 44), Vector2(66.5, 44), Vector2(62, 56), Vector2(52, 56)]],
+			["body", [Vector2(-62, 27), Vector2(18, 27), Vector2(18, 69), Vector2(-62, 69)]],
+			["glass", [Vector2(-52, 51), Vector2(-36, 51), Vector2(-36, 61), Vector2(-52, 61)]],
+			["glass", [Vector2(-16, 51), Vector2(0, 51), Vector2(0, 61), Vector2(-16, 61)]],
+			["accent", [Vector2(-46, 69), Vector2(-2, 69), Vector2(-2, 77), Vector2(-46, 77)], Color("#3f6b3a")]],
+	}
+
+	func _draw_vehicle(id: String, a: float) -> void:
+		var parts: Array = SIDES.get(id, SIDES["sled"])
+		var top := 0.0
+		for p in parts:
+			if p[0] == "wheel":
+				top = maxf(top, float(p[2]) * 2.0)
+			else:
+				for v: Vector2 in p[1]:
+					top = maxf(top, v.y)
+		top = minf(top, 86.0)   # the buggy's whip flag may poke out of the tile
+		var k := minf(size.x * 0.9 / 140.0, size.y * 0.9 / top)
+		var base := Vector2(size.x * 0.5 - 2.0 * k, size.y * 0.5 + top * k * 0.5)
+		var to := func(v: Vector2) -> Vector2: return base + Vector2(v.x, -v.y) * k
+		var cols := { "body": body, "paint": body, "low": body.darkened(0.38), "glass": Color("#6d93ab"),
+			"dark": Color("#3b424c"), "light": Color("#e9eef2"), "wood": Color("#6b4a2e") }
+		draw_line(to.call(Vector2(-70, 0)), to.call(Vector2(72, 0)), Color(0, 0, 0, 0.25 * a), maxf(2.0, k * 3.0))
+		for p in parts:
+			match String(p[0]):
+				"wheel":
+					var c: Vector2 = to.call(Vector2(p[1], p[2]))
+					draw_circle(c, float(p[2]) * k, Color(Color("#3b424c"), a))
+					draw_circle(c, float(p[2]) * k * 0.5, Color(body.lightened(0.2), a))
+				"line", "paint":
+					var pts := PackedVector2Array()
+					for v: Vector2 in p[1]:
+						pts.append(to.call(v))
+					var lc: Color = body if p[0] == "paint" else Color("#3b424c")
+					draw_polyline(pts, Color(lc, a), maxf(1.5, k * 3.5), true)
+				_:
+					var pts := PackedVector2Array()
+					for v: Vector2 in p[1]:
+						pts.append(to.call(v))
+					var fc: Color = p[2] if p[0] == "accent" else cols[p[0]]
+					draw_colored_polygon(pts, Color(fc, a))
