@@ -24,6 +24,18 @@
 - Always tell Guillaume when you do: say what you added under an `## AGENTS.md` heading in the PR
   body, and mention it in your reply in the project thread.
 
+## Tests (rule from Guillaume, 2026-11-12)
+
+- Every change comes with tests that cover it. A new feature gets a test of what it should do; a
+  bug fix gets a regression test that fails on the old code and passes with the fix, named after the
+  case that found it (first one: the "Pretzel" case in `tests/medals_test.gd`, a race win that showed
+  no medal on the menu).
+- Test what the player sees, not just the stored value: if a menu shows it, test the function the
+  menu reads. Keep that logic in a static function (e.g. `Campaign.medal_counts()`,
+  `Campaign.save_race()`) so a headless test can call it without building the UI.
+- A new test file gets a step in `.github/workflows/sim.yml` and a line in the list below.
+- Can't run Godot locally? CI runs every test on each push: wait for it to pass before merging.
+
 ## Checks to run before pushing
 
 ```
@@ -36,6 +48,7 @@ godot --headless --path . --script tests/wall_test.gd    # a car on the road edg
 godot --headless --path . --script tests/tutorial_test.gd  # the first-launch tutorial can be finished
 godot --headless --path . --script tests/cosmetics_test.gd  # garage items: prices, every look builds, looks only
 godot --headless --path . --script tests/economy_test.gd    # coins, Track of the day, awards, buying, progress reset
+godot --headless --path . --script tests/medals_test.gd     # medals saved and shown: race wins, layout bumps
 godot --headless --path . --script tests/award_anim_test.gd # every award has a medallion scene that draws
 godot --headless --path . --script tests/rivals_test.gd    # rival tiers get harder, stay beatable (~4 min)
 godot --headless --path . --script tests/obstacles_test.gd # the AI's line never touches an Obstacles post

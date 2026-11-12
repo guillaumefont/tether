@@ -65,6 +65,26 @@ static func medal(track_name: String, variant: String, mode: String) -> int:
 		return maxi(Records.get_medal(k, "trial"), Medals.trial_tier(track_name, variant, Records.get_best(k)))
 	return Records.get_medal(k, "race")
 
+# a one-player race just ended: save its medal. Returns the tier held before, the tier this
+# run earned and whether it is an upgrade (the results badge and the coins come from these)
+static func save_race(track_name: String, variant: String, place: int, lead: float, finished: bool) -> Dictionary:
+	var k := Records.key(track_name, variant)
+	var held := Records.get_medal(k, "race")
+	var tier := Medals.race_tier(place, lead) if finished else 0
+	return { "held": held, "tier": tier, "new": Records.award_medal(k, "race", tier) }
+
+# every medal held, counted by tier (the home page tally): one per track and variant in
+# Time trial and one in Race, so a race won in the campaign counts as much as a lap target
+static func medal_counts() -> Array:
+	var n := [0, 0, 0, 0]
+	for d in Defs.TRACKS:
+		for v in Defs.VARIANTS:
+			for mode in ["trial", "race"]:
+				var m := medal(d["name"], v[0], mode)
+				if m > 0:
+					n[m - 1] += 1
+	return n
+
 static func event_medal(i: int) -> int:
 	var e := event(i)
 	return medal(e["name"], e["variant"], e["mode"])

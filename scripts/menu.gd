@@ -425,7 +425,7 @@ func show_home() -> void:
 	cab.ink = true
 	cab.font = ui.f_bold
 	cab.font_size = 14
-	cab.counts = _medal_counts()
+	cab.counts = Campaign.medal_counts()
 	cab.custom_minimum_size = Vector2(230, 24)
 	cab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	sub.add_child(cab)
@@ -625,18 +625,6 @@ static func _variant_name(v: String) -> String:
 		if x[0] == v:
 			return x[1]
 	return v
-
-# every medal held, counted by tier: one per track and variant in Time trial and one in Race
-# (a race won in the campaign counts as much as a lap target beaten)
-func _medal_counts() -> Array:
-	var n := [0, 0, 0, 0]
-	for d in Defs.TRACKS:
-		for v in Defs.VARIANTS:
-			for mode in ["trial", "race"]:
-				var m := Campaign.medal(d["name"], v[0], mode)
-				if m > 0:
-					n[m - 1] += 1
-	return n
 
 func _first_open_event() -> int:
 	for i in Campaign.count():

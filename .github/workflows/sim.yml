@@ -34,6 +34,8 @@ jobs:
         run: ./godot --headless --path . --script tests/cosmetics_test.gd
       - name: Coins, Track of the day, awards and progress reset
         run: ./godot --headless --path . --script tests/economy_test.gd
+      - name: Medals are saved and shown (race wins, layout bumps)
+        run: ./godot --headless --path . --script tests/medals_test.gd
       - name: Award medallions all draw
         run: ./godot --headless --path . --script tests/award_anim_test.gd
       - name: Rival tiers are balanced
