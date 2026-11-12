@@ -2,9 +2,13 @@
 # Only solo Time Trial writes here; races never set records (same rule as the prototype).
 extends RefCounted
 
+const Defs = preload("res://scripts/track_defs.gd")
+const Medals = preload("res://scripts/medals.gd")
+
 const PATH := "user://records.cfg"
 # Bumped whenever track layouts or the driving rules change: best times and ghosts set on an
-# older layout are dropped (they no longer match the road). Medals and campaign progress are kept.
+# older layout are dropped (they no longer match the road). Medals and campaign progress are kept:
+# a Time Trial medal is saved as its own tier ("medal_trial") before its time goes.
 # 2: 2026-11 rework (shorter straights, more bends and crossings).
 # 3: the tether no longer shortens when hooked early (times set with the old rope are easier).
 const LAYOUT_VERSION := 3
@@ -23,9 +27,17 @@ static func _drop_old_layout_records() -> void:
 	if int(_cfg.get_value(META, "layouts", 1)) >= LAYOUT_VERSION:
 		return
 	var had_any := _cfg.get_sections().size() > 0
+	var names := {}   # record key -> [track, variant]
+	for d in Defs.TRACKS:
+		for v in Defs.VARIANTS:
+			names[key(d["name"], v[0])] = [d["name"], v[0]]
 	for k in _cfg.get_sections():
 		if k == META:
 			continue
+		if names.has(k) and _cfg.has_section_key(k, "best"):
+			var tier := Medals.trial_tier(names[k][0], names[k][1], float(_cfg.get_value(k, "best")))
+			if tier > int(_cfg.get_value(k, "medal_trial", 0)):
+				_cfg.set_value(k, "medal_trial", tier)
 		for key in ["best", "lap"]:
 			if _cfg.has_section_key(k, key):
 				_cfg.erase_section_key(k, key)
@@ -102,7 +114,9 @@ static func set_ghost(k: String, trace: Array) -> void:
 		flat[i * 3] = v.x; flat[i * 3 + 1] = v.y; flat[i * 3 + 2] = v.z
 	_write_ghost(k, flat)
 
-# medals: best tier earned (0 none, 1 bronze .. 4 pivot) per track + variant, per mode
+# medals: best tier earned (0 none, 1 bronze .. 4 pivot) per track + variant, per mode.
+# Time Trial medals are saved here too (as well as read from the best time), so they
+# survive a layout bump that drops the times.
 static func get_medal(k: String, mode: String) -> int:
 	return int(_load().get_value(k, "medal_" + mode, 0))
 

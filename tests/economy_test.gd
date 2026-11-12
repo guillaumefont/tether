@@ -12,8 +12,8 @@ const Cosmetics = preload("res://scripts/cosmetics.gd")
 const Records = preload("res://scripts/records.gd")
 const Defs = preload("res://scripts/track_defs.gd")
 const Times = preload("res://scripts/medal_times.gd")
-const Campaign = preload("res://scripts/campaign.gd")
 const Medals = preload("res://scripts/medals.gd")
+const Campaign = preload("res://scripts/campaign.gd")
 
 var bad := 0
 
@@ -95,6 +95,21 @@ func _init() -> void:
 	for a in Awards.LIST:
 		if a["coins"] <= 0 or a["name"] == "" or a["desc"] == "":
 			fail("award %s incomplete" % a["id"])
+	# a layout bump drops the times but keeps the Time trial medals they earned
+	var lk := Records.key("Lasso", "standard")
+	var old := ConfigFile.new()
+	old.set_value(Records.META, "layouts", Records.LAYOUT_VERSION - 1)
+	old.set_value(lk, "best", Medals.targets("Lasso", "standard")[2])   # a Gold lap
+	old.set_value(lk, "medal_race", 2)
+	old.save(Records.PATH)
+	Records._cfg = null
+	expect(Records.get_best(lk), -1.0, "old layout time dropped")
+	expect(Records.get_medal(lk, "trial"), 3, "old layout Gold kept")
+	expect(Campaign.medal("Lasso", "standard", "trial"), 3, "campaign sees the kept Gold")
+	expect(Records.get_medal(lk, "race"), 2, "race medal kept")
+	# a slower lap on the new layout never takes a medal away
+	Records.set_best(lk, 99.0)
+	expect(Campaign.medal("Lasso", "standard", "trial"), 3, "medal outlives a slower time")
 	# reset
 	Records.award_medal(Records.key("Lasso", "standard"), "race", 3)
 	Records.set_best(Records.key("Lasso", "standard"), 9.0)
@@ -103,6 +118,7 @@ func _init() -> void:
 	Cosmetics.unequip_all()
 	expect(Wallet.coins(), 0, "coins after reset")
 	expect(Records.get_medal(Records.key("Lasso", "standard"), "race"), 0, "medals after reset")
+	expect(Records.get_medal(Records.key("Lasso", "standard"), "trial"), 0, "trial medals after reset")
 	expect(Records.get_best(Records.key("Lasso", "standard")), -1.0, "records after reset")
 	expect(Cosmetics.owned("paint", signal_paint), false, "looks after reset")
 	expect(Cosmetics.equipped("paint"), "amber", "default paint after reset")
