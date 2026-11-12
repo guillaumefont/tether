@@ -74,7 +74,7 @@ class Sheet extends PanelContainer:
 	var ruled := true
 	var rule_top := 0.0      # first ruled line (under the title)
 	var margin_x := 0.0      # > 0: a red margin line this far in from the left edge
-	var clip_x := -1.0       # >= 0: a paper clip over the top edge, this far from the right
+	var clip_x := -1.0       # >= 0: a paper clip over the top edge, this far from the right (8 px from the left at most)
 
 	func _init() -> void:
 		var s := StyleBoxFlat.new()
@@ -137,7 +137,7 @@ class Sheet extends PanelContainer:
 		if margin_x > 0.0:
 			draw_line(Vector2(margin_x, 0), Vector2(margin_x, size.y), MARGIN, 2.0)
 		if clip_x >= 0.0:
-			clip(self, Vector2(size.x - clip_x, -18), 0.14)
+			clip(self, Vector2(maxf(8.0, size.x - clip_x), -18), 0.14)
 
 # a strip of tape holding a photo or a note onto the page (child of the thing it holds)
 class Tape extends Control:

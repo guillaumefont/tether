@@ -212,37 +212,35 @@ func _frame() -> VBoxContainer:
 	m.add_theme_constant_override("margin_top", (14 if tall else 16) + int(ins["t"]))
 	m.add_theme_constant_override("margin_bottom", (12 if tall else 16) + int(ins["b"]))
 	if tabs:
-		if tall:   # portrait: the page fills the top, the photo lies under it
-			m.anchor_bottom = HOME_PAGE_TALL
+		if tall:   # portrait: the page as tall as what it holds, the photo under it
+			m.anchor_bottom = 0.0
 			m.add_theme_constant_override("margin_top", 60 + int(ins["t"]))
 		else:      # landscape: the page on the left, the photo on the right
 			m.anchor_right = HOME_PAGE_W
+			m.anchor_bottom = 0.0   # as tall as what it holds
 			m.add_theme_constant_override("margin_left", 40 + int(ins["l"]))
 			m.add_theme_constant_override("margin_right", 0)
-			m.add_theme_constant_override("margin_top", 26 + int(ins["t"]))
-			m.add_theme_constant_override("margin_bottom", 96 + int(ins["b"]))
+			m.add_theme_constant_override("margin_top", (26 if not _short() else 14) + int(ins["t"]))
 	_tabs = null
-	if tabs:
-		_tabs = VBoxContainer.new()
-		if tall:
-			_tabs.anchor_left = 1.0; _tabs.anchor_right = 1.0
-			_tabs.offset_right = -int(ins["r"])
-			_tabs.offset_left = _tabs.offset_right - TAB_W - 8
-			_tabs.offset_top = 130 + int(ins["t"])
-		else:
-			_tabs.anchor_left = HOME_PAGE_W; _tabs.anchor_right = HOME_PAGE_W
-			_tabs.offset_left = -8
-			_tabs.offset_right = TAB_W
-			_tabs.offset_top = 96 + int(ins["t"])
-		_tabs.add_theme_constant_override("separation", 6)
-		desk.add_child(_tabs)   # before the page: it lies on top of their inner ends
 	desk.add_child(m)
 	var sheet := Paper.Sheet.new()
 	sheet.rule_top = 86.0 if not tall else 70.0
 	m.add_child(sheet)
 	if tabs:
+		# the bookmark tabs stick out of the page's right edge, wherever that edge ends up
+		# (a long line can make the page wider than planned on a narrow phone). They lie on
+		# top of the page, so nothing can cover them and every tap reaches them.
+		_tabs = VBoxContainer.new()
+		_tabs.add_theme_constant_override("separation", 6)
+		desk.add_child(_tabs)
+		var place_tabs := func():
+			var r := Rect2(m.position + sheet.position, sheet.size)
+			_tabs.position = Vector2(r.end.x - 10.0, r.position.y + (110.0 if tall else 70.0))
+			_tabs.size = Vector2(TAB_W + 8, 0)
+		sheet.item_rect_changed.connect(place_tabs)
+		m.item_rect_changed.connect(place_tabs)
 		sheet.margin_x = 26.0
-		sheet.clip_x = 200.0
+		sheet.clip_x = 200.0 if not tall else 99999.0   # portrait: by the left corner, clear of the title
 		sheet.get_theme_stylebox("panel").content_margin_left = 40
 	# tilt the page round its own middle
 	desk.rotation = deg_to_rad(HOME_TILT if tabs else PAGE_TILT)
@@ -254,8 +252,11 @@ func _frame() -> VBoxContainer:
 	_land(desk)
 	return vb
 
+# a low landscape screen (a phone on its side): the home page packs tighter to fit
+func _short() -> bool:
+	return not ui.is_portrait() and get_viewport_rect().size.y < 560.0
+
 const HOME_PAGE_W := 0.6      # landscape home: the page's share of the screen width
-const HOME_PAGE_TALL := 0.54  # portrait home: its share of the height
 const HOME_TILT := -1.3       # degrees
 const PAGE_TILT := -0.35
 var _page: Paper.Sheet
@@ -400,8 +401,8 @@ func show_home() -> void:
 	var logo := Art.Logo.new()
 	logo.ink = true
 	logo.font = ui.f_display
-	logo.font_size = 24 if tall else 36
-	logo.custom_minimum_size = Vector2(0, 44 if tall else 60)
+	logo.font_size = 24 if tall else (28 if _short() else 36)
+	logo.custom_minimum_size = Vector2(0, 44 if tall else (46 if _short() else 60))
 	logo.custom_minimum_size.x = logo.min_width()
 	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top.add_child(logo)
@@ -415,7 +416,7 @@ func show_home() -> void:
 	top.add_child(coins)
 	vb.add_child(top)
 	var sub := HBoxContainer.new()
-	var cap: Label = ui._label("ROADBOOK  ·  CO-DRIVER'S NOTES" if not tall else "ROADBOOK", 12, C_MUTED, ui.f_bold)
+	var cap: Label = ui._label("ROADBOOK  ·  CO-DRIVER'S NOTES" if not (tall or _short()) else "ROADBOOK", 12, C_MUTED, ui.f_bold)
 	cap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	cap.autowrap_mode = TextServer.AUTOWRAP_OFF
@@ -462,7 +463,7 @@ func show_home() -> void:
 	lines.add_child(_road_line(3, "duel", "2 PLAYERS", "One phone, two thumbs",
 		func(): kind = "versus"; _list_scroll.erase(kind); show_list()))
 	# a line of advice, handwritten under the lines
-	var tip := Paper.note("Hook the tower into the bend, let go when the nose points out!", 22 if tall else 25)
+	var tip := Paper.note("Hook the tower into the bend, let go when the nose points out!", 22 if tall or _short() else 25)
 	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	tip.rotation = 0.0
 	var tm := MarginContainer.new()
@@ -479,14 +480,25 @@ func show_home() -> void:
 	var ins: Dictionary = ui.safe_insets()
 	if tall:
 		daily.anchor_left = 0.12; daily.anchor_right = 0.88
-		daily.anchor_top = HOME_PAGE_TALL; daily.anchor_bottom = 1.0
-		daily.offset_top = 22; daily.offset_bottom = -44 - int(ins["b"])
-	else:
-		daily.anchor_left = HOME_PAGE_W; daily.anchor_right = 1.0
 		daily.anchor_top = 0.0; daily.anchor_bottom = 1.0
-		daily.offset_left = 92; daily.offset_right = -40 - int(ins["r"])
+		daily.offset_bottom = -30 - int(ins["b"])
+	else:
+		daily.anchor_left = 0.0; daily.anchor_right = 1.0
+		daily.anchor_top = 0.0; daily.anchor_bottom = 1.0
+		daily.offset_right = -40 - int(ins["r"])
 		daily.offset_top = 112 + int(ins["t"]); daily.offset_bottom = -110 - int(ins["b"])
 	body.add_child(daily)
+	# it lies clear of the page and its tabs: under the page (portrait) or right of the
+	# tabs (landscape), however big the page turned out
+	var page := _page
+	var place_daily := func():
+		var r := Rect2(page.get_parent().position + page.position, page.size)
+		if tall:
+			daily.offset_top = r.end.y + 22.0
+		else:
+			daily.offset_left = r.end.x + TAB_W + 30.0
+	page.item_rect_changed.connect(place_daily)
+	place_daily.call()
 	daily.rotation = deg_to_rad(3.5 if not tall else 2.5)
 	daily.resized.connect(func(): daily.pivot_offset = daily.size * 0.5)
 
@@ -572,7 +584,7 @@ func _road_line(n: int, icon: String, title: String, sub: String, cb: Callable, 
 	var b := Button.new()
 	_line_style(b)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	b.custom_minimum_size.y = 108 if tall else 80
+	b.custom_minimum_size.y = 84 if tall else (62 if _short() else 80)
 	var h := HBoxContainer.new()
 	h.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	h.offset_left = 2; h.offset_right = -4
