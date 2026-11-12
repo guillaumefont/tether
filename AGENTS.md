@@ -95,6 +95,11 @@ Only redo the ones where the change is visible, and put before/after images in t
   paper-like: pages slide in (`_land` in `menu.gd`), highlighter strokes draw on, medals are stamped
   (`Stamp.thump()`). Any full-screen container laid over buttons must have
   `mouse_filter = MOUSE_FILTER_IGNORE`, or it eats their taps (the home bookmarks broke that way).
+- Tether: fixed length, set by the distance to the tower at the moment of hooking. It never
+  shortens (no ratchet, no reel-in) and never pays out; hooked early, the rope hangs slack until the
+  car swings out to that length. Grab timing alone sets the line. After changing the driving rules,
+  rerun `tools/gen_medals.gd` and bump `LAYOUT_VERSION` in `scripts/records.gd` (old times were set
+  under the old rules).
 - The race camera stays fairly top-down (68°) while the player steers, so lines through bends stay
   readable. Low cinematic shots (`WorldView.CINE_SHOTS`, picked in `main.gd` `_pick_shot`) are only
   for moments nobody steers: countdown, finish/results, the tutorial's cards and frozen bends.

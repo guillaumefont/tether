@@ -263,10 +263,8 @@ func step_car(c: Car, dt: float) -> void:
 		c.pos += c.vel * dt
 		var rv := c.pos - a.pos
 		var d := rv.length()
-		# ratchet: if the car drifts closer to the pivot the tether takes up the slack;
-		# it never pays out again. No speed is added.
-		if d < c.rope:
-			c.rope = maxf(a.clear + CR, d)
+		# fixed length: the tether keeps the length it had when grabbed. Hooked early, the
+		# car runs on inside it (rope slack) until it pulls taut; it never shortens or pays out.
 		if d > c.rope:
 			var nv := rv / d
 			c.pos = a.pos + nv * c.rope
