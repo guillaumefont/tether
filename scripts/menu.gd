@@ -263,7 +263,7 @@ var _page: Paper.Sheet
 var _last_screen := ""
 
 static func _depth(scr: String) -> int:
-	return { "home": 0, "list": 1, "garage": 1, "awards": 1, "event": 2 }.get(scr, 1)
+	return { "home": 0, "worlds": 1, "list": 2, "garage": 1, "awards": 1, "event": 3 }.get(scr, 1)
 
 # the page slides onto the desk and settles (only when the screen changes, not on a rebuild)
 func _land(desk: Control) -> void:
@@ -457,7 +457,7 @@ func show_home() -> void:
 	var first := _first_open_event()
 	var next_name: String = Themes.get_theme(Campaign.CHAPTERS[Campaign.chapter_of(first)]["theme"])["name"]
 	lines.add_child(_road_line(1, "flag", "CAMPAIGN", "%d / %d events  ·  next: %s, event %d" % [cleared, Campaign.count(), next_name, first - Campaign.chapter_start(Campaign.chapter_of(first)) + 1],
-		func(): kind = "campaign"; world = -1; _list_scroll.erase(_list_key()); focus = _first_open_event() - Campaign.chapter_start(Campaign.chapter_of(_first_open_event())); show_list(), true))
+		func(): kind = "campaign"; world = -1; show_list(), true))
 	lines.add_child(_road_line(2, "watch", "TIME ATTACK", "%d tracks  ·  4 variants  ·  chase your ghost" % Defs.TRACKS.size(),
 		func(): kind = "attack"; _list_scroll.erase(kind); show_list()))
 	lines.add_child(_road_line(3, "duel", "2 PLAYERS", "One phone, two thumbs",
@@ -845,9 +845,10 @@ func show_list() -> void:
 const WORLD_TINT := { "snow": Color("#d8e8f2"), "forest": Color("#d3e6c8"), "sand": Color("#eedcb4"), "rock": Color("#d6d0c6") }
 
 func _show_campaign() -> void:
-	screen = "list"
 	if world < 0 or not Campaign.chapter_open(world):
-		world = Campaign.chapter_of(_first_open_event())
+		_show_worlds()
+		return
+	screen = "list"
 	var vb := _frame()
 	var tall: bool = ui.is_portrait()
 	var cleared := 0
@@ -929,6 +930,119 @@ func _show_campaign() -> void:
 	if focus >= 0 and focus < lines.size():
 		_reveal.call_deferred(_scroller, lines[focus])
 	focus = -1
+
+# The first step of the campaign: pick a world. The four worlds are photos taped onto the
+# page, a little crooked; a locked one is greyed with a padlock and what opens it, a
+# finished one is stamped DONE, and the one in play has a note in pen.
+func _show_worlds() -> void:
+	screen = "worlds"
+	var vb := _frame()
+	var tall: bool = ui.is_portrait()
+	var cleared := 0
+	for i in Campaign.count():
+		if Campaign.event_medal(i) > 0: cleared += 1
+	_header(vb, "Campaign", "Pick a world  ·  %d / %d events cleared" % [cleared, Campaign.count()], func(): go_back())
+	var g := GridContainer.new()
+	g.columns = 2 if tall else 4
+	g.add_theme_constant_override("h_separation", 18 if tall else 26)
+	g.add_theme_constant_override("v_separation", 22)
+	g.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var wrap := MarginContainer.new()   # room for the tape and the tilt round the photos
+	for side in ["left", "right", "top", "bottom"]:
+		wrap.add_theme_constant_override("margin_" + side, 14 if side != "top" else 22)
+	wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	wrap.add_child(g)
+	vb.add_child(wrap)
+	var playing := Campaign.chapter_of(_first_open_event())
+	for c in Campaign.CHAPTERS.size():
+		g.add_child(_world_photo(c, c == playing, tall))
+	focus = -1
+
+func _world_photo(c: int, playing: bool, tall: bool) -> Button:
+	var ch: Dictionary = Campaign.CHAPTERS[c]
+	var theme: String = ch["theme"]
+	var open := Campaign.chapter_open(c)
+	var done := open and Campaign.chapter_medals(c) == Campaign.chapter_size(c)
+	var b := Button.new()
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	b.disabled = not open
+	_photo_style(b)
+	b.add_theme_stylebox_override("disabled", b.get_theme_stylebox("normal"))
+	var v := VBoxContainer.new()
+	v.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	v.offset_left = 10; v.offset_right = -10; v.offset_top = 10; v.offset_bottom = -8
+	v.add_theme_constant_override("separation", 4)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var pic := TextureRect.new()
+	pic.texture = WORLD_ART.get(theme, WORLD_ART["snow"])
+	pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	pic.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	pic.custom_minimum_size.y = 60
+	pic.modulate = Color.WHITE if open else Color(0.5, 0.5, 0.5)
+	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(pic)
+	var cap: Label = ui._label("WORLD %d" % (c + 1), 11, C_MUTED, ui.f_bold)
+	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(cap)
+	var name: Label = ui._label(String(Themes.get_theme(theme)["name"]).to_upper(), 17 if tall else 20, C_FG if open else C_MUTED, ui.f_display)
+	name.autowrap_mode = TextServer.AUTOWRAP_OFF
+	name.clip_text = true
+	v.add_child(name)
+	var line := ""
+	if not open:
+		line = "Finish %s" % Themes.get_theme(Campaign.CHAPTERS[c - 1]["theme"])["name"]
+	else:
+		line = "%d / %d medals" % [Campaign.chapter_medals(c), Campaign.chapter_size(c)]
+	var l2 := Paper.note(line, 19 if tall else 21, Paper.PEN if open else Paper.PENCIL, 0.0)
+	v.add_child(l2)
+	b.add_child(v)
+	# a strip of tape at the top, a padlock on a shut world, a stamp on a finished one
+	var tape := Paper.Tape.new()
+	tape.tilt = -0.1 if c % 2 == 0 else 0.08
+	tape.anchor_left = 0.5; tape.anchor_right = 0.5
+	tape.offset_left = -40; tape.offset_right = 40; tape.offset_top = -12; tape.offset_bottom = 12
+	b.add_child(tape)
+	if not open:
+		var lk := _icon("lock", 40, Paper.PAPER)
+		lk.anchor_left = 0.5; lk.anchor_right = 0.5; lk.anchor_top = 0.3; lk.anchor_bottom = 0.3
+		lk.offset_left = -20; lk.offset_right = 20; lk.offset_top = -20; lk.offset_bottom = 20
+		b.add_child(lk)
+	elif done:
+		var st := Paper.Stamp.new()
+		st.text = "DONE"
+		st.col = Paper.ACCENT_INK
+		st.font = ui.f_display
+		st.anchor_left = 1.0; st.anchor_right = 1.0
+		st.offset_left = -84; st.offset_right = -12; st.offset_top = 16; st.offset_bottom = 88
+		b.add_child(st)
+	if playing and not done:
+		# a red-pen note on the photo's corner, on a scrap of paper so it reads on any picture
+		var nx := Paper.note("you are here", 20 if tall else 23, Paper.RED_INK, 0.0)
+		var tag := PanelContainer.new()
+		var ts := Paper.box(Color("#fdfcf8"), Color.TRANSPARENT, 0, 3)
+		ts.content_margin_left = 6; ts.content_margin_right = 6
+		tag.add_theme_stylebox_override("panel", ts)
+		tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tag.add_child(nx)
+		tag.anchor_left = 1.0; tag.anchor_right = 1.0
+		tag.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+		tag.offset_right = -4; tag.offset_top = 22
+		tag.rotation = 0.1
+		b.add_child(tag)
+		b.add_child(nx)
+	# lie a little crooked on the page
+	b.rotation = deg_to_rad([-2.0, 1.6, -1.2, 2.2][c % 4])
+	b.resized.connect(func(): b.pivot_offset = b.size * 0.5)
+	b.pressed.connect(func():
+		world = c
+		_list_scroll.erase(_list_key())
+		var first := _first_open_event()
+		focus = first - Campaign.chapter_start(c) if Campaign.chapter_of(first) == c else -1
+		_show_campaign())
+	return b
 
 # a world's tab: its picture, name and medals; the open one is joined to the page, a locked
 # one is greyed and can't be tapped
@@ -1480,6 +1594,7 @@ func refresh() -> void:
 	match screen:
 		"home": show_home()
 		"list": show_list()
+		"worlds": _show_worlds()
 		"event": show_event()
 		"garage": show_garage()
 		"awards": show_awards()
@@ -1511,6 +1626,13 @@ func go_back() -> bool:
 			show_list()
 			return true
 		"list":
+			if kind == "campaign":   # the events of a world -> the world select
+				world = -1
+				_show_worlds()
+			else:
+				show_home()
+			return true
+		"worlds":
 			show_home()
 			return true
 	return false

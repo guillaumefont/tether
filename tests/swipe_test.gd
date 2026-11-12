@@ -104,17 +104,25 @@ func _init() -> void:
 	var r: Rect2 = card.get_global_rect()
 	check(menu.screen == "list" and menu._scroller.get_global_rect().encloses(r), "back: the list shows that track's card (%d)" % t1)
 
-	# the campaign opens on the world of the event in play, its events as lines; a world tab
-	# switches world
+	# the campaign opens on the world select; tapping the world in play lists its events as
+	# lines; a world tab switches world; back returns to the world select
 	menu.kind = "campaign"
 	menu.world = -1
 	menu.show_list()
 	await frames(4)
+	check(menu.screen == "worlds", "the campaign opens on the world select (%s)" % menu.screen)
 	var Campaign = preload("res://scripts/campaign.gd")
 	var w0: int = Campaign.chapter_of(menu._first_open_event())
+	var photos: Array = menu.body.find_children("*", "Button", true, false).filter(func(b): return b.get_parent() is GridContainer)
+	check(photos.size() == Campaign.CHAPTERS.size(), "a photo per world (%d)" % photos.size())
+	await tap(photos[w0].get_global_rect().get_center())
+	await frames(3)
 	check(menu.world == w0 and menu._scroller.content.get_child(0).get_child_count() == Campaign.chapter_size(w0), "campaign opens on the world in play (%d), one line per event" % menu.world)
 	var tabs: Array = menu.body.find_children("*", "Button", true, false).filter(func(b): return b.custom_minimum_size.y == 66)
 	check(tabs.size() == Campaign.CHAPTERS.size(), "a tab per world (%d)" % tabs.size())
+	menu.go_back()
+	await frames(3)
+	check(menu.screen == "worlds", "back from a world's events goes to the world select (%s)" % menu.screen)
 
 	# the home screen's bookmark tabs take taps (the frame round the page must not eat them)
 	menu.show_home()
