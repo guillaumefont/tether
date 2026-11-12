@@ -834,7 +834,10 @@ func _show_tutorial_end() -> void:
 
 # a campaign world just finished: say which theme it opened
 func _unlock_note() -> String:
-	return _theme_note()
+	var n := _theme_note()
+	if ui.menu.gold_to_advance():
+		n += "Win Gold to open the next event. "
+	return n
 
 # One-player run over: pay the medal and Track of the day coins and any awards reached,
 # add their badges, and return a line for the results note.

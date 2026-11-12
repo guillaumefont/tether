@@ -135,5 +135,45 @@ func _init() -> void:
 	expect(Cosmetics.owned("paint", Cosmetics.find("paint", "cobalt")), false, "Cobalt (5 medals) still to buy")
 	Records.reset()
 	Wallet.reset()
+	_campaign_gold()
+	Records.reset()
+	Wallet.reset()
 	printerr("ECONOMY BAD: %d" % bad)
 	quit(1 if bad > 0 else 0)
+
+# give campaign event i medal tier `tier`, the way playing it would
+func _medal_event(i: int, tier: int) -> void:
+	var e := Campaign.event(i)
+	var k := Records.key(e["name"], e["variant"])
+	if e["mode"] == "trial":
+		Records.set_best(k, Medals.targets(e["name"], e["variant"])[tier - 1])
+	else:
+		Records.award_medal(k, "race", tier)
+
+# Gold opens the next event and finishes a world; an older save keeps what it had
+func _campaign_gold() -> void:
+	Records.reset()
+	var s1 := Campaign.chapter_start(1)
+	expect(Campaign.unlocked(0), true, "first event open")
+	expect(Campaign.unlocked(1), false, "second event shut at start")
+	_medal_event(0, 2)
+	expect(Campaign.unlocked(1), false, "Silver does not open the next event")
+	_medal_event(0, 3)
+	expect(Campaign.unlocked(1), true, "Gold opens the next event")
+	expect(Campaign.cleared(0), true, "Gold clears the event")
+	for i in range(1, s1):
+		_medal_event(i, 3 if i < s1 - 1 else 2)
+	expect(Campaign.chapter_done(0), false, "a world with a Silver is not finished")
+	expect(Campaign.chapter_open(1), false, "next world shut until the last Gold")
+	_medal_event(s1 - 1, 4)
+	expect(Campaign.chapter_done(0), true, "Gold (or Pivot) everywhere finishes the world")
+	expect(Campaign.chapter_open(1), true, "and opens the next one")
+	# an old save, from when any medal opened the next event: Bronze on events 0..2
+	Records.reset()
+	for i in 3:
+		_medal_event(i, 1)
+	expect(Campaign.unlocked(2), true, "an event already medalled stays playable")
+	expect(Campaign.unlocked(3), false, "the next one waits for Gold")
+	# a world finished under the old rule stays finished
+	Records.set_flag("campaign", "done_" + String(Campaign.CHAPTERS[0]["theme"]))
+	expect(Campaign.chapter_open(1), true, "a world saved as finished keeps the next one open")
