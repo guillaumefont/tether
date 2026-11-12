@@ -731,8 +731,7 @@ func _update_gap(c, lap_t: float, gems: bool) -> void:
 	ui.set_hud_color("gap", Color("#7be38b") if gap <= 0.0 else Color("#e2574c"))
 
 static func _ordinal(n: int) -> String:
-	var suf := ["th", "st", "nd", "rd"]
-	return str(n) + (suf[n] if n < 4 else "th")
+	return Race.ordinal(n)
 
 func _show_results() -> void:
 	phase = "results"
@@ -782,13 +781,9 @@ func _show_results() -> void:
 		_world_moment()
 		_award_moment()
 		return
-	var st := race.standings()
-	var winner = st[0]
-	var title := ""
-	if winner.human >= 0 or race.humans > 1:
-		title = winner.name + " wins"
-	else:
-		title = _ordinal(st.find(race.cars.filter(func(c): return c.human >= 0)[0]) + 1) + " place"
+	var res := race.result()
+	var st: Array = res["standings"]
+	var title: String = res["title"]
 	var rows2: Array = []
 	for k in st.size():
 		var c = st[k]
@@ -796,11 +791,9 @@ func _show_results() -> void:
 	var rnote := "Race times don't count for records. Lap records come from Time trial."
 	var rrewards: Array = []
 	if race.humans == 1:
-		var me = race.cars.filter(func(c): return c.human >= 0)[0]
-		var place: int = st.find(me) + 1
-		var lead := 0.0
-		if place == 1 and me.finished:
-			lead = (st[1].finish_time - me.finish_time) if st.size() > 1 and st[1].finished else 99.0
+		var me = res["me"]
+		var place: int = res["place"]
+		var lead: float = res["lead"]
 		var won := Campaign.save_race(name, variant, place, lead, me.finished)
 		var tier: int = won["tier"]
 		if won["new"]:

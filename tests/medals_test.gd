@@ -41,14 +41,14 @@ func _init() -> void:
 		fail("Pretzel standard race is no longer a campaign event: point this test at another race")
 	else:
 		var world := Campaign.chapter_of(ev)
-		var before := Campaign.chapter_medals(world)
+		var before := Campaign.chapter_golds(world)
 		var won := Campaign.save_race("Pretzel", "standard", 1, 1.2, true)
 		expect(won["tier"], 3, "1st place = Gold")
 		expect(won["held"], 0, "nothing held before")
 		expect(won["new"], true, "first win is an upgrade")
 		expect(Records.get_medal(Records.key("Pretzel", "standard"), "race"), 3, "race medal saved")
 		expect(Campaign.event_medal(ev), 3, "campaign line stamped Gold")
-		expect(Campaign.chapter_medals(world), before + 1, "world medal count goes up")
+		expect(Campaign.chapter_golds(world), before + 1, "world Gold count goes up")
 		expect(Campaign.medal_counts()[2], 1, "home tally shows the Gold")
 		if ev + 1 < Campaign.count() and Campaign.chapter_of(ev + 1) == world:
 			expect(Campaign.unlocked(ev + 1), true, "the next event opens")

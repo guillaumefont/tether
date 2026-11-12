@@ -49,6 +49,7 @@ godot --headless --path . --script tests/tutorial_test.gd  # the first-launch tu
 godot --headless --path . --script tests/cosmetics_test.gd  # garage items: prices, every look builds, looks only
 godot --headless --path . --script tests/economy_test.gd    # coins, Track of the day, awards, buying, progress reset
 godot --headless --path . --script tests/medals_test.gd     # medals saved and shown: race wins, layout bumps
+godot --headless --path . --script tests/race_results_test.gd # race results = order over the line, medal from it
 godot --headless --path . --script tests/award_anim_test.gd # every award has a medallion scene that draws
 godot --headless --path . --script tests/rivals_test.gd    # rival tiers get harder, stay beatable (~4 min)
 godot --headless --path . --script tests/obstacles_test.gd # the AI's line never touches an Obstacles post
@@ -112,6 +113,10 @@ Only redo the ones where the change is visible, and put before/after images in t
   Gold on all 12 events finishes a world (`Campaign.cleared`, `Campaign.GOLD`). Finished worlds are
   saved as `done_<theme>` flags, so a stricter rule never re-locks a world; an event that already
   has a medal stays playable. Covered by `tests/economy_test.gd`.
+- Race vs Time trial scoring: a Race is won by the first car over the line; time penalties (+1 s per
+  post, +0.25 s per missed gem) only exist in Time trial (`Race.OBS_PEN`, `TOKEN_PEN`). Anything that
+  says where the player finished (results title, HUD position, medal) reads `Race.result()` /
+  `standings()`, never its own sort. Covered by `tests/race_results_test.gd` (the Twin Bend case).
 - Tether: fixed length, set by the distance to the tower at the moment of hooking. It never
   shortens (no ratchet, no reel-in) and never pays out; hooked early, the rope hangs slack until the
   car swings out to that length. Grab timing alone sets the line. After changing the driving rules,

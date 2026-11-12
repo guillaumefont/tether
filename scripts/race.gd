@@ -19,8 +19,10 @@ const SWING_CAP := 1.28     # max speed multiplier while swinging
 const RANGE := 600.0        # hook reach (prototype 520; a little more forgiving)
 const RELEASE_KICK := 1.05  # slingshot on release
 const JUMP_MIN := 360.0     # slower than this at the ramp and you drop into the gap
-const OBS_PEN := 1.0        # seconds per post hit (Obstacles)
-const TOKEN_PEN := 0.25     # seconds per gem missed over the whole run (Collect)
+const OBS_PEN := 1.0        # seconds per post hit (Obstacles), Time trial only
+const TOKEN_PEN := 0.25     # seconds per gem missed over the whole run (Collect), Time trial only
+# In a Race the first car over the line wins: a post costs speed on the road, never seconds
+# added after the line (that once showed a win as "4th place", the Twin Bend case).
 # Touching the road edge is punished: a hit keeps WALL_KEEP of the speed (scaled down
 # further for head-on hits) and every moment spent rubbing along the rail bleeds speed:
 # the throttle cuts out and the car drags.
@@ -436,7 +438,7 @@ func step_car(c: Car, dt: float) -> void:
 		if c.lap >= 1:
 			c.last_got = c.got.size() - c.got_at_lap
 			c.got_at_lap = c.got.size()
-			var lt := clock - c.lap_start + c.lap_hits * OBS_PEN
+			var lt := clock - c.lap_start + (c.lap_hits * OBS_PEN if mode == "trial" else 0.0)
 			c.last_hits = c.lap_hits
 			c.lap_hits = 0
 			if c.best_lap < 0.0 or lt < c.best_lap:
@@ -453,7 +455,7 @@ func step_car(c: Car, dt: float) -> void:
 			# Collect: gems count over the whole run; every gem missed adds to the final time
 			c.finished = true
 			c.missed = track.tokens.size() - c.gems
-			c.pen = c.missed * TOKEN_PEN + c.hits * OBS_PEN
+			c.pen = c.missed * TOKEN_PEN + c.hits * OBS_PEN if mode == "trial" else 0.0
 			c.finish_time = clock + c.pen
 			events.append({ "t": "finish", "car": c })
 			if c.human >= 0:
@@ -615,6 +617,27 @@ func standings() -> Array:
 			return a.finished
 		return (a.lap * track.L + a.prog) > (b.lap * track.L + b.prog))
 	return arr
+
+# A race is over for the first player: what the results screen says. `place` and `lead`
+# (seconds ahead of 2nd, 99 when nobody else finished) are what the medal is worked out from.
+func result() -> Dictionary:
+	var st := standings()
+	var hs := cars.filter(func(c): return c.human >= 0)
+	var me = hs[0] if hs.size() else null
+	var place: int = st.find(me) + 1 if me else 0
+	var lead := 0.0
+	if me and place == 1 and me.finished:
+		lead = (st[1].finish_time - me.finish_time) if st.size() > 1 and st[1].finished else 99.0
+	var title := ""
+	if st[0].human >= 0 or humans > 1 or me == null:
+		title = st[0].name + " wins"
+	else:
+		title = ordinal(place) + " place"
+	return { "standings": st, "me": me, "place": place, "lead": lead, "finished": me != null and me.finished, "title": title }
+
+static func ordinal(n: int) -> String:
+	var suf := ["th", "st", "nd", "rd"]
+	return str(n) + (suf[n] if n < 4 and n >= 0 else "th")
 
 # the rotors keep turning in every phase (menu included)
 static func spin_anchors(tr: TrackData, dt: float) -> void:
