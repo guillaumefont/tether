@@ -800,11 +800,11 @@ func _show_results() -> void:
 		var lead := 0.0
 		if place == 1 and me.finished:
 			lead = (st[1].finish_time - me.finish_time) if st.size() > 1 and st[1].finished else 99.0
-		var tier := Medals.race_tier(place, lead) if me.finished else 0
-		var held := Records.get_medal(rec_key(), "race")
-		if Records.award_medal(rec_key(), "race", tier):
+		var won := Campaign.save_race(name, variant, place, lead, me.finished)
+		var tier: int = won["tier"]
+		if won["new"]:
 			rrewards.append({ "text": "%s MEDAL" % Medals.NAMES[tier - 1].to_upper(), "col": Medals.COLORS[tier - 1] })
-		rnote = _pay(Wallet.medal_coins(held, tier), 0, { "mode": "race", "variant": variant, "finished": me.finished, "place": place,
+		rnote = _pay(Wallet.medal_coins(won["held"], tier), 0, { "mode": "race", "variant": variant, "finished": me.finished, "place": place,
 			"lead": lead, "clean_laps": me.best_clean_laps, "streak": me.best_streak, "hits": me.hits }, rrewards) + rnote
 	ui.show_results(title, rows2, _unlock_note() + rnote, not ui.menu.next_event().is_empty(), 3, rrewards)
 	_world_moment()
