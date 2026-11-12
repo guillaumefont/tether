@@ -752,7 +752,8 @@ var _load_title: Label
 var _load_tip: Label
 var _load_tween: Tween
 var _load_box: VBoxContainer
-# loading artwork per theme: [landscape, portrait]; the screen wears the menu's theme.
+# loading artwork per theme: [landscape, portrait]. Menu loads wear the menu's theme;
+# a race load wears the world of the track being built.
 # Loaded on demand (load() caches) so only the pictures in use sit in memory.
 const ART := {
 	"snow": ["res://art/loading_snow_land.jpg", "res://art/loading_snow_port.jpg"],
@@ -803,10 +804,10 @@ func _build_loading() -> void:
 	root.add_child(loading)
 
 # cover the screen while a track is built; title is e.g. the track name
-func show_loading(title: String) -> void:
+func show_loading(title: String, theme := "") -> void:
 	if _load_tween:
 		_load_tween.kill()
-	art_theme = Campaign.menu_theme()
+	art_theme = theme if ART.has(theme) else Campaign.menu_theme()
 	_place_loading()
 	_load_title.text = title.to_upper()
 	_load_tip.text = TIPS[randi() % TIPS.size()]
