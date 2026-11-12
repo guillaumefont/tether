@@ -3,10 +3,11 @@
 extends RefCounted
 
 const PATH := "user://records.cfg"
-# Bumped whenever track layouts change: best times and ghosts set on an older layout are
-# dropped (they no longer match the road). Medals and campaign progress are kept.
+# Bumped whenever track layouts or the driving rules change: best times and ghosts set on an
+# older layout are dropped (they no longer match the road). Medals and campaign progress are kept.
 # 2: 2026-11 rework (shorter straights, more bends and crossings).
-const LAYOUT_VERSION := 2
+# 3: the tether no longer shortens when hooked early (times set with the old rope are easier).
+const LAYOUT_VERSION := 3
 const META := "meta"
 static var _cfg: ConfigFile
 
