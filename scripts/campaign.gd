@@ -72,8 +72,8 @@ static func track_index(name: String) -> int:
 
 static func medal(track_name: String, variant: String, mode: String) -> int:
 	var k := Records.key(track_name, variant)
-	if mode == "trial":
-		return Medals.trial_tier(track_name, variant, Records.get_best(k))
+	if mode == "trial":   # the saved tier, or the one the best time reaches
+		return maxi(Records.get_medal(k, "trial"), Medals.trial_tier(track_name, variant, Records.get_best(k)))
 	return Records.get_medal(k, "race")
 
 static func event_medal(i: int) -> int:

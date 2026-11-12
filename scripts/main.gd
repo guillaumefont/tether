@@ -340,7 +340,7 @@ func new_race(built: TrackData = null) -> void:
 	sfx.set_vehicle(WorldView.body_id(Cosmetics.player_look(), String(view.th["kit"])))
 	new_record = false
 	rec_before = Records.get_best(rec_key())
-	start_tier = Medals.trial_tier(cur_def()["name"], variant, rec_before)
+	start_tier = Campaign.medal(cur_def()["name"], variant, "trial")
 	ui.hide_streak()
 	ui.hide_lap_note()
 	countdown = 3.2
@@ -546,7 +546,7 @@ func _won(st: Array, me) -> bool:
 	if not me.finished:
 		return false
 	if mode == "trial":
-		return new_record or Medals.trial_tier(cur_def()["name"], variant, Records.get_best(rec_key())) > start_tier
+		return new_record or Campaign.medal(cur_def()["name"], variant, "trial") > start_tier
 	return st[0] == me
 
 func _aims() -> Dictionary:
@@ -635,6 +635,7 @@ func _trial_lap(c, lt: float, trace: Array) -> void:
 			Records.set_lap(rec_key(), lt)
 		else:
 			Records.set_best(rec_key(), lt)
+			Records.award_medal(rec_key(), "trial", Medals.trial_tier(cur_def()["name"], variant, lt))
 			new_record = true
 			sfx.blip(1320, 0.25, "square", 0.06, 300)
 			Haptics.reward()
@@ -654,6 +655,7 @@ func _trial_run(c) -> void:
 	var prev := Records.get_best(rec_key())
 	if prev <= 0.0 or c.finish_time < prev:
 		Records.set_best(rec_key(), c.finish_time)
+		Records.award_medal(rec_key(), "trial", Medals.trial_tier(cur_def()["name"], variant, c.finish_time))
 		new_record = true
 		sfx.blip(1320, 0.25, "square", 0.06, 300)
 		Haptics.reward()
@@ -754,7 +756,7 @@ func _show_results() -> void:
 				note = "Record on %s (Collect): %s. Score = total time + 0.25 s per gem missed." % [name, UI.fmt2(rec)]
 			else:
 				note = "Record on %s: %s. Your best lap becomes the ghost you chase next time." % [name, UI.fmt2(rec)]
-		var tier := Medals.trial_tier(name, variant, rec)
+		var tier := Campaign.medal(name, variant, "trial")
 		var rewards: Array = []
 		if new_record:
 			var gain := rec_before - rec

@@ -626,14 +626,16 @@ static func _variant_name(v: String) -> String:
 			return x[1]
 	return v
 
-# best medal held on every track and variant (time trial), counted by tier
+# every medal held, counted by tier: one per track and variant in Time trial and one in Race
+# (a race won in the campaign counts as much as a lap target beaten)
 func _medal_counts() -> Array:
 	var n := [0, 0, 0, 0]
 	for d in Defs.TRACKS:
 		for v in Defs.VARIANTS:
-			var m := Campaign.medal(d["name"], v[0], "trial")
-			if m > 0:
-				n[m - 1] += 1
+			for mode in ["trial", "race"]:
+				var m := Campaign.medal(d["name"], v[0], mode)
+				if m > 0:
+					n[m - 1] += 1
 	return n
 
 func _first_open_event() -> int:
