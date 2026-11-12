@@ -638,7 +638,7 @@ func _medal_counts() -> Array:
 
 func _first_open_event() -> int:
 	for i in Campaign.count():
-		if Campaign.unlocked(i) and Campaign.event_medal(i) == 0:
+		if Campaign.unlocked(i) and not Campaign.cleared(i):
 			return i
 	return 0
 
@@ -889,8 +889,8 @@ func _show_campaign() -> void:
 	wt.autowrap_mode = TextServer.AUTOWRAP_OFF
 	hv.add_child(Paper.highlight(wt))
 	head.add_child(hv)
-	var got := Campaign.chapter_medals(world)
-	var hn := Paper.note("%d / %d medals" % [got, Campaign.chapter_size(world)], 22 if tall else 26, Paper.PEN, -0.05)
+	var got := Campaign.chapter_golds(world)
+	var hn := Paper.note("%d / %d golds" % [got, Campaign.chapter_size(world)], 22 if tall else 26, Paper.PEN, -0.05)
 	hn.size_flags_vertical = Control.SIZE_SHRINK_END
 	head.add_child(hn)
 	right.add_child(head)
@@ -912,7 +912,7 @@ func _show_campaign() -> void:
 	list.add_child(g)
 	var left := Campaign.chapter_size(world) - got
 	if left > 0:
-		var foot := Paper.note("%d more medal%s for the %s stamp" % [left, "s" if left > 1 else "", Themes.get_theme(ch["theme"])["name"]], 21 if tall else 23, Paper.PENCIL, -0.02)
+		var foot := Paper.note("%d more Gold%s for the %s stamp" % [left, "s" if left > 1 else "", Themes.get_theme(ch["theme"])["name"]], 21 if tall else 23, Paper.PENCIL, -0.02)
 		var fm := MarginContainer.new()
 		fm.add_theme_constant_override("margin_top", 8)
 		fm.add_theme_constant_override("margin_bottom", 6)
@@ -977,13 +977,13 @@ func _world_tab(c: int, tall: bool) -> Button:
 	nl.autowrap_mode = TextServer.AUTOWRAP_OFF
 	if tall: nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(nl)
-	var sl: Label = ui._label("%d / %d" % [Campaign.chapter_medals(c), Campaign.chapter_size(c)] if open else "locked", 11 if tall else 14, C_MUTED, ui.f_bold)
+	var sl: Label = ui._label("%d / %d" % [Campaign.chapter_golds(c), Campaign.chapter_size(c)] if open else "locked", 11 if tall else 14, C_MUTED, ui.f_bold)
 	sl.autowrap_mode = TextServer.AUTOWRAP_OFF
 	if tall: sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(sl)
 	h.add_child(v)
 	b.add_child(h)
-	if open and Campaign.chapter_medals(c) == Campaign.chapter_size(c) and not tall:
+	if open and Campaign.chapter_done(c) and not tall:
 		var st := Paper.Stamp.new()   # a finished world: a small DONE stamp on its tab
 		st.text = "DONE"
 		st.col = Paper.ACCENT_INK
@@ -1252,9 +1252,13 @@ func show_event() -> void:
 				labels.append(ui.fmt2(t) if t > 0.0 else "--")
 			var rec := Records.get_best(key)
 			line = ("Your best %s: %s" % ["score" if ev["variant"] == "collect" else "lap", ui.fmt2(rec)]) if rec > 0.0 else "No time yet. Beat a target to win its medal."
+			if gold_to_advance():
+				line += " Gold opens the next event."
 		else:
 			labels = ["3rd", "2nd", "1st", "win +%d s" % int(Medals.RACE_TOP_GAP)]
 			line = "Race 3 rivals. Finish on the podium for a medal."
+			if gold_to_advance():
+				line = "Race 3 rivals. Win for Gold: it opens the next event."
 		var ms := MedalStrip.new()
 		ms.ink = true
 		ms.font = ui.f_bold
@@ -1483,6 +1487,14 @@ func refresh() -> void:
 		"event": show_event()
 		"garage": show_garage()
 		"awards": show_awards()
+
+# a campaign event short of Gold, with a next event in its world that Gold would open
+func gold_to_advance() -> bool:
+	if ev.get("kind", "") != "campaign":
+		return false
+	var i: int = ev["idx"]
+	return not Campaign.cleared(i) and i + 1 < Campaign.count() and Campaign.chapter_of(i + 1) == Campaign.chapter_of(i) \
+		and Campaign.event_medal(i + 1) == 0
 
 # next campaign event after ev, if unlocked
 func next_event() -> Dictionary:

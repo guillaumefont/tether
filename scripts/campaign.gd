@@ -1,13 +1,15 @@
-# The campaign: hand-picked track + variant + mode events in chapters of six.
-# An event unlocks once the one before it has at least a Bronze medal.
+# The campaign: hand-picked track + variant + mode events in chapters (worlds) of twelve.
+# An event unlocks once the one before it has Gold (or Pivot): you need Gold to advance.
 # Each chapter is one world (a sub-campaign) dressed in its theme. The first world is open
-# from the start; finishing a world (a medal in all its events) opens the next one and
+# from the start; finishing a world (Gold in all its events) opens the next one and
 # unlocks its theme for Time Attack, the menu backdrop and the loading screen.
 extends RefCounted
 
 const Defs = preload("res://scripts/track_defs.gd")
 const Records = preload("res://scripts/records.gd")
 const Medals = preload("res://scripts/medals.gd")
+
+const GOLD := 3   # the medal tier that clears an event (Medals.NAMES[GOLD - 1])
 
 # Twelve events per world, easiest first. Every event is a different track + variant + mode,
 # so each one is its own medal. Rock is the hardest world: the long, twisting tracks.
@@ -32,19 +34,6 @@ const CHAPTERS := [
 		["Squall", "reverse", "trial"], ["Fishhook", "obstacles", "trial"], ["Knot", "obstacles", "race"],
 		["Knucklebone", "reverse", "race"], ["Squall", "collect", "trial"], ["Fishhook", "reverse", "race"],
 		["Starfish", "reverse", "trial"], ["Starfish", "collect", "trial"], ["Knucklebone", "collect", "trial"]] },
-]
-
-# The six-event worlds of earlier builds. A player who finished one of them keeps that
-# world finished (and the next one open) after the worlds grew.
-const LEGACY := [
-	[["Lasso", "standard", "trial"], ["Twin Bend", "standard", "race"], ["Big Top", "standard", "trial"],
-		["Coil", "standard", "race"], ["Arch", "obstacles", "trial"], ["Lasso", "reverse", "race"]],
-	[["Diamond Eight", "standard", "trial"], ["Pretzel", "standard", "race"], ["Three Fingers", "collect", "trial"],
-		["Halo", "standard", "trial"], ["Sidestep", "reverse", "race"], ["Trefoil", "obstacles", "trial"]],
-	[["Triskel", "standard", "race"], ["Fishhook", "standard", "trial"], ["Knot", "collect", "trial"],
-		["Squall", "standard", "race"], ["Big Top", "collect", "trial"], ["Twin Bend", "obstacles", "race"]],
-	[["Knucklebone", "standard", "trial"], ["Starfish", "standard", "race"], ["Halo", "reverse", "race"],
-		["Fishhook", "obstacles", "trial"], ["Squall", "collect", "trial"], ["Starfish", "reverse", "trial"]],
 ]
 
 static func count() -> int:
@@ -80,13 +69,18 @@ static func event_medal(i: int) -> int:
 	var e := event(i)
 	return medal(e["name"], e["variant"], e["mode"])
 
-# the first event of an open world, the event after a medal, or one already medalled
-# (worlds grew between builds: a medal earned before stays playable)
+# an event is cleared with Gold or better; that opens the next one
+static func cleared(i: int) -> bool:
+	return event_medal(i) >= GOLD
+
+# the first event of an open world, the event after a Gold, or one already medalled
+# (a medal earned before stays playable: worlds grew between builds, and earlier builds
+# opened the next event on any medal)
 static func unlocked(i: int) -> bool:
 	var c := chapter_of(i)
 	if i == chapter_start(c):
 		return chapter_open(c)
-	return event_medal(i - 1) > 0 or event_medal(i) > 0
+	return cleared(i - 1) or event_medal(i) > 0
 
 static func total_medals() -> int:
 	var n := 0
@@ -110,22 +104,22 @@ static func chapter_of(i: int) -> int:
 			return c
 	return CHAPTERS.size() - 1
 
-static func chapter_medals(c: int) -> int:
+# events of world c cleared with Gold or better
+static func chapter_golds(c: int) -> int:
 	var n := 0
 	for k in chapter_size(c):
-		if event_medal(chapter_start(c) + k) > 0:
+		if cleared(chapter_start(c) + k):
 			n += 1
 	return n
 
-# a medal in every event, now or in an earlier build's shorter world. Saved once reached,
-# so a world stays finished (and its theme unlocked) if events are added later.
+# Gold in every event. Saved once reached, so a world stays finished (and its theme unlocked)
+# if events are added later or the rule gets stricter: worlds finished in earlier builds (six
+# events each, any medal was enough) were saved then and stay finished.
 static func chapter_done(c: int) -> bool:
 	var k := "done_" + String(CHAPTERS[c]["theme"])
 	if Records.get_flag("campaign", k):
 		return true
-	var done := chapter_medals(c) == chapter_size(c)
-	if not done and c < LEGACY.size():
-		done = LEGACY[c].all(func(e): return medal(e[0], e[1], e[2]) > 0)
+	var done := chapter_golds(c) == chapter_size(c)
 	if done:
 		Records.set_flag("campaign", k)
 	return done

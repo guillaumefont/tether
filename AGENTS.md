@@ -95,6 +95,10 @@ Only redo the ones where the change is visible, and put before/after images in t
   paper-like: pages slide in (`_land` in `menu.gd`), highlighter strokes draw on, medals are stamped
   (`Stamp.thump()`). Any full-screen container laid over buttons must have
   `mouse_filter = MOUSE_FILTER_IGNORE`, or it eats their taps (the home bookmarks broke that way).
+- Campaign progression: you need Gold (or Pivot) to advance. Gold on an event opens the next one;
+  Gold on all 12 events finishes a world (`Campaign.cleared`, `Campaign.GOLD`). Finished worlds are
+  saved as `done_<theme>` flags, so a stricter rule never re-locks a world; an event that already
+  has a medal stays playable. Covered by `tests/economy_test.gd`.
 - Tether: fixed length, set by the distance to the tower at the moment of hooking. It never
   shortens (no ratchet, no reel-in) and never pays out; hooked early, the rope hangs slack until the
   car swings out to that length. Grab timing alone sets the line. After changing the driving rules,
