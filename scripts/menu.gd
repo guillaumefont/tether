@@ -852,8 +852,8 @@ func _show_campaign() -> void:
 	var tall: bool = ui.is_portrait()
 	var cleared := 0
 	for i in Campaign.count():
-		if Campaign.event_medal(i) > 0: cleared += 1
-	_header(vb, "Campaign", "%d / %d events cleared  ·  finish a world to open the next" % [cleared, Campaign.count()] if not tall else "%d / %d events cleared" % [cleared, Campaign.count()], func(): go_back())
+		if Campaign.cleared(i): cleared += 1
+	_header(vb, "Campaign", "%d / %d events cleared with Gold  ·  Gold opens the next event" % [cleared, Campaign.count()] if not tall else "%d / %d events cleared" % [cleared, Campaign.count()], func(): go_back())
 	var split: BoxContainer = VBoxContainer.new() if tall else HBoxContainer.new()
 	split.add_theme_constant_override("separation", 0 if tall else 22)
 	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
