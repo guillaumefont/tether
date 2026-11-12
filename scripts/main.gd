@@ -157,7 +157,8 @@ func _with_loading(title: String, work: Callable) -> void:
 # build the race track a step at a time so the loading bar moves with the real work
 func _load_race() -> void:
 	building = true
-	ui.show_loading("Tutorial" if tutorial else Defs.TRACKS[track_idx]["name"])
+	var th: String = view.theme_override if view.theme_override != "" else String(Defs.TRACKS[track_idx].get("theme", "snow"))
+	ui.show_loading("Tutorial" if tutorial else Defs.TRACKS[track_idx]["name"], th)   # the art shows the world you're about to race in
 	await get_tree().process_frame
 	await get_tree().process_frame
 	var tr := _make_track()
@@ -1007,7 +1008,7 @@ func _run_demo(arg: String) -> void:
 		["world_done", func(): pass],
 		["world_close", func(): for w in ui.root.get_children(): if w is WorldUnlock: w.queue_free()],
 		["menu_back", func(): ui.results.visible = false; ui.menu.visible = true; ui.menu.show_home()],
-		["loading", func(): ui.show_loading(Defs.TRACKS[track_idx]["name"]); ui.set_loading_progress(0.6)],
+		["loading", func(): ui.show_loading(Defs.TRACKS[track_idx]["name"], view.theme_override); ui.set_loading_progress(0.6)],
 		["menu_event", func():
 			ui.loading.visible = false
 			ui.menu.kind = "attack" if mode == "trial" else "campaign"
