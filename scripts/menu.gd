@@ -1034,7 +1034,6 @@ func _world_photo(c: int, playing: bool, tall: bool) -> Button:
 		tag.offset_right = -4; tag.offset_top = 22
 		tag.rotation = 0.1
 		b.add_child(tag)
-		b.add_child(nx)
 	# lie a little crooked on the page
 	b.rotation = deg_to_rad([-2.0, 1.6, -1.2, 2.2][c % 4])
 	b.resized.connect(func(): b.pivot_offset = b.size * 0.5)
