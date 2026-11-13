@@ -19,7 +19,7 @@ const TIPS := [
 	"Rubbing the rail cuts your throttle. Let go a touch earlier to stay off it.",
 	"Every bend has its own tower. The rope keeps its length, so grab timing sets your line.",
 	"After you let go the car slides a little on the ice. Aim for it.",
-	"Beat a medal time to unlock the next campaign event.",
+	"Win Gold to open the next stop on the Road Trip.",
 	"In Collect, the gems trace the ideal line. Each one missed costs a quarter second.",
 	"Posts shatter when you hit them, and cost you a second.",
 ]
@@ -451,7 +451,7 @@ func _build_results() -> void:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	# the trophy in the corner that new award medallions fly into; shown when there are some
 	res_cup = icon_button("trophy", "", "card", false, 50)
-	res_cup.tooltip_text = "Awards"
+	res_cup.tooltip_text = "Passport"
 	res_cup.anchor_left = 1.0; res_cup.anchor_right = 1.0
 	res_cup.pressed.connect(func(): awards_pressed.emit())
 	res_cup.visible = false

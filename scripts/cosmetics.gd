@@ -168,7 +168,7 @@ static func requirement(it: Dictionary) -> String:
 	if u.has("product"): return Store.product(u["product"])["name"]
 	var txt := "%d coins" % u["coins"]
 	if u.has("world"):
-		txt = "Finish the %s world, then %s" % [String(Campaign.CHAPTERS[u["world"]]["theme"]).capitalize(), txt]
+		txt = "Finish the %s leg, then %s" % [String(Campaign.CHAPTERS[u["world"]]["theme"]).capitalize(), txt]
 	return txt
 
 # ---------------------------------------------------------------- the player's picks

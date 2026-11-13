@@ -16,7 +16,7 @@ const C_ICE_DIM := Color("#9fc0d6")
 const C_TOWER := Color("#2a2f36")
 const C_CAR := Color("#f2b134")
 
-# "TETHER RACING" with a tower emblem: a car orbits it on a rope and the rotor turns.
+# "TETHER RALLY" with a tower emblem: a car orbits it on a rope and the rotor turns.
 class Logo extends Control:
 	var font: Font
 	var font_size := 40
@@ -62,19 +62,19 @@ class Logo extends Control:
 		var w1 := font.get_string_size("TETHER ", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 		if ink:
 			draw_string(font, Vector2(x, base), "TETHER", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Paper.INK)
-			draw_string(font, Vector2(x + w1, base), "RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Paper.INK_SOFT)
+			draw_string(font, Vector2(x + w1, base), "RALLY", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Paper.INK_SOFT)
 			return
 		for pass_i in 2:
 			var o := Vector2(0, 3) if pass_i == 0 else Vector2.ZERO
 			var sh := Color(0, 0, 0, 0.35)
 			draw_string(font, Vector2(x, base) + o, "TETHER", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, sh if pass_i == 0 else C_ACCENT)
-			draw_string(font, Vector2(x + w1, base) + o, "RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, sh if pass_i == 0 else C_ACCENT_DIM)
+			draw_string(font, Vector2(x + w1, base) + o, "RALLY", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, sh if pass_i == 0 else C_ACCENT_DIM)
 
 	func min_width() -> float:
 		var h := maxf(size.y, custom_minimum_size.y)   # size is still 0 before the first layout
 		if font == null:
 			return h
-		return h * 1.12 + font.get_string_size("TETHER RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+		return h * 1.12 + font.get_string_size("TETHER RALLY", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 
 # Hand-drawn icons, all in one stroke style so they read as a set.
 # Cards: "flag" (campaign), "watch" (time attack), "duel" (two players).
@@ -439,13 +439,13 @@ class Splash extends Control:
 			return
 		var fs := int(u * 0.085 * emblem_k)
 		var w1 := font.get_string_size("TETHER ", HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-		var wt := font.get_string_size("TETHER RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var wt := font.get_string_size("TETHER RALLY", HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 		var base := c.y + R * 1.08 + u * 0.05 + fs * 0.8
 		var x := (w - wt) * 0.5
 		draw_string(font, Vector2(x, base + u * 0.006), "TETHER", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0, 0, 0, 0.4))
-		draw_string(font, Vector2(x + w1, base + u * 0.006), "RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0, 0, 0, 0.4))
+		draw_string(font, Vector2(x + w1, base + u * 0.006), "RALLY", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0, 0, 0, 0.4))
 		draw_string(font, Vector2(x, base), "TETHER", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, C_ACCENT)
-		draw_string(font, Vector2(x + w1, base), "RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, C_ACCENT_DIM)
+		draw_string(font, Vector2(x + w1, base), "RALLY", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, C_ACCENT_DIM)
 
 	# the emblem: tower with its spinning rotor, the car lapping it on its tether, and the ring
 	# round them that doubles as the loading indicator. `prog` 0..1 fills the ring in amber from

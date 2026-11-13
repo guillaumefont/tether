@@ -6,14 +6,16 @@
 
   ```
   ## Preview
-  - Play in the browser: https://guillaumefont.github.io/tether/pr/<N>/
-  - Android APK: https://guillaumefont.github.io/tether/pr/<N>/tether-racing.apk
+  - Play in the browser: https://guillaumefont.github.io/tether-rally/pr/<N>/
+  - Android APK: https://guillaumefont.github.io/tether-rally/pr/<N>/tether-racing.apk
   ```
 
   `<N>` is the PR number. Add the section right after opening the PR (edit the body once the
   number is known) and keep it when you rewrite the body. The **Builds** workflow publishes these
   on every push to the PR (allow a few minutes) and deletes them when the PR closes. `main` is at
-  https://guillaumefont.github.io/tether/ and `.../tether-racing.apk`.
+  https://guillaumefont.github.io/tether-rally/ and `.../tether-racing.apk`.
+- The repo is `guillaumefont/tether-rally` (renamed from `tether` on 2026-11-13). The Pages site path
+  follows the repo name; `build.yml` and `.github/pages/404.html` derive it, so only the docs spell it out.
 - All APKs share one app id: installing a PR build replaces the installed `main` build.
 
 ## Keeping this file up to date
@@ -56,6 +58,7 @@ godot --headless --path . --script tests/attack_unlock_test.gd # Time attack tra
 godot --headless --path . --script tests/time_attack_test.gd  # Time attack: Standard only, world chip
 godot --headless --path . --script tests/colours_test.gd    # no blue accent in UI, icons, splash, web page
 godot --headless --path . --script tests/award_anim_test.gd # every award has a medallion scene that draws
+godot --headless --path . --script tests/names_test.gd       # Tether Rally + traveller mode names, no old names in UI text
 godot --headless --path . --script tests/rivals_test.gd    # rival tiers get harder, stay beatable (~4 min)
 godot --headless --path . --script tests/obstacles_test.gd # the AI's line never touches an Obstacles post
 godot --headless --path . --script tests/camera_test.gd    # low camera shots: off while racing, never inside the land

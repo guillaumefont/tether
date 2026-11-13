@@ -1,4 +1,4 @@
-# Tether Racing
+# Tether Rally
 
 An original slingshot-style racer for Android and iOS, built with **Godot 4.7** in 3D.
 Your car only drives straight: hold to hook the nearest spinning tower, let the tether
@@ -63,10 +63,10 @@ The **Builds** workflow exports the Web build and a debug-signed Android APK and
 to the `gh-pages` branch (GitHub Pages: Settings > Pages > Deploy from a branch > `gh-pages`, folder `/`).
 
 - `main` (updated on every merge):
-  - Play in a browser: https://guillaumefont.github.io/tether/
-  - Install on Android: https://guillaumefont.github.io/tether/tether-racing.apk (allow installs from your browser when asked)
+  - Play in a browser: https://guillaumefont.github.io/tether-rally/
+  - Install on Android: https://guillaumefont.github.io/tether-rally/tether-racing.apk (allow installs from your browser when asked)
 - Each open pull request gets its own preview, linked in a comment on the PR and updated on every push:
-  https://guillaumefont.github.io/tether/pr/N/ and `.../pr/N/tether-racing.apk`. It is deleted when the PR closes; after that, its links open the latest `main` build instead (via the site's 404 page).
+  https://guillaumefont.github.io/tether-rally/pr/N/ and `.../pr/N/tether-racing.apk`. It is deleted when the PR closes; after that, its links open the latest `main` build instead (via the site's 404 page).
 
 All APKs share one app id, so installing a preview replaces the installed `main` build (and the other way round).
 The APK is also attached to each workflow run as the `tether-racing-apk` artifact.

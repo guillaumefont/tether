@@ -242,7 +242,7 @@ func _set_paused(on: bool) -> void:
 		touch_owner.clear()
 		sfx.set_engine(0.0, false)
 		var d: Dictionary = cur_def()
-		var what := "Time trial" if mode == "trial" else ("2-player race" if humans > 1 else "Race")
+		var what := "Time trial" if mode == "trial" else ("Two for the Road" if humans > 1 else "Race")
 		var c0 = race.cars[0]
 		if tut:
 			ui.show_pause("Tutorial  ·  lap %s" % tut.lap_label().replace("/", " / "), _pause_opts())
@@ -822,7 +822,7 @@ func _show_tutorial_end() -> void:
 	for r in tut.summary:
 		rows.append({ "cells": r })
 	var bt := tut.best
-	var note := "You're ready. The Campaign starts in the snow world. Replay this tutorial any time from Settings."
+	var note := "You're ready. The Road Trip starts in Snowfield. Replay this tutorial any time from Settings."
 	if bt > 0.0:
 		note = "Best lap on your own: %s (target %s). " % [UI.fmt2(bt), tut.target_text()] + note
 	ui.show_results("TUTORIAL DONE", rows, note, false, 2)
@@ -831,7 +831,7 @@ func _show_tutorial_end() -> void:
 func _unlock_note() -> String:
 	var n := _theme_note()
 	if ui.menu.gold_to_advance():
-		n += "Win Gold to open the next event. "
+		n += "Win Gold to open the next stop. "
 	return n
 
 # One-player run over: pay the medal and Track of the day coins and any awards reached,
@@ -846,10 +846,10 @@ func _pay(medal_coins: int, daily: int, run: Dictionary, rewards: Array) -> Stri
 		rewards.push_front({ "text": "+%d COINS" % total, "col": Color("#f2c84a") })
 		var parts: Array = []
 		if medal_coins > 0: parts.append("medal %d" % medal_coins)
-		if daily > 0: parts.append("Track of the day %d" % daily)
+		if daily > 0: parts.append("Daily Detour %d" % daily)
 		txt = "+%d coins (%s): %d in all.  " % [total, ", ".join(parts), Wallet.coins()]
 	if not won.is_empty():
-		txt += "New award%s: collect %d coins on the Awards screen.  " % ["s" if won.size() > 1 else "", won.reduce(func(n, a): return n + int(a["coins"]), 0)]
+		txt += "New award%s: collect %d coins in the Passport.  " % ["s" if won.size() > 1 else "", won.reduce(func(n, a): return n + int(a["coins"]), 0)]
 	return txt
 
 # Settings > Reset progress (confirmed there): coins, looks bought, awards, medals,
@@ -918,9 +918,9 @@ func show_world_unlock(c: int) -> void:
 	var nxt: String = done if last else String(Campaign.CHAPTERS[c + 1]["theme"])
 	var lines: Array = []
 	if not last:
-		lines.append("World %d, %s, open in the Campaign" % [c + 2, Themes.get_theme(nxt)["name"]])
+		lines.append("Leg %d, %s, open on the Road Trip" % [c + 2, Themes.get_theme(nxt)["name"]])
 	if c > 0:
-		lines.append("%s theme in Time attack" % Themes.get_theme(done)["name"])
+		lines.append("%s theme in Special Stages" % Themes.get_theme(done)["name"])
 		lines.append("Menu and loading screen dressed in %s" % Themes.get_theme(done)["name"])
 	for it in Cosmetics.PAINTS:
 		if it["unlock"].get("world", -1) == c:
@@ -928,8 +928,8 @@ func show_world_unlock(c: int) -> void:
 	var aw := Awards.find("world_" + done)
 	if not aw.is_empty():
 		lines.append("Award %s: %d coins to collect" % [aw["name"], aw["coins"]])
-	var title := "All worlds done!" if last else "%s unlocked" % Themes.get_theme(nxt)["name"]
-	var sub := "%s world finished" % Themes.get_theme(done)["name"]
+	var title := "Road Trip done!" if last else "%s unlocked" % Themes.get_theme(nxt)["name"]
+	var sub := "%s leg finished" % Themes.get_theme(done)["name"]
 	var w := WorldUnlock.new()
 	ui.root.add_child(w)
 	w.setup(ui, ui.menu.WORLD_ART[nxt], nxt, title, sub, lines)
@@ -961,7 +961,7 @@ func _theme_note() -> String:
 	for t in Themes.ORDER:
 		if Campaign.theme_unlocked(t) and not themes_before.has(t):
 			themes_before.append(t)
-			return "World finished: %s unlocked in Time attack and the menu!  " % Themes.get_theme(t)["name"]
+			return "Leg finished: %s unlocked in Special Stages and the menu!  " % Themes.get_theme(t)["name"]
 	return ""
 
 # ---------------------------------------------------------------- demo / screenshots
@@ -996,7 +996,7 @@ func _run_demo(arg: String) -> void:
 		["results_coins", func():
 			ui.hide_settings()
 			ui.menu.visible = false
-			ui.show_results("Time trial", [{ "cells": ["Fastest lap", "", "0:12.10"], "hl": true }], "+400 coins (medal 100, Track of the day 100, Clean triple 150, Smooth operator 100): 1240 in all.", false, 3,
+			ui.show_results("Time trial", [{ "cells": ["Fastest lap", "", "0:12.10"], "hl": true }], "+400 coins (medal 100, Daily Detour 100, Clean triple 150, Smooth operator 100): 1240 in all.", false, 3,
 				[{ "text": "+450 COINS", "col": Color("#f2c84a") }, { "text": "GOLD MEDAL", "col": Medals.COLORS[2] }])],
 		["award_play", func(): show_awards_won([Awards.find("clean_laps"), Awards.find("first_pivot")])],
 		["award_done", func(): pass],

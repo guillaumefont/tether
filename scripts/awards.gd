@@ -19,11 +19,11 @@ const LIST := [
 	{ "id": "first_pivot", "name": "Pivot!", "desc": "Earn your first Pivot medal", "coins": 200 },
 	{ "id": "golds10", "name": "Gold standard", "desc": "Hold 10 Gold medals or better", "coins": 250 },
 	{ "id": "every_track", "name": "Globetrotter", "desc": "A medal on every track", "coins": 400 },
-	{ "id": "world_snow", "name": "Snowfield champion", "desc": "Finish the Snowfield world", "coins": 200 },
-	{ "id": "world_forest", "name": "Pinewood champion", "desc": "Finish the Pinewood world", "coins": 300 },
-	{ "id": "world_sand", "name": "Dunes champion", "desc": "Finish the Dunes world", "coins": 400 },
-	{ "id": "world_rock", "name": "Highlands champion", "desc": "Finish the Highlands world", "coins": 500 },
-	{ "id": "dailies7", "name": "Daily driver", "desc": "Finish seven Tracks of the day", "coins": 300 },
+	{ "id": "world_snow", "name": "Snowfield champion", "desc": "Finish the Snowfield leg", "coins": 200 },
+	{ "id": "world_forest", "name": "Pinewood champion", "desc": "Finish the Pinewood leg", "coins": 300 },
+	{ "id": "world_sand", "name": "Dunes champion", "desc": "Finish the Dunes leg", "coins": 400 },
+	{ "id": "world_rock", "name": "Highlands champion", "desc": "Finish the Highlands leg", "coins": 500 },
+	{ "id": "dailies7", "name": "Daily driver", "desc": "Take seven Daily Detours", "coins": 300 },
 	{ "id": "records25", "name": "Record breaker", "desc": "Set 25 new records", "coins": 150 },
 ]
 

@@ -1,6 +1,6 @@
-# Tether Racing: production readiness (audit 2026-11-03, updated)
+# Tether Rally: production readiness (audit 2026-11-03, updated)
 
-Decisions taken 2026-11-03: proprietary license (repo now private), **Android first** (iOS later), game renamed **Tether Racing** (was Pivot Rush), store artwork kept in the repo (`store/`, `icons/`).
+Decisions taken 2026-11-03: proprietary license (repo now private), **Android first** (iOS later), game renamed **Tether Racing** (was Pivot Rush), then **Tether Rally** (2026-11-13), store artwork kept in the repo (`store/`, `icons/`).
 
 ## Part 1. Game quality vs what players expect
 
@@ -56,7 +56,7 @@ This is the bigger gap. Judged against well-rated one-touch arcade racers on Goo
 
 **Legal**
 - Done: proprietary `LICENSE` with Godot (MIT) and font (OFL) notices. Still add an in-game Credits/Licenses screen showing those notices.
-- Run a trademark and store search on "Tether Racing" before publishing, and keep the store text free of references to other games.
+- Run a trademark and store search on "Tether Rally" before publishing, and keep the store text free of references to other games.
 
 ## Artwork status
 `store/icon-512.png`, `store/feature-graphic-1024x500.png`, 6 screenshots (1920x1080) in `store/screenshots/`, Android launcher and adaptive icons in `icons/`, wired into the Android export preset. These are made from the current in-game look and the existing emblem. They are fine for internal and closed testing, but the production listing will need new screenshots once the visual themes (Part 1, item 1) exist.
