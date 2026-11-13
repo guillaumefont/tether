@@ -187,6 +187,8 @@ func _frame() -> VBoxContainer:
 	_drag = false
 	if _flip_tween:
 		_flip_tween.kill()
+	if _slide_in:
+		_slide_in.kill()
 	var ins: Dictionary = ui.safe_insets()
 	var tall: bool = ui.is_portrait()
 	body = Control.new()
@@ -279,9 +281,10 @@ func _land(desk: Control) -> void:
 	desk.rotation = rot + (0.05 * dir if dir != 0 else -0.035)
 	desk.modulate.a = 0.0
 	var tw := desk.create_tween().set_parallel().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tw.tween_property(desk, "position", Vector2.ZERO, 0.28)
-	tw.tween_property(desk, "rotation", rot, 0.36).set_trans(Tween.TRANS_BACK)
-	tw.tween_property(desk, "modulate:a", 1.0, 0.16)
+	# slow enough to read as a page being laid down (it never blocks a tap)
+	tw.tween_property(desk, "position", Vector2.ZERO, 0.55)
+	tw.tween_property(desk, "rotation", rot, 0.7).set_trans(Tween.TRANS_BACK)
+	tw.tween_property(desk, "modulate:a", 1.0, 0.3)
 
 const TAB_W := 52
 var _tabs: VBoxContainer
@@ -458,7 +461,10 @@ func show_home() -> void:
 	var next_name: String = Themes.get_theme(Campaign.CHAPTERS[Campaign.chapter_of(first)]["theme"])["name"]
 	lines.add_child(_road_line(1, "flag", "CAMPAIGN", "%d / %d events  ·  next: %s, event %d" % [cleared, Campaign.count(), next_name, first - Campaign.chapter_start(Campaign.chapter_of(first)) + 1],
 		func(): kind = "campaign"; world = -1; show_list(), true))
-	lines.add_child(_road_line(2, "watch", "TIME ATTACK", "%d tracks  ·  4 variants  ·  chase your ghost" % Defs.TRACKS.size(),
+	var n_open := Campaign.attack_tracks().size()
+	var ta_sub := "%d tracks  ·  4 variants  ·  chase your ghost" % n_open if n_open == Defs.TRACKS.size() \
+		else "%d / %d tracks open  ·  the campaign opens more" % [n_open, Defs.TRACKS.size()]
+	lines.add_child(_road_line(2, "watch", "TIME ATTACK", ta_sub,
 		func(): kind = "attack"; _list_scroll.erase(kind); show_list()))
 	lines.add_child(_road_line(3, "duel", "2 PLAYERS", "One phone, two thumbs",
 		func(): kind = "versus"; _list_scroll.erase(kind); show_list()))
@@ -794,12 +800,16 @@ func show_list() -> void:
 	screen = "list"
 	var vb := _frame()
 	var title := "Time attack" if kind == "attack" else "2-player race"
+	var order := _track_order()
+	var open := Campaign.attack_tracks()
 	var sub := "%d tracks  ·  pick one" % Defs.TRACKS.size()
+	if kind == "attack" and open.size() < Defs.TRACKS.size():
+		sub = "%d / %d tracks open  ·  the campaign opens the rest" % [open.size(), Defs.TRACKS.size()]
 	var tall: bool = ui.is_portrait()
 	_header(vb, title, sub, func(): go_back())
 	var list := VBoxContainer.new()
 	list.add_theme_constant_override("separation", 10)
-	var cards := []   # by track (attack, versus) or event index (campaign)
+	var cards := []   # in list order (_track_order)
 	var grid := func() -> GridContainer:
 		var g := GridContainer.new()
 		g.columns = 1 if tall else 3   # portrait: one column of cards
@@ -808,8 +818,8 @@ func show_list() -> void:
 		list.add_child(g)
 		return g
 	var g: GridContainer = grid.call()
-	for i in Defs.TRACKS.size():
-		var b := _track_card(i)
+	for p in order.size():
+		var b := _track_card(order[p], p + 1, kind != "attack" or open.has(order[p]))
 		g.add_child(b)
 		cards.append(b)
 	var card_h := 92.0 if tall else 132.0
@@ -825,9 +835,17 @@ func show_list() -> void:
 	_scroller.set_meta("list", true)
 	vb.add_child(_scroller)
 	_scroller.scroll = _list_scroll.get(_list_key(), 0.0)
-	if focus >= 0 and focus < cards.size():
-		_reveal.call_deferred(_scroller, cards[focus])
+	var fp := order.find(focus)   # focus is a track index here
+	if fp >= 0:
+		_reveal.call_deferred(_scroller, cards[fp])
 	focus = -1
+
+# the tracks of the Time attack / 2-player list, top to bottom: Time attack in the order the
+# campaign opens them, so the open ones come first
+func _track_order() -> Array:
+	if kind == "attack":
+		return Campaign.attack_order()
+	return range(Defs.TRACKS.size())
 
 # The campaign is one roadbook: a tab per world down the side (across the top in portrait),
 # and the open world's 12 events as numbered lines, each with its track's outline and the
@@ -1163,7 +1181,7 @@ func _event_line(i: int, tall: bool) -> Button:
 		st.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		h.add_child(st)
 		if medal > int(_seen_medal.get(i, medal)):   # won since this list was last shown: stamp it now
-			st.thump(0.45)
+			st.thump(0.75)
 	elif locked:
 		h.add_child(_icon("lock", 20))
 	else:
@@ -1246,13 +1264,24 @@ func _tag(variant: String, mode: String) -> String:
 func _list_key() -> String:
 	return "campaign%d" % world if kind == "campaign" else kind
 
-func _track_card(i: int) -> Button:
+# a track on the Time attack / 2-player list; in Time attack a track the campaign has not
+# opened yet is greyed with a padlock and says which event opens it
+func _track_card(i: int, num: int, open := true) -> Button:
 	var name: String = Defs.TRACKS[i]["name"]
 	var best := -1 if kind == "versus" else 0
 	if kind == "attack":
 		for v in Defs.VARIANTS:
 			best = maxi(best, Campaign.medal(name, v[0], "trial"))
-	var b := _card(i, name.to_upper(), Defs.TRACKS[i]["note"], best, false, i + 1)
+	var note: String = Defs.TRACKS[i]["note"]
+	if not open:
+		var fe := Campaign.first_event_of(i)
+		var c := Campaign.chapter_of(fe)
+		note = "Opens with %s, event %d" % [Themes.get_theme(Campaign.CHAPTERS[c]["theme"])["name"], fe - Campaign.chapter_start(c) + 1]
+	var b := _card(i, name.to_upper(), note, best, not open, num)
+	if not open:
+		b.disabled = true
+		b.get_child(0).add_child(_icon("lock", 20))
+		return b
 	b.pressed.connect(func():
 		ev = { "track": i, "variant": "standard", "mode": "trial" if kind == "attack" else "race",
 			"humans": 1 if kind == "attack" else 2, "kind": kind, "idx": i, "theme": _theme_for(i) }
@@ -1389,14 +1418,16 @@ func _event_pos() -> Array:
 	if ev["kind"] == "campaign":
 		var c := Campaign.chapter_of(ev["idx"])
 		return [ev["idx"] - Campaign.chapter_start(c), Campaign.chapter_size(c)]
-	return [ev["track"], Defs.TRACKS.size()]
+	var order := _track_order()
+	return [order.find(ev["track"]), order.size()]
 
 # ---------------------------------------------------------------- swipe
 var _drag := false        # a press landed on the pager
 var _dragging := false    # ...and has moved far enough sideways to be a swipe
 var _drag_from := Vector2.ZERO
 var _drag_ms := 0
-var _flip_tween: Tween
+var _flip_tween: Tween    # the page sliding out (input waits for it)
+var _slide_in: Tween      # the next page sliding in (a press cuts it short)
 const DRAG_START := 14.0  # px before a press turns into a swipe (a tap wiggles less)
 
 # put `content` in a pager that fills the rest of the screen
@@ -1408,8 +1439,8 @@ func _carousel(vb: VBoxContainer, content: Control) -> void:
 	vb.add_child(_pager)
 	if _slide_from != 0:
 		_pager.shift = _slide_from
-		_flip_tween = create_tween()
-		_flip_tween.tween_property(_pager, "shift", 0.0, 0.18).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		_slide_in = create_tween()
+		_slide_in.tween_property(_pager, "shift", 0.0, 0.34).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 		_slide_from = 0
 
 # can the current screen flip one step that way (+1 next, -1 previous)?
@@ -1417,6 +1448,8 @@ func _can_flip(dir: int) -> bool:
 	match screen:
 		"event":
 			var pos := _event_pos()
+			if ev["kind"] in ["attack", "versus"]:
+				return _flip_track(dir) >= 0
 			var i: int = pos[0] + dir
 			if i < 0 or i >= pos[1]:
 				return false
@@ -1432,18 +1465,32 @@ func _flip(dir: int) -> void:
 				ev = { "track": e["track"], "variant": e["variant"], "mode": e["mode"], "humans": 1, "kind": "campaign", "idx": e["idx"], "theme": e.get("theme", "") }
 
 			else:
-				ev["track"] += dir
+				ev["track"] = _flip_track(dir)
 				ev["idx"] = ev["track"]
 				ev["theme"] = _theme_for(ev["track"])
 			show_event()
+
+# the track a swipe that way lands on: the next one down the list (up for -1), skipping
+# tracks Time attack has not opened yet; -1 at either end
+func _flip_track(dir: int) -> int:
+	var order := _track_order()
+	var open := Campaign.attack_tracks() if ev["kind"] == "attack" else {}
+	var p: int = order.find(ev["track"]) + dir
+	while p >= 0 and p < order.size():
+		if ev["kind"] != "attack" or open.has(order[p]):
+			return order[p]
+		p += dir
+	return -1
 
 # slide the page out, then build the next one sliding in (or bounce back)
 func _settle(dir: int) -> void:
 	if _flip_tween:
 		_flip_tween.kill()
+	if _slide_in:
+		_slide_in.kill()
 	var go := dir != 0 and _can_flip(dir)
 	_flip_tween = create_tween()
-	_flip_tween.tween_property(_pager, "shift", -float(dir) if go else 0.0, 0.14).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN if go else Tween.EASE_OUT)
+	_flip_tween.tween_property(_pager, "shift", -float(dir) if go else 0.0, 0.2).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN if go else Tween.EASE_OUT)
 	# rebuilding also drops the card that saw the press, so it never fires after a swipe
 	_flip_tween.tween_callback(func(): _flip(dir) if go else refresh())
 
@@ -1557,6 +1604,9 @@ func _event_input(e: InputEvent) -> void:
 			if _flip_tween and _flip_tween.is_running():
 				get_viewport().set_input_as_handled()   # mid-flip: ignore
 				return
+			if _slide_in and _slide_in.is_running():
+				_slide_in.kill()   # the page is still coming in: snap it home and take the press
+				_pager.shift = 0.0
 			_drag = _pager.get_global_rect().has_point(e.position)
 			_dragging = false
 			_drag_from = e.position

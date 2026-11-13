@@ -26,6 +26,8 @@ jobs:
         run: ./godot --headless --path . --script tests/hook_test.gd
       - name: Menu swipe and tap test
         run: ./godot --headless --path . --script tests/swipe_test.gd
+      - name: Pause menu and its Settings page
+        run: ./godot --headless --path . --script tests/pause_test.gd
       - name: Cars never stay pinned on the road edge
         run: ./godot --headless --path . --script tests/wall_test.gd
       - name: Tutorial can be finished
@@ -38,6 +40,8 @@ jobs:
         run: ./godot --headless --path . --script tests/medals_test.gd
       - name: Race results follow the finish line (Twin Bend case)
         run: ./godot --headless --path . --script tests/race_results_test.gd
+      - name: Time attack tracks open with the campaign
+        run: ./godot --headless --path . --script tests/attack_unlock_test.gd
       - name: No blue accent in the UI or icon (Ice Blue case)
         run: ./godot --headless --path . --script tests/colours_test.gd
       - name: Award medallions all draw

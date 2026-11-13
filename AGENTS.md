@@ -44,12 +44,14 @@ godot --headless --path . --script tests/sim_test.gd     # AI finishes every tra
 godot --headless --path . --script tests/levels_test.gd  # bends stay level, medal times, campaign
 godot --headless --path . --script tests/hook_test.gd    # hooking picks the current bend's tower
 godot --headless --path . --script tests/swipe_test.gd   # menu lists scroll, event swipe flips, tap opens
+godot --headless --path . --script tests/pause_test.gd   # pause page stays short, options on its Settings page
 godot --headless --path . --script tests/wall_test.gd    # a car on the road edge always gets off it again
 godot --headless --path . --script tests/tutorial_test.gd  # the first-launch tutorial can be finished
 godot --headless --path . --script tests/cosmetics_test.gd  # garage items: prices, every look builds, looks only
 godot --headless --path . --script tests/economy_test.gd    # coins, Track of the day, awards, buying, progress reset
 godot --headless --path . --script tests/medals_test.gd     # medals saved and shown: race wins, layout bumps
 godot --headless --path . --script tests/race_results_test.gd # race results = order over the line, medal from it
+godot --headless --path . --script tests/attack_unlock_test.gd # Time attack tracks open with the campaign
 godot --headless --path . --script tests/colours_test.gd    # no blue accent in UI, icons, splash, web page
 godot --headless --path . --script tests/award_anim_test.gd # every award has a medallion scene that draws
 godot --headless --path . --script tests/rivals_test.gd    # rival tiers get harder, stay beatable (~4 min)
@@ -110,12 +112,20 @@ Only redo the ones where the change is visible, and put before/after images in t
   with the Track of the day as a separate photo). Handwritten notes use `Paper.note()` (Caveat, black
   pen / pencil grey / red) for asides only, never for something you must read to play. Motion is
   paper-like: pages slide in (`_land` in `menu.gd`), marker strokes draw on, medals are stamped
-  (`Stamp.thump()`). Any full-screen container laid over buttons must have
+  (`Stamp.thump()`). The in-race pause page stays short (Guillaume, 2026-11-13: it was too busy): where you
+  are, Menu / Restart / Resume and one Settings button; options live on the pause Settings page, never on
+  the pause page itself. Any full-screen container laid over buttons must have
   `mouse_filter = MOUSE_FILTER_IGNORE`, or it eats their taps (the home bookmarks broke that way).
 - Campaign progression: you need Gold (or Pivot) to advance. Gold on an event opens the next one;
   Gold on all 12 events finishes a world (`Campaign.cleared`, `Campaign.GOLD`). Finished worlds are
   saved as `done_<theme>` flags, so a stricter rule never re-locks a world; an event that already
   has a medal stays playable. Covered by `tests/economy_test.gd`.
+- Time attack tracks (Guillaume, 2026-11-13): a track is open in Time attack once a campaign event on
+  it is unlocked (`Campaign.attack_tracks()`); shut ones are greyed with a padlock and skipped by the
+  swipe. Tracks raced before the rule were kept as `[attack]` flags (`attack_gate`). So every track
+  must appear in some campaign event, or it can never open (`tests/attack_unlock_test.gd` checks).
+  2-player races and the Track of the day ignore the lock. A menu test that needs every track open
+  sets those flags in memory (see `tests/swipe_test.gd`).
 - Race vs Time trial scoring: a Race is won by the first car over the line; time penalties (+1 s per
   post, +0.25 s per missed gem) only exist in Time trial (`Race.OBS_PEN`, `TOKEN_PEN`). Anything that
   says where the player finished (results title, HUD position, medal) reads `Race.result()` /
