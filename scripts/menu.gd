@@ -237,7 +237,9 @@ func _frame() -> VBoxContainer:
 		desk.add_child(_tabs)
 		var place_tabs := func():
 			var r := Rect2(m.position + sheet.position, sheet.size)
-			_tabs.position = Vector2(r.end.x - 10.0, r.position.y + (110.0 if tall else 70.0))
+			# never past the screen's right edge, whatever width the page ends up with
+			var right: float = get_viewport_rect().size.x - ui.safe_insets()["r"]
+			_tabs.position = Vector2(minf(r.end.x - 10.0, right - (TAB_W + 8)), r.position.y + (110.0 if tall else 70.0))
 			_tabs.size = Vector2(TAB_W + 8, 0)
 		sheet.item_rect_changed.connect(place_tabs)
 		m.item_rect_changed.connect(place_tabs)
@@ -253,6 +255,13 @@ func _frame() -> VBoxContainer:
 	sheet.add_child(vb)
 	_land(desk)
 	return vb
+
+# portrait home: the width left for what the page holds, between the page's planned edges
+func _home_page_room() -> float:
+	var ins: Dictionary = ui.safe_insets()
+	var st: StyleBox = _page.get_theme_stylebox("panel")
+	return get_viewport_rect().size.x - (10 + ins["l"]) - (TAB_W - 6 + ins["r"]) \
+		- st.get_margin(SIDE_LEFT) - st.get_margin(SIDE_RIGHT)
 
 # a low landscape screen (a phone on its side): the home page packs tighter to fit
 func _short() -> bool:
@@ -418,6 +427,13 @@ func show_home() -> void:
 	coins.pressed.connect(show_garage)
 	top.add_child(coins)
 	vb.add_child(top)
+	# a narrow phone: the wordmark shrinks so the page keeps its planned width and the
+	# bookmark tabs stay on screen (a four-digit coin count made it too wide: "2183 coins" case)
+	if tall:
+		var room := _home_page_room() - coins.get_combined_minimum_size().x - top.get_theme_constant("separation")
+		while logo.font_size > 16 and logo.min_width() > room:
+			logo.font_size -= 1
+		logo.custom_minimum_size.x = logo.min_width()
 	var sub := HBoxContainer.new()
 	var cap: Label = ui._label("ROADBOOK  ·  CO-DRIVER'S NOTES" if not (tall or _short()) else "ROADBOOK", 12, C_MUTED, ui.f_bold)
 	cap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -617,12 +633,24 @@ func _road_line(n: int, icon: String, title: String, sub: String, cb: Callable, 
 	th.add_child(Paper.highlight(t) if hl else t)
 	v.add_child(th)
 	var sl: Label = ui._label(sub, 13 if tall else 14, C_MUTED, ui.f_bold)
-	sl.autowrap_mode = TextServer.AUTOWRAP_OFF
-	sl.clip_text = true
+	# a long subtitle goes onto a second line rather than being cut off (a narrow phone)
+	sl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sl.max_lines_visible = 2
+	sl.set_meta("road_sub", true)
+	# too long for one line: break it at its "·" rather than mid-phrase
+	sl.resized.connect(func():
+		var f := sl.get_theme_font("font")
+		var one := f.get_string_size(sub, HORIZONTAL_ALIGNMENT_LEFT, -1, sl.get_theme_font_size("font_size")).x <= sl.size.x
+		var want := sub if one else sub.replace("  ·  ", "\n")
+		if sl.text != want:
+			sl.text = want)
 	v.add_child(sl)
 	h.add_child(v)
 	h.add_child(_icon("next", 22))
 	b.add_child(h)
+	# the line grows if its subtitle took two lines
+	var base_h := b.custom_minimum_size.y
+	sl.resized.connect(func(): b.custom_minimum_size.y = maxf(base_h, h.get_combined_minimum_size().y + 6.0))
 	b.pressed.connect(cb)
 	return b
 

@@ -26,6 +26,8 @@ jobs:
         run: ./godot --headless --path . --script tests/hook_test.gd
       - name: Menu swipe and tap test
         run: ./godot --headless --path . --script tests/swipe_test.gd
+      - name: Home bookmark tabs stay on screen on a phone
+        run: ./godot --headless --path . --script tests/home_tabs_test.gd
       - name: Pause menu and its Settings page
         run: ./godot --headless --path . --script tests/pause_test.gd
       - name: Cars never stay pinned on the road edge
