@@ -198,9 +198,9 @@ class Stamp extends Control:
 			pivot_offset = size * 0.5
 			scale = Vector2.ONE * 2.0
 			modulate.a = 1.0)
-		tw.tween_property(self, "scale", Vector2.ONE, 0.14).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-		tw.tween_property(self, "scale", Vector2.ONE * 1.06, 0.05)
-		tw.tween_property(self, "scale", Vector2.ONE, 0.12)
+		tw.tween_property(self, "scale", Vector2.ONE, 0.26).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tw.tween_property(self, "scale", Vector2.ONE * 1.08, 0.08)
+		tw.tween_property(self, "scale", Vector2.ONE, 0.2)
 
 	func _draw() -> void:
 		var c := size * 0.5
@@ -263,8 +263,8 @@ static func highlight(l: Label) -> MarginContainer:
 		m.draw_rect(Rect2(0, h * 0.42, m.size.x * float(m.get_meta("t")), h * 0.46), HL))
 	m.tree_entered.connect(func():
 		var tw := m.create_tween()
-		tw.tween_interval(0.18)
-		tw.tween_method(func(v: float): m.set_meta("t", v); m.queue_redraw(), 0.0, 1.0, 0.32).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT), CONNECT_ONE_SHOT)
+		tw.tween_interval(0.4)   # once the page has mostly landed, so the stroke is seen
+		tw.tween_method(func(v: float): m.set_meta("t", v); m.queue_redraw(), 0.0, 1.0, 0.6).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT), CONNECT_ONE_SHOT)
 	return m
 
 # a numbered box down the left of a roadbook line (filled in ink on the current one)
