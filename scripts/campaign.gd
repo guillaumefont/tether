@@ -166,3 +166,55 @@ static func menu_theme() -> String:
 static func track_theme(track_i: int) -> String:
 	var home := String(Defs.TRACKS[track_i].get("theme", "snow"))
 	return home if theme_unlocked(home) else menu_theme()
+
+# ---------------------------------------------------------------- Time attack tracks
+# A track opens in Time attack once a campaign event on it is unlocked (playable, not
+# necessarily won). Tracks a player had already raced in Time attack before this rule came
+# in stay open: they were saved as [attack] flags the first time the rule was checked.
+const ATTACK_GATE := "attack_gate"   # [campaign] flag: the old tracks have been kept
+
+static func _keep_played_tracks() -> void:
+	if Records.get_flag("campaign", ATTACK_GATE):
+		return
+	for d in Defs.TRACKS:
+		for v in Defs.VARIANTS:
+			var k := Records.key(d["name"], v[0])
+			if Records.get_best(k) > 0.0 or Records.get_medal(k, "trial") > 0:
+				Records.set_flag("attack", d["name"])
+				break
+	Records.set_flag("campaign", ATTACK_GATE)
+
+# track index -> true for every track open in Time attack
+static func attack_tracks() -> Dictionary:
+	_keep_played_tracks()
+	var open := {}
+	for i in Defs.TRACKS.size():
+		if Records.get_flag("attack", Defs.TRACKS[i]["name"]):
+			open[i] = true
+	for i in count():
+		var t: int = event(i)["track"]
+		if not open.has(t) and unlocked(i):
+			open[t] = true
+	return open
+
+static func attack_open(track_i: int) -> bool:
+	return attack_tracks().has(track_i)
+
+# the first campaign event on a track (it opens the track in Time attack), -1 if none
+static func first_event_of(track_i: int) -> int:
+	for i in count():
+		if event(i)["track"] == track_i:
+			return i
+	return -1
+
+# Time attack lists the tracks in the order the campaign opens them
+static func attack_order() -> Array:
+	var order := []
+	for i in count():
+		var t: int = event(i)["track"]
+		if not t in order:
+			order.append(t)
+	for t in Defs.TRACKS.size():   # a track no event uses goes last
+		if not t in order:
+			order.append(t)
+	return order

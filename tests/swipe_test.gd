@@ -55,6 +55,11 @@ func _init() -> void:
 	root.size = Vector2i(1280, 720)
 	# a fresh install would open on the tutorial: start on the menu (in memory, not saved)
 	preload("res://scripts/settings.gd")._load().set_value("options", "tutorial_done", true)
+	# every Time attack track open, as for a player who has raced them all (in memory, not saved)
+	var rec: ConfigFile = preload("res://scripts/records.gd")._load()
+	rec.set_value("campaign", "attack_gate", true)
+	for d in preload("res://scripts/track_defs.gd").TRACKS:
+		rec.set_value("attack", d["name"], true)
 	var main: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 	await frames(5)
@@ -88,8 +93,9 @@ func _init() -> void:
 	await tap(mid)
 	check(menu.screen == "event", "a tap still opens the card (%s)" % menu.screen)
 	var t0: int = menu.ev["track"]
+	var order: Array = menu._track_order()
 	await drag(mid, Vector2(-300, 0))
-	check(menu.screen == "event" and menu.ev["track"] == t0 + 1, "event screen: swipe to the next track")
+	check(menu.screen == "event" and menu.ev["track"] == order[order.find(t0) + 1], "event screen: swipe to the next track")
 	menu.ev["variant"] = "collect"
 	menu.show_event()
 	await frames(2)
@@ -100,7 +106,7 @@ func _init() -> void:
 	var t1: int = menu.ev["track"]
 	menu.go_back()
 	await frames(4)
-	var card: Control = menu._scroller.content.get_child(0).get_child(t1)
+	var card: Control = menu._scroller.content.get_child(0).get_child(order.find(t1))
 	var r: Rect2 = card.get_global_rect()
 	check(menu.screen == "list" and menu._scroller.get_global_rect().encloses(r), "back: the list shows that track's card (%d)" % t1)
 
