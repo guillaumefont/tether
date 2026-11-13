@@ -50,6 +50,7 @@ godot --headless --path . --script tests/cosmetics_test.gd  # garage items: pric
 godot --headless --path . --script tests/economy_test.gd    # coins, Track of the day, awards, buying, progress reset
 godot --headless --path . --script tests/medals_test.gd     # medals saved and shown: race wins, layout bumps
 godot --headless --path . --script tests/race_results_test.gd # race results = order over the line, medal from it
+godot --headless --path . --script tests/attack_unlock_test.gd # Time attack tracks open with the campaign
 godot --headless --path . --script tests/colours_test.gd    # no blue accent in UI, icons, splash, web page
 godot --headless --path . --script tests/award_anim_test.gd # every award has a medallion scene that draws
 godot --headless --path . --script tests/rivals_test.gd    # rival tiers get harder, stay beatable (~4 min)
@@ -116,6 +117,12 @@ Only redo the ones where the change is visible, and put before/after images in t
   Gold on all 12 events finishes a world (`Campaign.cleared`, `Campaign.GOLD`). Finished worlds are
   saved as `done_<theme>` flags, so a stricter rule never re-locks a world; an event that already
   has a medal stays playable. Covered by `tests/economy_test.gd`.
+- Time attack tracks (Guillaume, 2026-11-13): a track is open in Time attack once a campaign event on
+  it is unlocked (`Campaign.attack_tracks()`); shut ones are greyed with a padlock and skipped by the
+  swipe. Tracks raced before the rule were kept as `[attack]` flags (`attack_gate`). So every track
+  must appear in some campaign event, or it can never open (`tests/attack_unlock_test.gd` checks).
+  2-player races and the Track of the day ignore the lock. A menu test that needs every track open
+  sets those flags in memory (see `tests/swipe_test.gd`).
 - Race vs Time trial scoring: a Race is won by the first car over the line; time penalties (+1 s per
   post, +0.25 s per missed gem) only exist in Time trial (`Race.OBS_PEN`, `TOKEN_PEN`). Anything that
   says where the player finished (results title, HUD position, medal) reads `Race.result()` /
