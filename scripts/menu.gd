@@ -187,6 +187,8 @@ func _frame() -> VBoxContainer:
 	_drag = false
 	if _flip_tween:
 		_flip_tween.kill()
+	if _slide_in:
+		_slide_in.kill()
 	var ins: Dictionary = ui.safe_insets()
 	var tall: bool = ui.is_portrait()
 	body = Control.new()
@@ -279,9 +281,10 @@ func _land(desk: Control) -> void:
 	desk.rotation = rot + (0.05 * dir if dir != 0 else -0.035)
 	desk.modulate.a = 0.0
 	var tw := desk.create_tween().set_parallel().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tw.tween_property(desk, "position", Vector2.ZERO, 0.28)
-	tw.tween_property(desk, "rotation", rot, 0.36).set_trans(Tween.TRANS_BACK)
-	tw.tween_property(desk, "modulate:a", 1.0, 0.16)
+	# slow enough to read as a page being laid down (it never blocks a tap)
+	tw.tween_property(desk, "position", Vector2.ZERO, 0.55)
+	tw.tween_property(desk, "rotation", rot, 0.7).set_trans(Tween.TRANS_BACK)
+	tw.tween_property(desk, "modulate:a", 1.0, 0.3)
 
 const TAB_W := 52
 var _tabs: VBoxContainer
@@ -1178,7 +1181,7 @@ func _event_line(i: int, tall: bool) -> Button:
 		st.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		h.add_child(st)
 		if medal > int(_seen_medal.get(i, medal)):   # won since this list was last shown: stamp it now
-			st.thump(0.45)
+			st.thump(0.75)
 	elif locked:
 		h.add_child(_icon("lock", 20))
 	else:
@@ -1423,7 +1426,8 @@ var _drag := false        # a press landed on the pager
 var _dragging := false    # ...and has moved far enough sideways to be a swipe
 var _drag_from := Vector2.ZERO
 var _drag_ms := 0
-var _flip_tween: Tween
+var _flip_tween: Tween    # the page sliding out (input waits for it)
+var _slide_in: Tween      # the next page sliding in (a press cuts it short)
 const DRAG_START := 14.0  # px before a press turns into a swipe (a tap wiggles less)
 
 # put `content` in a pager that fills the rest of the screen
@@ -1435,8 +1439,8 @@ func _carousel(vb: VBoxContainer, content: Control) -> void:
 	vb.add_child(_pager)
 	if _slide_from != 0:
 		_pager.shift = _slide_from
-		_flip_tween = create_tween()
-		_flip_tween.tween_property(_pager, "shift", 0.0, 0.18).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		_slide_in = create_tween()
+		_slide_in.tween_property(_pager, "shift", 0.0, 0.34).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 		_slide_from = 0
 
 # can the current screen flip one step that way (+1 next, -1 previous)?
@@ -1482,9 +1486,11 @@ func _flip_track(dir: int) -> int:
 func _settle(dir: int) -> void:
 	if _flip_tween:
 		_flip_tween.kill()
+	if _slide_in:
+		_slide_in.kill()
 	var go := dir != 0 and _can_flip(dir)
 	_flip_tween = create_tween()
-	_flip_tween.tween_property(_pager, "shift", -float(dir) if go else 0.0, 0.14).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN if go else Tween.EASE_OUT)
+	_flip_tween.tween_property(_pager, "shift", -float(dir) if go else 0.0, 0.2).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN if go else Tween.EASE_OUT)
 	# rebuilding also drops the card that saw the press, so it never fires after a swipe
 	_flip_tween.tween_callback(func(): _flip(dir) if go else refresh())
 
@@ -1598,6 +1604,9 @@ func _event_input(e: InputEvent) -> void:
 			if _flip_tween and _flip_tween.is_running():
 				get_viewport().set_input_as_handled()   # mid-flip: ignore
 				return
+			if _slide_in and _slide_in.is_running():
+				_slide_in.kill()   # the page is still coming in: snap it home and take the press
+				_pager.shift = 0.0
 			_drag = _pager.get_global_rect().has_point(e.position)
 			_dragging = false
 			_drag_from = e.position

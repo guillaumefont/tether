@@ -44,6 +44,7 @@ godot --headless --path . --script tests/sim_test.gd     # AI finishes every tra
 godot --headless --path . --script tests/levels_test.gd  # bends stay level, medal times, campaign
 godot --headless --path . --script tests/hook_test.gd    # hooking picks the current bend's tower
 godot --headless --path . --script tests/swipe_test.gd   # menu lists scroll, event swipe flips, tap opens
+godot --headless --path . --script tests/pause_test.gd   # pause page stays short, options on its Settings page
 godot --headless --path . --script tests/wall_test.gd    # a car on the road edge always gets off it again
 godot --headless --path . --script tests/tutorial_test.gd  # the first-launch tutorial can be finished
 godot --headless --path . --script tests/cosmetics_test.gd  # garage items: prices, every look builds, looks only
@@ -111,7 +112,9 @@ Only redo the ones where the change is visible, and put before/after images in t
   with the Track of the day as a separate photo). Handwritten notes use `Paper.note()` (Caveat, black
   pen / pencil grey / red) for asides only, never for something you must read to play. Motion is
   paper-like: pages slide in (`_land` in `menu.gd`), marker strokes draw on, medals are stamped
-  (`Stamp.thump()`). Any full-screen container laid over buttons must have
+  (`Stamp.thump()`). The in-race pause page stays short (Guillaume, 2026-11-13: it was too busy): where you
+  are, Menu / Restart / Resume and one Settings button; options live on the pause Settings page, never on
+  the pause page itself. Any full-screen container laid over buttons must have
   `mouse_filter = MOUSE_FILTER_IGNORE`, or it eats their taps (the home bookmarks broke that way).
 - Campaign progression: you need Gold (or Pivot) to advance. Gold on an event opens the next one;
   Gold on all 12 events finishes a world (`Campaign.cleared`, `Campaign.GOLD`). Finished worlds are
