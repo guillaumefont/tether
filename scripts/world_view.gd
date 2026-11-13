@@ -166,7 +166,7 @@ func build(tr: TrackData) -> void:
 
 # The build cut into a few steps so a loading screen can draw its bar between them.
 func build_steps(tr: TrackData) -> Array:
-	return [func(): _clear(tr), _build_ground, func(): _build_road(); _build_drifts(), _build_scenery,
+	return [func(): _clear(tr), _build_ground, func(): _build_road(); _build_drifts(); _build_underpasses(), _build_scenery,
 		func(): _build_jumps(); _build_start(); _build_towers(),
 		func(): _build_posts(); _build_gems(); _build_fx(); _build_weather()]
 
@@ -492,6 +492,11 @@ func _build_road() -> void:
 	var up := Vector3.UP
 	var cnt := smp.size()
 	var pillar_acc := 0.0
+	_wins = _window_spans()
+	var win_st: SurfaceTool = null
+	if not _wins.is_empty():
+		win_st = SurfaceTool.new()
+		win_st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for k in cnt:
 		var A: Dictionary = smp[k]
 		var B: Dictionary = smp[(k + 1) % cnt]
@@ -505,10 +510,22 @@ func _build_road() -> void:
 		var ha: float = A["h"] + ROAD_Y; var hb: float = B["h"] + ROAD_Y
 		var P := func(c: Vector2, n: Vector2, off: float, h: float) -> Vector3:
 			return w3(c + n * off, h)
+		var win := _in_window(smid)
+		if not win.is_empty():
+			# see-through deck: its own mesh, uv = (s, offset), uv2.x = -1..1 along the window
+			var wl: float = (win[1] - win[0]) * 0.5
+			var ua := (fposmod(sa - win[2] + track.L * 0.5, track.L) - track.L * 0.5) / wl
+			var ub := (fposmod(sb - win[2] + track.L * 0.5, track.L) - track.L * 0.5) / wl
+			var ow := HW + KERB_W
+			for v in [[ca, na, ow, ha, sa, ua], [cb, nb, ow, hb, sb, ub], [cb, nb, -ow, hb, sb, ub], [ca, na, ow, ha, sa, ua], [cb, nb, -ow, hb, sb, ub], [ca, na, -ow, ha, sa, ua]]:
+				win_st.set_normal(Vector3.UP)
+				win_st.set_uv(Vector2(v[4], v[2]))
+				win_st.set_uv2(Vector2(v[5], signf(v[2])))
+				win_st.add_vertex(P.call(v[0], v[1], v[2], v[3] + 0.3))
 		# asphalt
-		road.quad(P.call(ca, na, HW, ha), P.call(cb, nb, HW, hb), P.call(cb, nb, -HW, hb), P.call(ca, na, -HW, ha), th["road"], up, true)
+		if win.is_empty(): road.quad(P.call(ca, na, HW, ha), P.call(cb, nb, HW, hb), P.call(cb, nb, -HW, hb), P.call(ca, na, -HW, ha), th["road"], up, true)
 		# centre dashes (40 on, 50 off)
-		if fposmod(smid, 90.0) < 40.0:
+		if fposmod(smid, 90.0) < 40.0 and win.is_empty():
 			road.quad(P.call(ca, na, 2.5, ha + 0.4), P.call(cb, nb, 2.5, hb + 0.4), P.call(cb, nb, -2.5, hb + 0.4), P.call(ca, na, -2.5, ha + 0.4), Color(COL_CHALK, 1.0).darkened(0.55), up, false, true)
 		var elevated: bool = A["h"] > 2.0 or B["h"] > 2.0
 		for side: float in [1.0, -1.0]:
@@ -517,7 +534,7 @@ func _build_road() -> void:
 			var o2 := (HW + KERB_W + RAIL_W) * side
 			var out_hint := Vector3(na.x * side, 0, na.y * side)
 			# verge: a strip of packed, blue-shaded snow right at the lane edge
-			road.quad(P.call(ca, na, o0, ha + 0.6), P.call(cb, nb, o0, hb + 0.6), P.call(cb, nb, o1, hb + 0.6), P.call(ca, na, o1, ha + 0.6), th["verge"], up)
+			if win.is_empty(): road.quad(P.call(ca, na, o0, ha + 0.6), P.call(cb, nb, o0, hb + 0.6), P.call(cb, nb, o1, hb + 0.6), P.call(ca, na, o1, ha + 0.6), th["verge"], up)
 			if elevated:
 				# bridge: wooden rail with snow lying on top
 				var rh := RAIL_H + 10.0
@@ -569,7 +586,7 @@ func _build_road() -> void:
 		if elevated:
 			# deck underside
 			var oo := HW + KERB_W + RAIL_W
-			road.quad(P.call(ca, na, oo, ha - 22.0), P.call(cb, nb, oo, hb - 22.0), P.call(cb, nb, -oo, hb - 22.0), P.call(ca, na, -oo, ha - 22.0), COL_DECK.darkened(0.3), -up)
+			if win.is_empty(): road.quad(P.call(ca, na, oo, ha - 22.0), P.call(cb, nb, oo, hb - 22.0), P.call(cb, nb, -oo, hb - 22.0), P.call(ca, na, -oo, ha - 22.0), COL_DECK.darkened(0.3), -up)
 			pillar_acc += sb - sa
 			if pillar_acc > 260.0 and A["h"] > 70.0 and not _near_bridge_center(ca, HW * 2.4):
 				pillar_acc = 0.0
@@ -579,6 +596,14 @@ func _build_road() -> void:
 					static_root.add_child(pil)
 		else:
 			pillar_acc = 260.0
+	if win_st != null:
+		var wm := MeshInstance3D.new()
+		wm.set_meta("deck_window", true)
+		wm.mesh = win_st.commit()
+		wm.material_override = _window_mat(String(th["kit"]))
+		if th["kit"] == "snow":
+			wm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF   # clear ice: no shadow
+		static_root.add_child(wm)
 	var mi := MeshInstance3D.new()
 	mi.mesh = road.st.commit()
 	mi.material_override = _road_mat()
@@ -586,6 +611,184 @@ func _build_road() -> void:
 	# along the outer slope
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	static_root.add_child(mi)
+
+# ---------------------------------------------------------------- underpasses
+# Where the road passes under a bridge (Guillaume, 2026-11-13): the stretch of deck right
+# above the lane below is a see-through section in the world's own material (clear ice,
+# timber planks, a carved lattice, a steel grating), so a car underneath never vanishes.
+# Visual only: the deck drives exactly the same.
+
+# one entry per bridge, in prototype units: crossing point, both directions, heights
+func _crossings() -> Array:
+	var out: Array = []
+	if track == null:
+		return out
+	for B in track.bridges:
+		var a: int = B["under"]
+		var b: int = (int(B["from"]) + posmod(int(B["to"]) - int(B["from"]), track.n) / 2) % track.n
+		var su := track.s_of(a, 0.5)
+		var sd := track.s_of(b, 0.5)
+		if track.height_at(su) > track.height_at(sd):
+			var t := su; su = sd; sd = t
+			a = b
+		var pu := track.point_at(su)
+		var pd := track.point_at(sd)
+		var du: Vector2 = pu["dir"]
+		var dd: Vector2 = pd["dir"]
+		var cu: Vector2 = pu["pos"]
+		var den := du.cross(dd)
+		var c := cu
+		if absf(den) > 0.2:
+			c = cu + du * ((Vector2(pd["pos"]) - cu).cross(dd) / den)
+		out.append({ "a": a, "c": c, "du": du, "dd": dd, "sin": maxf(0.4, absf(den)),
+			"hu": track.height_at(su), "hd": track.height_at(sd), "sd": sd + (c - Vector2(pd["pos"])).dot(dd) })
+	return out
+
+# stretches of deck [s0, s1, s mid] shown as a see-through section: walk the deck round each
+# crossing and keep every bit of it that lies over the lane below (a bent deck or a slanted
+# crossing covers more road than a straight cross-section would)
+var _wins: Array = []
+func _window_spans() -> Array:
+	var out: Array = []
+	for X in _crossings():
+		var a: int = X["a"]
+		var lo := INF
+		var hi := -INF
+		var sv: float = X["sd"] - 1400.0
+		while sv < X["sd"] + 1400.0:
+			if absf(track.height_at(sv) - X["hu"]) > 60.0:
+				var q := track.point_at(sv)
+				var nrm := TrackData.perp(q["dir"])
+				for off in range(-196, 197, 49):
+					if _lane_dist(a, Vector2(q["pos"]) + nrm * off) < HW + 6.0:
+						lo = minf(lo, sv)
+						hi = maxf(hi, sv)
+						break
+			sv += 20.0
+		if hi >= lo:
+			out.append([lo - 25.0, hi + 25.0, (lo + hi) * 0.5])
+	return out
+
+# distance from p to the road's centre line near point index a
+func _lane_dist(a: int, p: Vector2) -> float:
+	var best := INF
+	for k in range(a - 12, a + 13):
+		var i := posmod(k, track.n)
+		best = minf(best, Geometry2D.get_closest_point_to_segment(p, track.P[i], track.P[(i + 1) % track.n]).distance_to(p))
+	return best
+
+func _in_window(sv: float) -> Array:
+	for w in _wins:
+		var d := fposmod(sv - w[2] + track.L * 0.5, track.L) - track.L * 0.5
+		if absf(d) < (w[1] - w[0]) * 0.5:
+			return w
+	return []
+
+# point on the plane of a crossing: alpha along the deck, beta along the under road
+static func _xp(X: Dictionary, al: float, be: float) -> Vector2:
+	return X["c"] + X["dd"] * al + X["du"] * be
+
+func _build_underpasses() -> void:
+	for X in _crossings():
+		_under_shade(X, 0.3)
+
+# a dark wash on the lane below, fading out towards both sides of the deck
+func _under_shade(X: Dictionary, amt: float) -> void:
+	var sn: float = X["sin"]
+	var a0 := (HW + KERB_W + 4.0) / sn
+	var b0 := (HW + KERB_W + RAIL_W + 30.0) / sn
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var y: float = X["hu"] + ROAD_Y + 0.9
+	var N := 8
+	for j in N:
+		var t0 := -1.0 + 2.0 * j / N
+		var t1 := -1.0 + 2.0 * (j + 1) / N
+		var f0 := amt * clampf((1.0 - absf(t0)) * 2.2, 0.0, 1.0)
+		var f1 := amt * clampf((1.0 - absf(t1)) * 2.2, 0.0, 1.0)
+		var q := [[-1.0, t0, f0], [1.0, t0, f0], [1.0, t1, f1], [-1.0, t0, f0], [1.0, t1, f1], [-1.0, t1, f1]]
+		for v in q:
+			st.set_color(Color(0.02, 0.03, 0.06, v[2]))
+			st.add_vertex(w3(_xp(X, a0 * v[0], b0 * v[1]), y))
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.vertex_color_use_as_albedo = true
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	static_root.add_child(mi)
+
+const WINDOW_LOOK := {
+	# frame, bars (or ice tint), bars 2
+	"snow":   [Color("#e8f3f9"), Color("#9fd4ea"), Color("#ffffff")],
+	"forest": [Color("#4a3322"), Color("#8a6040"), Color("#74502f")],
+	"sand":   [Color("#a8743f"), Color("#d9aa6c"), Color("#c4945a")],
+	"rock":   [Color("#3b4046"), Color("#6c737b"), Color("#575e66")],
+}
+func _window_mat(kind: String) -> ShaderMaterial:
+	var lk: Array = WINDOW_LOOK.get(kind, WINDOW_LOOK["rock"])
+	var sh := Shader.new()
+	var ice := kind == "snow"
+	sh.code = """
+shader_type spatial;
+render_mode cull_disabled%s;
+uniform vec3 frame_col : source_color;
+uniform vec3 bar_col : source_color;
+uniform vec3 bar2_col : source_color;
+uniform int kind = 0;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+void fragment() {
+	vec2 q = UV;     // units: along the deck, across the deck
+	float fr = step(0.93, abs(UV2.x));   // a beam across the deck at both ends of the window
+	vec3 c = bar_col;
+	float m = 1.0;
+	float rough = 0.8;
+	if (kind == 0) {
+		// clear ice: pale blue, frosted towards the frame, a few cracks
+		float edge = smoothstep(0.6, 0.93, max(abs(UV2.x), abs(UV.y) / 196.0));
+		// a few long cracks: thin lines along the zero sets of two slow wobbly functions
+		float f1 = sin(q.x * 0.011 + sin(q.y * 0.02) * 1.6) * 60.0 + q.y * 0.6;
+		float f2 = sin(q.y * 0.03 + q.x * 0.004) * 50.0 - q.x * 0.35;
+		float crack = 1.0 - smoothstep(0.6, 1.4, abs(fract(f1 / 140.0 + 0.5) - 0.5) * 140.0);
+		crack = max(crack, 1.0 - smoothstep(0.6, 1.4, abs(fract(f2 / 170.0 + 0.5) - 0.5) * 170.0));
+		c = mix(bar_col, bar2_col, max(edge * 0.8, crack));
+		m = 0.22 + edge * 0.55 + crack * 0.5;
+		rough = 0.05;
+	} else if (kind == 1) {
+		// timber boardwalk: planks across the deck with gaps between
+		float f = fract(q.x / 30.0);
+		m = step(0.3, f);
+		c = mix(bar_col, bar2_col, hash(vec2(floor(q.x / 30.0), 3.0)));
+	} else if (kind == 2) {
+		// carved sandstone lattice
+		float u = fract((q.x + q.y) / 34.0);
+		float v = fract((q.x - q.y) / 34.0);
+		m = max(step(u, 0.2), step(v, 0.2));
+		c = mix(bar_col, bar2_col, step(u, 0.2));
+	} else {
+		// steel grating
+		float u = fract(q.x / 20.0);
+		float v = fract(q.y / 20.0);
+		m = max(step(u, 0.2), step(v, 0.14));
+		c = mix(bar_col, bar2_col, step(u, 0.2));
+		rough = 0.45;
+	}
+	if (fr > 0.5) { c = frame_col; m = 1.0; }
+	ALBEDO = c;
+	ROUGHNESS = rough;
+	%s
+}
+""" % ([", depth_draw_always", "ALPHA = m;"] if ice else ["", "ALPHA = m; ALPHA_SCISSOR_THRESHOLD = 0.5;"])
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	m.set_shader_parameter("frame_col", lk[0])
+	m.set_shader_parameter("bar_col", lk[1])
+	m.set_shader_parameter("bar2_col", lk[2])
+	m.set_shader_parameter("kind", ["snow", "forest", "sand", "rock"].find(kind))
+	return m
 
 # Loose stuff heaped along both lane edges, half on the verge and half spilling onto
 # the lane, so a car rubbing the edge visibly ploughs into it: fresh powder, forest

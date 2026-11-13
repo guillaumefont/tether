@@ -58,6 +58,7 @@ godot --headless --path . --script tests/rivals_test.gd    # rival tiers get har
 godot --headless --path . --script tests/obstacles_test.gd # the AI's line never touches an Obstacles post
 godot --headless --path . --script tests/camera_test.gd    # low camera shots: off while racing, never inside the land
 godot --headless --path . --script tests/engine_test.gd    # every vehicle has an engine sound that loops cleanly
+godot --headless --path . --script tests/underpass_test.gd # all deck over a lower lane is a see-through window
 ```
 
 After changing a track layout, rerun `tools/gen_obstacles.gd` (posts placed off the AI's racing line,
@@ -66,7 +67,9 @@ Also bump `LAYOUT_VERSION` in `scripts/records.gd`, so players' best times and g
 road are dropped (medals and campaign progress stay). `tools/tighten_layout.gd` searches for a
 layout with short links (about one lane between bends) that still passes the layout check.
 
-Writing a `SceneTree` test: a node added to `root` only gets `_ready()` after `await process_frame`
+Writing a `SceneTree` test: after `view.build()` the old nodes are only queued for deletion, so a
+new node given the same `name` gets renamed; tag nodes a test looks for with `set_meta()` instead.
+Also in a `SceneTree` test: a node added to `root` only gets `_ready()` after `await process_frame`
 (see `tests/camera_test.gd`), and a runtime error stops the test function before `quit()`, so the run
 hangs instead of failing. Wrap local runs in `timeout`.
 
@@ -137,6 +140,11 @@ Only redo the ones where the change is visible, and put before/after images in t
   under the old rules). The bump drops best times and ghosts only: medals live in their own keys
   (`medal_trial`, `medal_race` in `records.cfg`), so anything a player earned must be saved as its
   own value, never only worked out from a time the bump erases.
+- Bridges (Guillaume, 2026-11-13): the stretch of deck right above the lane below is a see-through
+  window in the world's material (clear ice, timber planks, carved lattice, steel grating), so a car
+  under a bridge never vanishes; visual only (`_window_spans`, `_window_mat` in `world_view.gd`).
+  `track.bridges[k]["under"]` is not always the lower road (the height solver can swap levels):
+  compare `height_at` of both passes, as `WorldView._crossings()` does.
 - The race camera stays fairly top-down (68°) while the player steers, so lines through bends stay
   readable. Low cinematic shots (`WorldView.CINE_SHOTS`, picked in `main.gd` `_pick_shot`) are only
   for moments nobody steers: countdown, finish/results, the tutorial's cards and frozen bends.

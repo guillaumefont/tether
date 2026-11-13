@@ -54,3 +54,5 @@ jobs:
         run: ./godot --headless --path . --script tests/camera_test.gd
       - name: Engine sounds test
         run: ./godot --headless --path . --script tests/engine_test.gd
+      - name: Under a bridge the car stays in sight
+        run: ./godot --headless --path . --script tests/underpass_test.gd
