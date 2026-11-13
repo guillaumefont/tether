@@ -296,7 +296,9 @@ func _go_back() -> void:
 	if building:
 		return
 	if race != null and phase != "menu":
-		if paused or _can_pause():
+		if ui.pause_settings_open():
+			ui.show_pause_settings(false)   # back from the pause Settings page to the pause page
+		elif paused or _can_pause():
 			_toggle_pause()
 		elif ui.results.visible:
 			_with_loading("", _to_menu)
@@ -1048,6 +1050,10 @@ func _run_demo(arg: String) -> void:
 			await get_tree().create_timer(0.2).timeout
 			await RenderingServer.frame_post_draw
 			get_viewport().get_texture().get_image().save_png(out.path_join("pause.png"))
+			ui.show_pause_settings(true)
+			await get_tree().create_timer(0.2).timeout
+			await RenderingServer.frame_post_draw
+			get_viewport().get_texture().get_image().save_png(out.path_join("pause_settings.png"))
 			_set_paused(false)
 		if t > (shot + 1) * secs / 4.0:
 			shot += 1

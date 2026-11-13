@@ -31,8 +31,8 @@ SHOT_DIR=/tmp/shots/a godot --path . --resolution 1920x1080 --rendering-driver o
 
 Menus only (no race needed): `0,standard,4,race,1,snow` takes about 4 min.
 
-README shots: `docs/race-obstacles.png` = 03 at 1280x720, `docs/pause.png` = the 03 run with
-`SHOT_PAUSE=1`, `docs/menu.png` = menu_home, `docs/portrait-collect.png` =
+README shots: `docs/race-obstacles.png` = 03 at 1280x720, `docs/pause.png` (and `docs/pause-settings.png`
+= frame pause_settings) = the 03 run with `SHOT_PAUSE=1`, `docs/menu.png` = menu_home, `docs/portrait-collect.png` =
 `9,collect,20,trial,1,snow` at `--resolution 780x1386`, race_4, scaled to 390x693.
 Since the landscape relief, one run takes 10-20 min on 4 software-GL cores; run at most two at once. The AI race shifts when gameplay or scenery code changes, so check the frames and retune.
 
