@@ -42,6 +42,8 @@ jobs:
         run: ./godot --headless --path . --script tests/race_results_test.gd
       - name: Time attack tracks open with the campaign
         run: ./godot --headless --path . --script tests/attack_unlock_test.gd
+      - name: Time attack is Standard only, one world chip
+        run: ./godot --headless --path . --script tests/time_attack_test.gd
       - name: No blue accent in the UI or icon (Ice Blue case)
         run: ./godot --headless --path . --script tests/colours_test.gd
       - name: Award medallions all draw

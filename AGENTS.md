@@ -52,6 +52,7 @@ godot --headless --path . --script tests/economy_test.gd    # coins, Track of th
 godot --headless --path . --script tests/medals_test.gd     # medals saved and shown: race wins, layout bumps
 godot --headless --path . --script tests/race_results_test.gd # race results = order over the line, medal from it
 godot --headless --path . --script tests/attack_unlock_test.gd # Time attack tracks open with the campaign
+godot --headless --path . --script tests/time_attack_test.gd  # Time attack: Standard only, world chip
 godot --headless --path . --script tests/colours_test.gd    # no blue accent in UI, icons, splash, web page
 godot --headless --path . --script tests/award_anim_test.gd # every award has a medallion scene that draws
 godot --headless --path . --script tests/rivals_test.gd    # rival tiers get harder, stay beatable (~4 min)
@@ -129,6 +130,12 @@ Only redo the ones where the change is visible, and put before/after images in t
   must appear in some campaign event, or it can never open (`tests/attack_unlock_test.gd` checks).
   2-player races and the Track of the day ignore the lock. A menu test that needs every track open
   sets those flags in memory (see `tests/swipe_test.gd`).
+- Time attack is the Standard layout only (Guillaume, 2026-11-13): one record and one ghost per
+  track. Reverse / Obstacles / Collect live in campaign events and the Track of the day (whose
+  `kind` is not "attack"); 2-player races keep all four (`Menu.variants_for()`). The world is one
+  chip in the track screen's header that steps through opened worlds (`_world_chip`), not a grid.
+  Its list cards are the road and its name, with the Standard medal once won (`Menu.attack_medal()`).
+  Covered by `tests/time_attack_test.gd`.
 - Race vs Time trial scoring: a Race is won by the first car over the line; time penalties (+1 s per
   post, +0.25 s per missed gem) only exist in Time trial (`Race.OBS_PEN`, `TOKEN_PEN`). Anything that
   says where the player finished (results title, HUD position, medal) reads `Race.result()` /

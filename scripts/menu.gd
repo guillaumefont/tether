@@ -462,7 +462,7 @@ func show_home() -> void:
 	lines.add_child(_road_line(1, "flag", "CAMPAIGN", "%d / %d events  ·  next: %s, event %d" % [cleared, Campaign.count(), next_name, first - Campaign.chapter_start(Campaign.chapter_of(first)) + 1],
 		func(): kind = "campaign"; world = -1; show_list(), true))
 	var n_open := Campaign.attack_tracks().size()
-	var ta_sub := "%d tracks  ·  4 variants  ·  chase your ghost" % n_open if n_open == Defs.TRACKS.size() \
+	var ta_sub := "%d tracks  ·  chase your ghost" % n_open if n_open == Defs.TRACKS.size() \
 		else "%d / %d tracks open  ·  the campaign opens more" % [n_open, Defs.TRACKS.size()]
 	lines.add_child(_road_line(2, "watch", "TIME ATTACK", ta_sub,
 		func(): kind = "attack"; _list_scroll.erase(kind); show_list()))
@@ -1241,15 +1241,15 @@ func _card(track_i: int, line1: String, line2: String, medal: int, locked: bool,
 	l1.autowrap_mode = TextServer.AUTOWRAP_OFF
 	l1.clip_text = true
 	v.add_child(l1)
-	var l2: Label = ui._label(line2, 12, C_MUTED, ui.f_med)
-	v.add_child(l2)
+	if line2 != "":
+		v.add_child(ui._label(line2, 12, C_MUTED, ui.f_med))
 	var ms := MedalStrip.new()
 	ms.ink = true
 	ms.compact = true
 	ms.custom_minimum_size = Vector2(0, 18)
 	ms.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ms.set_state(medal, ["", "", "", ""])
-	if not locked and medal >= 0:
+	if not locked and medal >= 0 and (medal > 0 or num > 0):   # Time attack: rings once one is won
 		v.add_child(ms)
 	h.add_child(v)
 	b.add_child(h)
@@ -1264,20 +1264,31 @@ func _tag(variant: String, mode: String) -> String:
 func _list_key() -> String:
 	return "campaign%d" % world if kind == "campaign" else kind
 
+# The variants a mode offers on its track screen. Time attack is the plain layout only
+# (Guillaume, 2026-11-13): one record and one ghost per track; Reverse, Obstacles and Collect
+# are met in the campaign and the Track of the day. 2-player races keep all four.
+static func variants_for(mode_kind: String) -> Array:
+	if mode_kind == "attack":
+		return ["standard"]
+	return Defs.VARIANTS.map(func(v): return v[0])
+
+# the medal a Time attack track card shows: its Standard Time trial medal
+static func attack_medal(track_i: int) -> int:
+	return Campaign.medal(Defs.TRACKS[track_i]["name"], "standard", "trial")
+
 # a track on the Time attack / 2-player list; in Time attack a track the campaign has not
-# opened yet is greyed with a padlock and says which event opens it
+# opened yet is greyed with a padlock and says which event opens it. A Time attack card is
+# just the road and its name, with the medal once one is won.
 func _track_card(i: int, num: int, open := true) -> Button:
-	var name: String = Defs.TRACKS[i]["name"]
-	var best := -1 if kind == "versus" else 0
+	var best := -1 if kind == "versus" else attack_medal(i)
+	var note: String = "" if kind == "attack" else Defs.TRACKS[i]["note"]
 	if kind == "attack":
-		for v in Defs.VARIANTS:
-			best = maxi(best, Campaign.medal(name, v[0], "trial"))
-	var note: String = Defs.TRACKS[i]["note"]
+		num = 0
 	if not open:
 		var fe := Campaign.first_event_of(i)
 		var c := Campaign.chapter_of(fe)
 		note = "Opens with %s, event %d" % [Themes.get_theme(Campaign.CHAPTERS[c]["theme"])["name"], fe - Campaign.chapter_start(c) + 1]
-	var b := _card(i, name.to_upper(), note, best, not open, num)
+	var b := _card(i, String(Defs.TRACKS[i]["name"]).to_upper(), note, best, not open, num)
 	if not open:
 		b.disabled = true
 		b.get_child(0).add_child(_icon("lock", 20))
@@ -1307,13 +1318,17 @@ func show_event() -> void:
 			sub = "%s  ·  event %d of %d  ·  %s" % [Themes.get_theme(Campaign.CHAPTERS[c]["theme"])["name"], ev["idx"] - Campaign.chapter_start(c) + 1, Campaign.chapter_size(c), _tag(ev["variant"], ev["mode"])]
 			if ev["mode"] == "race":
 				sub += "  ·  %s rivals" % Rivals.tier_name(Rivals.campaign_tier(c))
-		"attack": sub = "Time attack  ·  %d laps" % int(d.get("laps", 3))
+		"attack":
+			ev["variant"] = "standard"
+			sub = "%s  ·  %d laps" % [d["note"], int(d.get("laps", 3))]
 		"daily":
 			var paid := Daily.paid_tier()
 			sub = "Track of the day  ·  %s  ·  %s" % [_variant_name(ev["variant"]),
 				"+%d coins, +%d per medal" % [Daily.BASE, Daily.PER_TIER] if paid < 0 else "done today, a better medal pays +%d" % Daily.PER_TIER]
 		"versus": sub = "2-player race  ·  %d laps" % int(d.get("laps", 3))
-	_header(vb, d["name"], sub, func(): go_back())
+	var eh := _header(vb, d["name"], sub, func(): go_back())
+	if ev["kind"] == "attack":
+		_world_chip(eh, func(): show_event())
 	var tall: bool = ui.is_portrait()
 	var row: BoxContainer = VBoxContainer.new() if tall else HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12 if tall else 18)
@@ -1342,39 +1357,26 @@ func show_event() -> void:
 		right.size_flags_vertical = Control.SIZE_SHRINK_END
 	right.add_theme_constant_override("separation", 10)
 	row.add_child(right)
-	right.add_child(ui._label(d["note"], 15, C_MUTED, ui.f_bold))
-	if ev["kind"] in ["attack", "versus"]:
+	if ev["kind"] != "attack":
+		right.add_child(ui._label(d["note"], 15, C_MUTED, ui.f_bold))
+	if variants_for(ev["kind"]).size() > 1 and ev["kind"] != "campaign" and ev["kind"] != "daily":
 		var g := GridContainer.new()
-		g.columns = 2 if tall else 4
+		g.columns = 4
 		g.add_theme_constant_override("h_separation", 8)
 		g.add_theme_constant_override("v_separation", 8)
 		for v in Defs.VARIANTS:
-			# portrait: icon beside the name (2 x 2); landscape: icon over it (one row of 4)
-			var b: Button = ui.icon_button(v[0], v[1].to_upper(), "card", not tall, 50 if tall else 62)
+			# one row of 4, icon over the name
+			var b: Button = ui.icon_button(v[0], v[1].to_upper(), "card", true, 58 if tall else 62)
 			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			ui.set_tile_on(b, v[0] == ev["variant"])
 			b.pressed.connect(func(): ev["variant"] = v[0]; show_event())
 			g.add_child(b)
 		right.add_child(g)
-	if ev["kind"] == "attack":
-		# theme switcher: the worlds unlocked in the campaign; the rest show a lock
-		var tg := GridContainer.new()
-		tg.columns = 4
-		tg.add_theme_constant_override("h_separation", 8)
-		for t in Themes.ORDER:
-			var open := Campaign.theme_unlocked(t)
-			var tb: Button = ui.icon_button(t if open else "lock", String(Themes.get_theme(t)["name"]).to_upper(), "card", true, 54 if tall else 58)
-			tb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			tb.tooltip_text = Themes.get_theme(t)["name"] if open else "Finish its campaign world to unlock"
-			tb.disabled = not open
-			ui.set_tile_on(tb, t == ev.get("theme", ""))
-			tb.pressed.connect(func(): ev["theme"] = t; attack_theme = t; show_event())
-			tg.add_child(tb)
-		right.add_child(tg)
 	var vdesc := ""
 	for v in Defs.VARIANTS:
 		if v[0] == ev["variant"]: vdesc = v[2]
-	right.add_child(ui._label(vdesc, 13, C_MUTED))
+	if ev["variant"] != "standard":   # only a variant with a rule of its own needs a word
+		right.add_child(ui._label(vdesc, 13, C_MUTED))
 	if ev["kind"] != "versus":
 		var key := Records.key(d["name"], ev["variant"])
 		var labels: Array = []
@@ -1384,6 +1386,8 @@ func show_event() -> void:
 				labels.append(ui.fmt2(t) if t > 0.0 else "--")
 			var rec := Records.get_best(key)
 			line = ("Your best %s: %s" % ["score" if ev["variant"] == "collect" else "lap", ui.fmt2(rec)]) if rec > 0.0 else "No time yet. Beat a target to win its medal."
+			if ev["kind"] == "attack":
+				line = ("Best  %s" % ui.fmt2(rec)) if rec > 0.0 else "No time yet"
 			if gold_to_advance():
 				line += " Gold opens the next event."
 		else:
@@ -1687,3 +1691,30 @@ func go_back() -> bool:
 			show_home()
 			return true
 	return false
+
+# Time attack: the world the track is raced in, as one chip at the right of its header.
+# A tap steps to the next world the campaign has opened (locked ones are not shown); with
+# only one world open there is nothing to pick and no chip.
+func _world_chip(hb: HBoxContainer, redraw: Callable) -> Button:
+	var open: Array = Themes.ORDER.filter(func(t): return Campaign.theme_unlocked(t))
+	if open.size() < 2:
+		return null
+	var cur := chip_world(open)
+	var b: Button = ui.icon_button(cur, String(Themes.get_theme(cur)["name"]).to_upper(), "card", false, 46)
+	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	b.tooltip_text = "World: tap for the next one"
+	b.set_meta("world_chip", cur)
+	b.pressed.connect(func():
+		attack_theme = open[(open.find(cur) + 1) % open.size()]
+		ev["theme"] = attack_theme
+		redraw.call())
+	hb.add_child(b)
+	return b
+
+# the world the chip shows: the one the track opens in, else the last pick, else the first
+func chip_world(open: Array) -> String:
+	if String(ev.get("theme", "")) in open:
+		return ev["theme"]
+	if attack_theme in open:
+		return attack_theme
+	return open[0]
