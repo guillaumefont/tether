@@ -1,5 +1,5 @@
 # The Roadbook look of the menus: a rally co-driver's notebook. Cream ruled paper, navy ink,
-# white index cards, an ice-blue highlighter, strips of tape, rubber-stamp medals and
+# white index cards, a grey marker, strips of tape, rubber-stamp medals and
 # "tulip" bend diagrams. The race HUD stays dark (it sits over the moving track); every menu,
 # panel and overlay is paper.
 extends RefCounted
@@ -11,13 +11,14 @@ const INK := Color("#15222e")          # text, outlines, the main buttons
 const INK_SOFT := Color("#56636e")     # second line of text
 const INK_FAINT := Color(0.082, 0.133, 0.18, 0.28)
 const RULE := Color(0.082, 0.133, 0.18, 0.08)   # the ruled lines
-const ACCENT := Color("#4fb6ff")       # the game's ice blue: highlighter, button shadow, tower cap
-const ACCENT_INK := Color("#1d7fc4")   # the same blue dark enough to read as text on paper
-const HL := Color(0.31, 0.71, 1.0, 0.5)   # highlighter band behind a word
+# No coloured accent: the pages are ink on paper. What stands out is set in INK, made bolder,
+# boxed, filled or highlighted, never recoloured.
+const SHADE := Color("#9a9d9c")        # the felt-tip block shadow under the main action
+const HL := Color(0.082, 0.133, 0.18, 0.14)   # grey marker band behind a word
 const TAPE := Color(0.84, 0.89, 0.91, 0.78)
 const COIN_INK := Color("#a8730c")     # coin amounts written on paper (gold, darkened to read)
 const RED_INK := Color("#c8432f")
-const PEN := Color("#1d5fa8")          # ballpoint blue: handwritten notes
+const PEN := Color("#2b2d31")          # black ballpoint: handwritten notes
 const PENCIL := Color("#6b6f73")       # pencilled asides
 const MARGIN := Color(0.78, 0.26, 0.18, 0.35)   # the red margin line down a page
 
@@ -32,7 +33,7 @@ static func hand() -> Font:
 		_hand = fv
 	return _hand
 
-# a handwritten note: Caveat in pen blue, a touch crooked
+# a handwritten note: Caveat in black pen, a touch crooked
 static func note(text: String, size := 22, col := PEN, tilt := -0.02) -> Label:
 	var l := Label.new()
 	l.text = text
@@ -58,15 +59,15 @@ static func box(bg: Color, border := Color.TRANSPARENT, bw := 0, shadow := 4, ra
 	s.anti_aliasing = false
 	return s
 
-# the main action: solid ink with an ice-blue block shadow, like a felt-tip box
+# the main action: solid ink with a grey block shadow, like a felt-tip box
 # (drawn as a border just outside the button's right and bottom edges; `off` = its depth)
 static func go_box(lit := false, off := 4) -> StyleBoxFlat:
-	var s := box(INK.lightened(0.12) if lit else INK, ACCENT, 0, 0)
+	var s := box(INK.lightened(0.12) if lit else INK, SHADE, 0, 0)
 	s.expand_margin_right = off
 	s.expand_margin_bottom = off
 	s.border_width_right = off
 	s.border_width_bottom = off
-	s.border_color = ACCENT
+	s.border_color = SHADE
 	return s
 
 # one sheet of the roadbook: cream paper, ruled lines, a shadow onto the world behind
@@ -216,7 +217,7 @@ class Stamp extends Control:
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 # A roadbook "tulip": how a bend is drawn in rally notes. You come in from the bottom dot,
-# the ice-blue tower sits inside the bend, the arrow points to the exit. `seed` varies it.
+# the tower (an ink ring) sits inside the bend, the arrow points to the exit. `seed` varies it.
 class Tulip extends Control:
 	var seed := 0
 	var col := INK
@@ -245,7 +246,7 @@ class Tulip extends Control:
 		var side := -1.0 if ang > 0.0 else 1.0
 		var tw := mid + Vector2(side * s * 0.22, -s * 0.02)
 		draw_circle(tw, s * 0.1, col)
-		draw_circle(tw, s * 0.065, ACCENT)
+		draw_circle(tw, s * 0.065, CARD)
 
 # a word with a highlighter stroke behind it: put the label inside, the band is drawn first
 static func highlight(l: Label) -> MarginContainer:

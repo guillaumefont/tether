@@ -50,6 +50,7 @@ godot --headless --path . --script tests/cosmetics_test.gd  # garage items: pric
 godot --headless --path . --script tests/economy_test.gd    # coins, Track of the day, awards, buying, progress reset
 godot --headless --path . --script tests/medals_test.gd     # medals saved and shown: race wins, layout bumps
 godot --headless --path . --script tests/race_results_test.gd # race results = order over the line, medal from it
+godot --headless --path . --script tests/colours_test.gd    # no blue accent in UI, icons, splash, web page
 godot --headless --path . --script tests/award_anim_test.gd # every award has a medallion scene that draws
 godot --headless --path . --script tests/rivals_test.gd    # rival tiers get harder, stay beatable (~4 min)
 godot --headless --path . --script tests/obstacles_test.gd # the AI's line never touches an Obstacles post
@@ -92,21 +93,23 @@ Only redo the ones where the change is visible, and put before/after images in t
 
 - Original game: track layouts and art must be original, never copied from another game.
 - Targets Android and iOS (web build via WASM).
-- Colour roles: the UI accent is ice blue `#4fb6ff` (`C_ACCENT` in `menu_art.gd`, mirrored in `ui.gd`,
-  `menu.gd`, `garage.gd`); amber `#f2b134` is the player's car and rope; gold is only for medals and
-  coins (`C_COIN`). Icons/splash PNGs and the logo PNG inside `web/shell.html` must follow `icon.svg`
-  and `menu_art.gd` when these change.
+- Colour roles (Guillaume, 2026-11-13): the UI has no coloured accent. On paper, emphasis is `Paper.INK`
+  (bolder, boxed, filled or under the grey marker `Paper.HL`); on dark (HUD, splash, loading ring,
+  logo, icon hub) it is chalk cream `#f3efe6` (`C_ACCENT` in `menu_art.gd`, mirrored in `ui.gd`).
+  Amber `#f2b134` is the player's car and rope; gold is only for medals and coins (`C_COIN`). Don't
+  bring back a blue (or any new) accent colour; `tests/colours_test.gd` checks it. Icons/splash PNGs
+  and the logo PNG inside `web/shell.html` must follow `icon.svg` and `menu_art.gd` when these change
+  (`tools/gen_splash.gd`, `tools/gen_web_shell.gd`; the icon PNGs are PIL edits of `icon.svg`'s look).
 - Menu look ("Roadbook", chosen by Guillaume 2026-11-11): every menu screen, panel and overlay is a page
   of a rally co-driver's notebook, built from `scripts/paper.gd` (cream ruled `Sheet`, navy `INK`, white
-  index cards, tape, stamps, tulip bend diagrams, highlighter). On paper, write blue text in
-  `Paper.ACCENT_INK` (the light `#4fb6ff` is for the highlighter, button shadows and tower caps) and
-  coin amounts in `Paper.COIN_INK`; `Paper.ink_of()` darkens a HUD colour for paper. The race HUD and the
+  index cards, tape, stamps, tulip bend diagrams, grey marker). On paper, write in `Paper.INK` (the main
+  button's block shadow is `Paper.SHADE`) and coin amounts in `Paper.COIN_INK`; `Paper.ink_of()` darkens a HUD colour for paper. The race HUD and the
   full-screen award / world-unlock shows stay dark. Containers lay out every child, so tape on a
   container is drawn with `Paper.draw_tape()` in a `draw` callback, not added as a `Tape` child.
   The page lies on the desk: a slight tilt, the live world visible round it (home is a smaller sheet
-  with the Track of the day as a separate photo). Handwritten notes use `Paper.note()` (Caveat, pen
-  blue / pencil grey / red) for asides only, never for something you must read to play. Motion is
-  paper-like: pages slide in (`_land` in `menu.gd`), highlighter strokes draw on, medals are stamped
+  with the Track of the day as a separate photo). Handwritten notes use `Paper.note()` (Caveat, black
+  pen / pencil grey / red) for asides only, never for something you must read to play. Motion is
+  paper-like: pages slide in (`_land` in `menu.gd`), marker strokes draw on, medals are stamped
   (`Stamp.thump()`). Any full-screen container laid over buttons must have
   `mouse_filter = MOUSE_FILTER_IGNORE`, or it eats their taps (the home bookmarks broke that way).
 - Campaign progression: you need Gold (or Pivot) to advance. Gold on an event opens the next one;

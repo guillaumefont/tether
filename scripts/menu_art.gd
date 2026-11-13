@@ -5,9 +5,11 @@ extends RefCounted
 const Medals = preload("res://scripts/medals.gd")
 const Paper = preload("res://scripts/paper.gd")
 
-# The UI accent (titles, buttons, icons, the tower emblem and its loading ring). The cars keep
-# their amber; gold stays for medals and coins only.
-const C_ACCENT := Color("#4fb6ff")
+# The UI has no coloured accent: on dark it is chalk cream (titles, icons, the tower emblem
+# and its loading ring), on paper it is ink. The cars keep their amber; gold stays for medals
+# and coins only.
+const C_ACCENT := Color("#f3efe6")
+const C_ACCENT_DIM := Color("#b3ad9f")   # the second word of the logo on dark
 const C_AMBER := Color("#f2b134")
 const C_ICE := Color("#e6f1f8")
 const C_ICE_DIM := Color("#9fc0d6")
@@ -19,7 +21,7 @@ class Logo extends Control:
 	var font: Font
 	var font_size := 40
 	var t := 0.0
-	var ink := false   # written on the roadbook's paper: ink and dark blue, no shadow
+	var ink := false   # written on the roadbook's paper: ink and soft ink, no shadow
 
 	func _process(dt: float) -> void:
 		if is_visible_in_tree():
@@ -60,13 +62,13 @@ class Logo extends Control:
 		var w1 := font.get_string_size("TETHER ", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 		if ink:
 			draw_string(font, Vector2(x, base), "TETHER", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Paper.INK)
-			draw_string(font, Vector2(x + w1, base), "RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Paper.ACCENT_INK)
+			draw_string(font, Vector2(x + w1, base), "RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Paper.INK_SOFT)
 			return
 		for pass_i in 2:
 			var o := Vector2(0, 3) if pass_i == 0 else Vector2.ZERO
 			var sh := Color(0, 0, 0, 0.35)
 			draw_string(font, Vector2(x, base) + o, "TETHER", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, sh if pass_i == 0 else C_ACCENT)
-			draw_string(font, Vector2(x + w1, base) + o, "RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, sh if pass_i == 0 else C_ICE)
+			draw_string(font, Vector2(x + w1, base) + o, "RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, sh if pass_i == 0 else C_ACCENT_DIM)
 
 	func min_width() -> float:
 		var h := maxf(size.y, custom_minimum_size.y)   # size is still 0 before the first layout
@@ -89,7 +91,7 @@ class Icon extends Control:
 			col = v
 			queue_redraw()
 	var col2 := C_ICE   # second tone (hands of the watch, gem facets...)
-	var ink := false    # drawn on paper: holes and flag squares in paper, snowflake in blue ink
+	var ink := false    # drawn on paper: holes and flag squares in paper, snowflake in ink
 
 	func _chevron(c: Vector2, s: float, dir: float, lw: float) -> void:
 		var d := Vector2(dir, 0)
@@ -106,7 +108,7 @@ class Icon extends Control:
 		var lw := maxf(2.0, s * 0.07)
 		var hole := Paper.CARD if ink else Color("#0d1a26")
 		var pale := Paper.CARD if ink else C_ICE
-		var flake := Paper.ACCENT_INK if ink else C_ICE
+		var flake := Paper.INK if ink else C_ICE
 		match kind:
 			"gear":
 				var r := s * 0.3
@@ -443,7 +445,7 @@ class Splash extends Control:
 		draw_string(font, Vector2(x, base + u * 0.006), "TETHER", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0, 0, 0, 0.4))
 		draw_string(font, Vector2(x + w1, base + u * 0.006), "RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0, 0, 0, 0.4))
 		draw_string(font, Vector2(x, base), "TETHER", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, C_ACCENT)
-		draw_string(font, Vector2(x + w1, base), "RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, C_ICE)
+		draw_string(font, Vector2(x + w1, base), "RACING", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, C_ACCENT_DIM)
 
 	# the emblem: tower with its spinning rotor, the car lapping it on its tether, and the ring
 	# round them that doubles as the loading indicator. `prog` 0..1 fills the ring in amber from

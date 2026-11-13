@@ -8,7 +8,7 @@ var race = null           # when set, car dots are drawn (minimap)
 var bg := false
 var mini := false          # menu miniature: thicker road, no start line clutter
 var dim := false           # locked card
-var ink := false           # drawn on the roadbook paper: the road as an ink outline, towers in ice blue
+var ink := false           # drawn on the roadbook paper: the road as an ink outline, towers as ink rings
 
 func set_track(t: TrackData) -> void:
 	track = t
@@ -66,7 +66,7 @@ func _draw() -> void:
 		draw_colored_polygon(PackedVector2Array([p + n * hw, p + n * hw + d * gl, p - n * hw + d * gl, p - n * hw]), Color("#06100f"))
 	if race == null:
 		for a in track.anchors:
-			draw_circle(a.pos * sc + off, 2.5, Color("#4fb6ff"))
+			draw_circle(a.pos * sc + off, 2.5, Color("#f3efe6"))
 		var st := track.point_at(track.start_s)
 		var n2 := TrackData.perp(st["dir"]) * TrackData.HW * sc
 		var sp: Vector2 = st["pos"] * sc + off
@@ -81,7 +81,7 @@ func _draw() -> void:
 			draw_circle(c.pos * sc + off, 4.5 if c.human >= 0 else 3.0, c.color)
 
 # the roadbook drawing: the road as two ink edges (bridges drawn over with a thicker deck),
-# jump gaps left blank, towers as ice-blue dots, the start line as a dash across
+# jump gaps left blank, towers as chalk dots, the start line as a dash across
 func _draw_ink(pts: PackedVector2Array, sc: float, off: Vector2, w: float) -> void:
 	const INK := Color("#15222e")
 	const PAPER := Color("#fbf8f1")
@@ -133,7 +133,7 @@ func _draw_ink(pts: PackedVector2Array, sc: float, off: Vector2, w: float) -> vo
 	var tr := clampf(w * 0.24, 2.5, 7.0)
 	for a in track.anchors:
 		draw_circle(a.pos * sc + off, tr, INK)
-		draw_circle(a.pos * sc + off, tr * 0.62, Color("#4fb6ff"))
+		draw_circle(a.pos * sc + off, tr * 0.62, Color("#fbf8f1"))
 	var st := track.point_at(track.start_s)
 	var n2 := TrackData.perp(st["dir"]) * (TrackData.HW * sc + edge)
 	var sp: Vector2 = st["pos"] * sc + off

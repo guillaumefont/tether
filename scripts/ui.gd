@@ -1,6 +1,6 @@
 # Menus, HUD, big centre text, results and minimap. Built in code so the layout
 # adapts to any phone screen. Menus, panels and overlays wear the Roadbook look (paper.gd:
-# cream paper, navy ink, ice-blue highlighter); the race HUD stays dark over the track.
+# cream paper, navy ink, grey marker); the race HUD stays dark over the track.
 extends CanvasLayer
 
 const TrackData = preload("res://scripts/track.gd")
@@ -41,7 +41,7 @@ const MINIMAP := 110.0
 const C_PANEL := Color(0.035, 0.075, 0.082, 0.92)
 const C_FG := Color("#f3efe6")
 const C_MUTED := Color("#9fb3b0")
-const C_ACCENT := Color("#4fb6ff")   # UI accent, same as Art.C_ACCENT
+const C_ACCENT := Color("#f3efe6")   # no coloured accent: chalk cream on dark, same as Art.C_ACCENT
 const C_COIN := Color("#f2b134")     # coin amounts stay gold
 const C_GAIN := Color("#5fd38d")   # time gained on a record (same green as the lap delta)
 const C_ASPHALT := Color("#393e46")
@@ -211,8 +211,8 @@ func _make_theme() -> Theme:
 	# roadbook: white index-card buttons outlined in ink, cream paper panels
 	t.set_stylebox("normal", "Button", sb.call(Paper.CARD, Paper.INK, 2))
 	t.set_stylebox("hover", "Button", sb.call(Paper.CARD.darkened(0.04), Paper.INK, 2))
-	t.set_stylebox("pressed", "Button", sb.call(Paper.CARD.darkened(0.04), Paper.ACCENT_INK, 3))
-	t.set_stylebox("hover_pressed", "Button", sb.call(Paper.CARD.darkened(0.04), Paper.ACCENT_INK, 3))
+	t.set_stylebox("pressed", "Button", sb.call(Paper.CARD.darkened(0.04), Paper.INK, 3))
+	t.set_stylebox("hover_pressed", "Button", sb.call(Paper.CARD.darkened(0.04), Paper.INK, 3))
 	t.set_stylebox("focus", "Button", StyleBoxEmpty.new())
 	for st in ["normal", "hover", "pressed", "hover_pressed"]:
 		(t.get_stylebox(st, "Button") as StyleBoxFlat).set_corner_radius_all(2)
@@ -385,7 +385,7 @@ func set_tile_on(b: Button, on: bool) -> void:
 	_tile_look(b, b.get_meta("look"), on)
 
 func _tile_look(b: Button, look: String, on: bool) -> void:
-	# roadbook: "go" is solid ink with an ice-blue block shadow, "card" a white index card
+	# roadbook: "go" is solid ink with a grey block shadow, "card" a white index card
 	# outlined in ink, and a selected card is filled in ink like a ticked box
 	var go := look == "go"
 	var filled := go or on
@@ -397,7 +397,7 @@ func _tile_look(b: Button, look: String, on: bool) -> void:
 			# pressed into the paper: the shadow closes up
 			sbx = Paper.go_box(lit, 1 if down else (4 if go else 3))
 		else:
-			sbx = Paper.box(Paper.CARD.darkened(0.05) if lit else Paper.CARD, Paper.ACCENT_INK if down else Paper.INK, 3 if down else 2, 3)
+			sbx = Paper.box(Paper.CARD.darkened(0.05) if lit else Paper.CARD, Paper.INK if down else Paper.INK, 3 if down else 2, 3)
 		if st == "disabled":
 			sbx.bg_color = Color(Paper.PAPER_DARK, 0.7)
 			sbx.border_color = Paper.INK_FAINT
@@ -409,7 +409,7 @@ func _tile_look(b: Button, look: String, on: bool) -> void:
 	var ic: Art.Icon = b.get_meta("icon")
 	ic.ink = not filled   # on a filled (ink) button the icon keeps its night-time tones
 	ic.col = ink
-	ic.col2 = Paper.ACCENT if filled else Paper.ACCENT_INK
+	ic.col2 = Paper.CARD if filled else Paper.INK
 	if b.disabled:
 		ic.col = Paper.INK_FAINT
 	if b.has_meta("label"):
@@ -594,7 +594,7 @@ func _volume_row(key: String, title: String) -> Array:
 	var fill := track.duplicate()
 	fill.bg_color = Paper.INK
 	var fill_hi := track.duplicate()
-	fill_hi.bg_color = Paper.ACCENT_INK
+	fill_hi.bg_color = Paper.INK
 	sl.add_theme_stylebox_override("slider", track)
 	sl.add_theme_stylebox_override("grabber_area", fill)
 	sl.add_theme_stylebox_override("grabber_area_highlight", fill_hi)
@@ -662,7 +662,7 @@ func _set_quality_btn(b: Button, v: int) -> void:
 	var l: Label = b.get_meta("label")
 	l.text = "GRAPHICS  %s" % Settings.QUALITY_NAMES[v]
 	var ic: Art.Icon = b.get_meta("icon")
-	ic.col = Paper.ACCENT_INK if v > 0 else Paper.INK_FAINT
+	ic.col = Paper.INK if v > 0 else Paper.INK_FAINT
 
 func set_options(o: Dictionary, opts: Dictionary) -> void:
 	_set_quality_btn(o["quality"], int(opts.get("quality", 1)))
@@ -1015,8 +1015,8 @@ func show_streak(n: int) -> void:
 		streak.offset_top += lap_note.get_content_height() + 4.0
 	streak.offset_bottom = streak.offset_top + 40.0
 	streak.text = "CLEAN  ×%d" % n
-	# bluer and bigger as the run of clean bends grows
-	var col: Color = Art.C_ICE.lerp(C_ACCENT, clampf((n - 2) / 6.0, 0.0, 1.0))
+	# brighter and bigger as the run of clean bends grows
+	var col: Color = Color(C_ACCENT, 0.75).lerp(C_ACCENT, clampf((n - 2) / 6.0, 0.0, 1.0))
 	streak.add_theme_color_override("font_color", col)
 	streak.pivot_offset = Vector2(streak.size.x * 0.5, 20.0)
 	if _streak_tw:
@@ -1094,7 +1094,7 @@ func _build_coach() -> void:
 	vb.add_child(_coach_title)
 	_coach_body = _label("", 15, Paper.INK, f_med)
 	vb.add_child(_coach_body)
-	_coach_foot = _label("", 14, Paper.ACCENT_INK, f_bold)
+	_coach_foot = _label("", 14, Paper.INK, f_bold)
 	_coach_foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	vb.add_child(_coach_foot)
 	coach.visible = false
@@ -1169,7 +1169,7 @@ func show_results(title: String, rows: Array, note: String, has_next := false, c
 		var hl: bool = row.get("hl", false)
 		var cells: Array = row["cells"]
 		for k in cells.size():
-			var l := _label(str(cells[k]), 16, Paper.ACCENT_INK if hl else Paper.INK, f_bold if hl else f_med)
+			var l := _label(str(cells[k]), 16, Paper.INK if hl else Paper.INK, f_bold if hl else f_med)
 			l.autowrap_mode = TextServer.AUTOWRAP_OFF
 			if k == cells.size() - 1:
 				l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
