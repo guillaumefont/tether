@@ -100,7 +100,7 @@ func _init() -> void:
 	menu.show_event()
 	await frames(2)
 	await drag(mid, Vector2(300, 0))
-	check(menu.ev["track"] == t0 and menu.ev["variant"] == "collect", "previous track keeps the chosen variant")
+	check(menu.ev["track"] == t0 and menu.ev["variant"] == "standard", "Time attack swipes stay on the Standard layout")
 	await drag(mid, Vector2(300, 0))
 	await drag(mid, Vector2(300, 0))
 	var t1: int = menu.ev["track"]
