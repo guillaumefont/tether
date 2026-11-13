@@ -54,6 +54,7 @@ godot --headless --path . --script tests/race_results_test.gd # race results = o
 godot --headless --path . --script tests/attack_unlock_test.gd # Time attack tracks open with the campaign
 godot --headless --path . --script tests/colours_test.gd    # no blue accent in UI, icons, splash, web page
 godot --headless --path . --script tests/award_anim_test.gd # every award has a medallion scene that draws
+godot --headless --path . --script tests/names_test.gd       # Tether Rally + traveller mode names, no old names in UI text
 godot --headless --path . --script tests/rivals_test.gd    # rival tiers get harder, stay beatable (~4 min)
 godot --headless --path . --script tests/obstacles_test.gd # the AI's line never touches an Obstacles post
 godot --headless --path . --script tests/camera_test.gd    # low camera shots: off while racing, never inside the land

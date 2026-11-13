@@ -53,7 +53,7 @@ func _init(r: Race) -> void:
 		o["gone"] = true
 	for k in track.tokens.size():
 		car.got[k] = true
-	_show("WELCOME TO TETHER RACING",
+	_show("WELCOME TO TETHER RALLY",
 		"Your car drives itself. You only need one finger: hold to hook a tower, let go to fly out of the bend. Let's try it on a real track.",
 		"TAP TO START", 0.0)
 	wait = "tap"

@@ -1,4 +1,4 @@
-# Tether Racing
+# Tether Rally
 
 An original slingshot-style racer for Android and iOS, built with **Godot 4.7** in 3D.
 Your car only drives straight: hold to hook the nearest spinning tower, let the tether

@@ -14,9 +14,9 @@ t = Image.new("RGBA", (W, H)); d = ImageDraw.Draw(t)
 ft = ImageFont.truetype("fonts/Bungee-Regular.ttf", 138)
 fs = ImageFont.truetype("fonts/ChakraPetch-Medium.ttf", 76)
 x = 114
-bb = d.textbbox((0, 0), "TETHER RACING", font=ft); ty = 772 - bb[1]
-d.text((x + 7, ty + 7), "TETHER RACING", font=ft, fill=(20, 22, 30, 230))
-d.text((x, ty), "TETHER RACING", font=ft, fill=(0xf2, 0xb1, 0x34, 255))
+bb = d.textbbox((0, 0), "TETHER RALLY", font=ft); ty = 772 - bb[1]
+d.text((x + 7, ty + 7), "TETHER RALLY", font=ft, fill=(20, 22, 30, 230))
+d.text((x, ty), "TETHER RALLY", font=ft, fill=(0xf2, 0xb1, 0x34, 255))
 bb = d.textbbox((0, 0), "Hook. Swing. Slide.", font=fs); sy = 890 - bb[1]
 d.text((x + 8, sy), "Hook. Swing. Slide.", font=fs, fill=(255, 255, 255, 255))
 im = Image.alpha_composite(im, t)

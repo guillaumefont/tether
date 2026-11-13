@@ -303,7 +303,7 @@ func _tile(it: Dictionary) -> Button:
 
 static func _short_req(it: Dictionary) -> String:
 	var u: Dictionary = it["unlock"]
-	if u.has("world"): return String(Campaign.CHAPTERS[u["world"]]["theme"]).capitalize() + " world"
+	if u.has("world"): return String(Campaign.CHAPTERS[u["world"]]["theme"]).capitalize() + " leg"
 	return ""
 
 # A small drawing of an item: a paint blob with its finish, a car from above wearing a

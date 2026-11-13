@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tether Racing soundtrack, composed and synthesised in code.
+"""Tether Rally soundtrack, composed and synthesised in code.
 
 Every note, sound and effect here is generated from scratch (oscillators, FM,
 noise), so the music is fully original and owned by the project. Nothing is

@@ -435,7 +435,7 @@ func show_home() -> void:
 	vb.add_child(sub)
 	_rule(vb)
 	# bookmark tabs: Awards, Garage, Settings
-	var cup := _bookmark("trophy", Color("#e6d9b8"), "Awards", show_awards)
+	var cup := _bookmark("trophy", Color("#e6d9b8"), "Passport", show_awards)
 	if Awards.ready_count() > 0:   # awards waiting to be collected: the cup gives a little hop now and then
 		var ic: Control = cup.get_meta("icon")
 		ic.pivot_offset = ic.custom_minimum_size * 0.5
@@ -459,14 +459,14 @@ func show_home() -> void:
 		if Campaign.cleared(i): cleared += 1
 	var first := _first_open_event()
 	var next_name: String = Themes.get_theme(Campaign.CHAPTERS[Campaign.chapter_of(first)]["theme"])["name"]
-	lines.add_child(_road_line(1, "flag", "CAMPAIGN", "%d / %d events  ·  next: %s, event %d" % [cleared, Campaign.count(), next_name, first - Campaign.chapter_start(Campaign.chapter_of(first)) + 1],
+	lines.add_child(_road_line(1, "flag", "ROAD TRIP", "%d / %d stops  ·  next: %s, stop %d" % [cleared, Campaign.count(), next_name, first - Campaign.chapter_start(Campaign.chapter_of(first)) + 1],
 		func(): kind = "campaign"; world = -1; show_list(), true))
 	var n_open := Campaign.attack_tracks().size()
-	var ta_sub := "%d tracks  ·  4 variants  ·  chase your ghost" % n_open if n_open == Defs.TRACKS.size() \
-		else "%d / %d tracks open  ·  the campaign opens more" % [n_open, Defs.TRACKS.size()]
-	lines.add_child(_road_line(2, "watch", "TIME ATTACK", ta_sub,
+	var ta_sub := "%d stages  ·  4 variants  ·  chase your ghost" % n_open if n_open == Defs.TRACKS.size() \
+		else "%d / %d stages open  ·  the Road Trip opens more" % [n_open, Defs.TRACKS.size()]
+	lines.add_child(_road_line(2, "watch", "SPECIAL STAGES", ta_sub,
 		func(): kind = "attack"; _list_scroll.erase(kind); show_list()))
-	lines.add_child(_road_line(3, "duel", "2 PLAYERS", "One phone, two thumbs",
+	lines.add_child(_road_line(3, "duel", "TWO FOR THE ROAD", "One phone, two thumbs",
 		func(): kind = "versus"; _list_scroll.erase(kind); show_list()))
 	# a line of advice, handwritten under the lines
 	var tip := Paper.note("Hook the tower into the bend, let go when the nose points out!", 22 if tall or _short() else 25)
@@ -538,7 +538,7 @@ func _daily_banner() -> Button:
 	head.add_theme_constant_override("separation", 6)
 	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	head.add_child(_icon(p["variant"], 18))
-	var hl: Label = ui._label("TRACK OF THE DAY", 12, C_MUTED, ui.f_bold)
+	var hl: Label = ui._label("DAILY DETOUR", 12, C_MUTED, ui.f_bold)
 	hl.autowrap_mode = TextServer.AUTOWRAP_OFF
 	head.add_child(hl)
 	tv.add_child(head)
@@ -642,7 +642,7 @@ func _first_open_event() -> int:
 func show_garage() -> void:
 	screen = "garage"
 	var vb := _frame()
-	var gsub := "Looks only, same car" if ui.is_portrait() else "Looks only, same car  ·  earn coins with medals, awards and the Track of the day"
+	var gsub := "Looks only, same car" if ui.is_portrait() else "Looks only, same car  ·  earn coins with medals, Passport stamps and the Daily Detour"
 	var hb := _header(vb, "Garage", gsub, func(): go_back())
 	var coins: Button = ui.icon_button("coin", str(Wallet.coins()), "card", false, 50)
 	coins.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -657,7 +657,7 @@ func show_garage() -> void:
 func show_awards() -> void:
 	screen = "awards"
 	var vb := _frame()
-	var hb := _header(vb, "Awards", _awards_sub(), func(): go_back())
+	var hb := _header(vb, "Passport", _awards_sub(), func(): go_back())
 	var coins: Button = ui.icon_button("coin", str(Wallet.coins()), "card", false, 50)
 	coins.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hb.add_child(coins)
@@ -799,12 +799,12 @@ func show_list() -> void:
 		return
 	screen = "list"
 	var vb := _frame()
-	var title := "Time attack" if kind == "attack" else "2-player race"
+	var title := "Special Stages" if kind == "attack" else "Two for the Road"
 	var order := _track_order()
 	var open := Campaign.attack_tracks()
 	var sub := "%d tracks  ·  pick one" % Defs.TRACKS.size()
 	if kind == "attack" and open.size() < Defs.TRACKS.size():
-		sub = "%d / %d tracks open  ·  the campaign opens the rest" % [open.size(), Defs.TRACKS.size()]
+		sub = "%d / %d stages open  ·  the Road Trip opens the rest" % [open.size(), Defs.TRACKS.size()]
 	var tall: bool = ui.is_portrait()
 	_header(vb, title, sub, func(): go_back())
 	var list := VBoxContainer.new()
@@ -862,7 +862,7 @@ func _show_campaign() -> void:
 	var cleared := 0
 	for i in Campaign.count():
 		if Campaign.cleared(i): cleared += 1
-	_header(vb, "Campaign", "%d / %d events cleared with Gold  ·  Gold opens the next event" % [cleared, Campaign.count()] if not tall else "%d / %d events cleared" % [cleared, Campaign.count()], func(): go_back())
+	_header(vb, "Road Trip", "%d / %d stops cleared with Gold  ·  Gold opens the next stop" % [cleared, Campaign.count()] if not tall else "%d / %d stops cleared" % [cleared, Campaign.count()], func(): go_back())
 	var split: BoxContainer = VBoxContainer.new() if tall else HBoxContainer.new()
 	split.add_theme_constant_override("separation", 0 if tall else 22)
 	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -891,7 +891,7 @@ func _show_campaign() -> void:
 	var hv := VBoxContainer.new()
 	hv.add_theme_constant_override("separation", -2)
 	hv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var cap: Label = ui._label("WORLD %d  ·  %s" % [world + 1, String(ch["name"]).to_upper()], 12, C_MUTED, ui.f_bold)
+	var cap: Label = ui._label("LEG %d  ·  %s" % [world + 1, String(ch["name"]).to_upper()], 12, C_MUTED, ui.f_bold)
 	cap.autowrap_mode = TextServer.AUTOWRAP_OFF
 	hv.add_child(cap)
 	var wt: Label = ui._label(String(Themes.get_theme(ch["theme"])["name"]).to_upper(), 22 if tall else 26, C_FG, ui.f_display)
@@ -949,7 +949,7 @@ func _show_worlds() -> void:
 	var cleared := 0
 	for i in Campaign.count():
 		if Campaign.cleared(i): cleared += 1
-	_header(vb, "Campaign", "Pick a world  ·  %d / %d events cleared with Gold" % [cleared, Campaign.count()], func(): go_back())
+	_header(vb, "Road Trip", "Pick a leg  ·  %d / %d stops cleared with Gold" % [cleared, Campaign.count()], func(): go_back())
 	var g := GridContainer.new()
 	g.columns = 2 if tall else 4
 	g.add_theme_constant_override("h_separation", 18 if tall else 26)
@@ -992,7 +992,7 @@ func _world_photo(c: int, playing: bool, tall: bool) -> Button:
 	pic.modulate = Color.WHITE if open else Color(0.5, 0.5, 0.5)
 	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.add_child(pic)
-	var cap: Label = ui._label("WORLD %d" % (c + 1), 11, C_MUTED, ui.f_bold)
+	var cap: Label = ui._label("LEG %d" % (c + 1), 11, C_MUTED, ui.f_bold)
 	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.add_child(cap)
 	var name: Label = ui._label(String(Themes.get_theme(theme)["name"]).to_upper(), 17 if tall else 20, C_FG if open else C_MUTED, ui.f_display)
@@ -1276,7 +1276,7 @@ func _track_card(i: int, num: int, open := true) -> Button:
 	if not open:
 		var fe := Campaign.first_event_of(i)
 		var c := Campaign.chapter_of(fe)
-		note = "Opens with %s, event %d" % [Themes.get_theme(Campaign.CHAPTERS[c]["theme"])["name"], fe - Campaign.chapter_start(c) + 1]
+		note = "Opens with %s, stop %d" % [Themes.get_theme(Campaign.CHAPTERS[c]["theme"])["name"], fe - Campaign.chapter_start(c) + 1]
 	var b := _card(i, name.to_upper(), note, best, not open, num)
 	if not open:
 		b.disabled = true
@@ -1304,15 +1304,15 @@ func show_event() -> void:
 	match ev["kind"]:
 		"campaign":
 			var c := Campaign.chapter_of(ev["idx"])
-			sub = "%s  ·  event %d of %d  ·  %s" % [Themes.get_theme(Campaign.CHAPTERS[c]["theme"])["name"], ev["idx"] - Campaign.chapter_start(c) + 1, Campaign.chapter_size(c), _tag(ev["variant"], ev["mode"])]
+			sub = "%s  ·  stop %d of %d  ·  %s" % [Themes.get_theme(Campaign.CHAPTERS[c]["theme"])["name"], ev["idx"] - Campaign.chapter_start(c) + 1, Campaign.chapter_size(c), _tag(ev["variant"], ev["mode"])]
 			if ev["mode"] == "race":
 				sub += "  ·  %s rivals" % Rivals.tier_name(Rivals.campaign_tier(c))
-		"attack": sub = "Time attack  ·  %d laps" % int(d.get("laps", 3))
+		"attack": sub = "Special Stage  ·  %d laps" % int(d.get("laps", 3))
 		"daily":
 			var paid := Daily.paid_tier()
-			sub = "Track of the day  ·  %s  ·  %s" % [_variant_name(ev["variant"]),
+			sub = "Daily Detour  ·  %s  ·  %s" % [_variant_name(ev["variant"]),
 				"+%d coins, +%d per medal" % [Daily.BASE, Daily.PER_TIER] if paid < 0 else "done today, a better medal pays +%d" % Daily.PER_TIER]
-		"versus": sub = "2-player race  ·  %d laps" % int(d.get("laps", 3))
+		"versus": sub = "Two for the Road  ·  %d laps" % int(d.get("laps", 3))
 	_header(vb, d["name"], sub, func(): go_back())
 	var tall: bool = ui.is_portrait()
 	var row: BoxContainer = VBoxContainer.new() if tall else HBoxContainer.new()
@@ -1365,7 +1365,7 @@ func show_event() -> void:
 			var open := Campaign.theme_unlocked(t)
 			var tb: Button = ui.icon_button(t if open else "lock", String(Themes.get_theme(t)["name"]).to_upper(), "card", true, 54 if tall else 58)
 			tb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			tb.tooltip_text = Themes.get_theme(t)["name"] if open else "Finish its campaign world to unlock"
+			tb.tooltip_text = Themes.get_theme(t)["name"] if open else "Finish its Road Trip leg to unlock"
 			tb.disabled = not open
 			ui.set_tile_on(tb, t == ev.get("theme", ""))
 			tb.pressed.connect(func(): ev["theme"] = t; attack_theme = t; show_event())
@@ -1385,12 +1385,12 @@ func show_event() -> void:
 			var rec := Records.get_best(key)
 			line = ("Your best %s: %s" % ["score" if ev["variant"] == "collect" else "lap", ui.fmt2(rec)]) if rec > 0.0 else "No time yet. Beat a target to win its medal."
 			if gold_to_advance():
-				line += " Gold opens the next event."
+				line += " Gold opens the next stop."
 		else:
 			labels = ["3rd", "2nd", "1st", "win +%d s" % int(Medals.RACE_TOP_GAP)]
 			line = "Race 3 rivals. Finish on the podium for a medal."
 			if gold_to_advance():
-				line = "Race 3 rivals. Win for Gold: it opens the next event."
+				line = "Race 3 rivals. Win for Gold: it opens the next stop."
 		var ms := MedalStrip.new()
 		ms.ink = true
 		ms.font = ui.f_bold
