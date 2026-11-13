@@ -44,6 +44,7 @@ godot --headless --path . --script tests/sim_test.gd     # AI finishes every tra
 godot --headless --path . --script tests/levels_test.gd  # bends stay level, medal times, campaign
 godot --headless --path . --script tests/hook_test.gd    # hooking picks the current bend's tower
 godot --headless --path . --script tests/swipe_test.gd   # menu lists scroll, event swipe flips, tap opens
+godot --headless --path . --script tests/home_tabs_test.gd # home bookmark tabs on screen and tappable on a phone
 godot --headless --path . --script tests/pause_test.gd   # pause page stays short, options on its Settings page
 godot --headless --path . --script tests/wall_test.gd    # a car on the road edge always gets off it again
 godot --headless --path . --script tests/tutorial_test.gd  # the first-launch tutorial can be finished
@@ -72,6 +73,9 @@ new node given the same `name` gets renamed; tag nodes a test looks for with `se
 Also in a `SceneTree` test: a node added to `root` only gets `_ready()` after `await process_frame`
 (see `tests/camera_test.gd`), and a runtime error stops the test function before `quit()`, so the run
 hangs instead of failing. Wrap local runs in `timeout`.
+A headless run lays the UI out for 640 logical pixels (desktop); to test at a phone's size set
+`main.ui._uh = 450` and then change `root.size` (or call `ui._apply_scale()`), as `tests/home_tabs_test.gd`
+does. Test with a long save too (four-digit coins, every medal kind): the home page grows with its content.
 
 Screenshots without a GPU: `xvfb-run -a godot --rendering-driver opengl3 --path . --resolution 1280x720 -- <demo flag>`
 with `SHOT_DIR=<dir>`. Demo flags in `scripts/main.gd`: `--demo=`, `--tutorial-demo`, `--cine-demo=` (camera shots).
