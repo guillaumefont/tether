@@ -1,5 +1,7 @@
 # Tether Rally
 
+**Play the latest `main` build:** [in your browser](https://guillaumefont.github.io/tether-rally/) · [Android APK](https://guillaumefont.github.io/tether-rally/tether-racing.apk)
+
 An original slingshot-style racer for Android and iOS, built with **Godot 4.7** in 3D.
 Your car only drives straight: hold to hook the nearest spinning tower, let the tether
 whip you round the bend, release to slide out down the next straight.
