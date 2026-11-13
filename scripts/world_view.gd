@@ -763,14 +763,11 @@ void fragment() {
 		m = step(0.3, f);
 		c = mix(bar_col, bar2_col, hash(vec2(floor(q.x / 30.0), 3.0)));
 	} else if (kind == 2) {
-		// sandstone slab pierced with round openings in staggered rows
-		float row = floor(q.x / 46.0);
-		vec2 cell = vec2(q.x, q.y + mod(row, 2.0) * 23.0);
-		vec2 d = mod(cell, 46.0) - 23.0;
-		float r = length(d);
-		m = step(21.0, r);
-		c = mix(bar_col, bar2_col, smoothstep(19.0, 23.0, r) * 0.0 + step(r, 23.0) * 0.6);
-		c *= 0.94 + 0.12 * hash(floor(q / 46.0));
+		// carved sandstone lattice
+		float u = fract((q.x + q.y) / 34.0);
+		float v = fract((q.x - q.y) / 34.0);
+		m = max(step(u, 0.2), step(v, 0.2));
+		c = mix(bar_col, bar2_col, step(u, 0.2));
 	} else {
 		// steel grating
 		float u = fract(q.x / 20.0);
