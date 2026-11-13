@@ -15,7 +15,7 @@ const Paper = preload("res://scripts/paper.gd")
 # written on the roadbook paper (see paper.gd)
 const C_FG := Paper.INK
 const C_MUTED := Paper.INK_SOFT
-const C_ACCENT := Paper.ACCENT_INK
+const C_ACCENT := Paper.INK
 const C_COIN := Paper.COIN_INK
 const Themes = preload("res://scripts/themes.gd")
 const Settings = preload("res://scripts/settings.gd")

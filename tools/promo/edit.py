@@ -34,7 +34,7 @@ DEFAULT_PLAN = {
 TITLE_FONT = os.path.join(ROOT, "fonts/Bungee-Regular.ttf")
 BODY_FONT = os.path.join(ROOT, "fonts/ChakraPetch-Bold.ttf")
 LOGO = os.path.join(ROOT, "icons/splash.png")
-ACCENT = "0x4fb6ff"   # UI accent (ice blue)
+ACCENT = "0xf3efe6"   # UI accent (chalk cream, no coloured accent)
 BG = "0x06121b"
 
 

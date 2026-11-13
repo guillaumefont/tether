@@ -38,6 +38,8 @@ jobs:
         run: ./godot --headless --path . --script tests/medals_test.gd
       - name: Race results follow the finish line (Twin Bend case)
         run: ./godot --headless --path . --script tests/race_results_test.gd
+      - name: No blue accent in the UI or icon (Ice Blue case)
+        run: ./godot --headless --path . --script tests/colours_test.gd
       - name: Award medallions all draw
         run: ./godot --headless --path . --script tests/award_anim_test.gd
       - name: Rival tiers are balanced

@@ -40,7 +40,7 @@ const C_BG_BOT := Color(0.02, 0.06, 0.10, 0.34)
 const C_CARD := Paper.CARD
 const C_FG := Paper.INK
 const C_MUTED := Paper.INK_SOFT
-const C_ACCENT := Paper.ACCENT_INK   # the ice blue, dark enough to read on paper
+const C_ACCENT := Paper.INK   # no coloured accent: emphasis is ink (bolder, boxed)
 const C_COIN := Paper.COIN_INK       # coin amounts: gold, inked
 const MODE_NAMES := { "trial": "Time trial", "race": "Race" }
 
@@ -298,7 +298,7 @@ func _bookmark(icon: String, tint: Color, tip: String, cb: Callable) -> Button:
 		sb.shadow_offset = Vector2(2, 2)
 		sb.content_margin_left = 8
 		if st.contains("pressed"):
-			sb.border_color = Paper.ACCENT_INK
+			sb.border_color = Paper.INK
 			sb.border_width_right = 3
 		b.add_theme_stylebox_override(st, sb)
 	var ic: Art.Icon = b.get_meta("icon")
@@ -331,7 +331,7 @@ func _icon(kind_: String, sz: float, col := Paper.INK) -> Art.Icon:
 	ic.kind = kind_
 	ic.ink = true
 	ic.col = col
-	ic.col2 = Paper.ACCENT_INK
+	ic.col2 = Paper.INK
 	ic.custom_minimum_size = Vector2(sz, sz)
 	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -362,21 +362,21 @@ func _header(vb: VBoxContainer, title: String, sub: String, back: Callable) -> H
 	_rule(vb)
 	return hb
 
-# a white index card lying on the page, outlined in ink; pressed, the outline turns blue;
+# a white index card lying on the page, outlined in ink; pressed, the outline thickens;
 # locked, it is a greyer card pencilled in faintly
 func _card_style(b: Button, locked := false) -> void:
 	for st in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
 		var down: bool = st.contains("pressed")
-		var s := Paper.box(C_CARD.darkened(0.04) if st.begins_with("hover") else C_CARD, Paper.ACCENT_INK if down else Paper.INK, 3 if down else 2, 3)
+		var s := Paper.box(C_CARD.darkened(0.04) if st.begins_with("hover") else C_CARD, Paper.INK, 3 if down else 2, 3)
 		if locked:
 			s = Paper.box(Paper.PAPER_DARK, Paper.INK_FAINT, 2, 0)
 		b.add_theme_stylebox_override(st, s)
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 
-# a photo print lying on the desk: white border, a soft shadow; pressed, a blue edge
+# a photo print lying on the desk: white border, a soft shadow; pressed, an ink edge
 func _photo_style(b: Button) -> void:
 	for st in ["normal", "hover", "pressed", "hover_pressed"]:
-		var s := Paper.box(Color("#fdfcf8") if not st.begins_with("hover") else Color("#f4f1ea"), Paper.ACCENT_INK, 3 if st.contains("pressed") else 0, 8)
+		var s := Paper.box(Color("#fdfcf8") if not st.begins_with("hover") else Color("#f4f1ea"), Paper.INK, 3 if st.contains("pressed") else 0, 8)
 		s.shadow_offset = Vector2(2, 5)
 		b.add_theme_stylebox_override(st, s)
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
@@ -385,7 +385,7 @@ func _photo_style(b: Button) -> void:
 func _line_style(b: Button) -> void:
 	for st in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
 		var s := StyleBoxFlat.new()
-		s.bg_color = Color(Paper.ACCENT, 0.22) if st.contains("pressed") else (Color(Paper.INK, 0.04) if st.begins_with("hover") else Color(0, 0, 0, 0))
+		s.bg_color = Paper.HL if st.contains("pressed") else (Color(Paper.INK, 0.04) if st.begins_with("hover") else Color(0, 0, 0, 0))
 		s.border_color = Paper.INK
 		s.border_width_bottom = 2
 		b.add_theme_stylebox_override(st, s)
@@ -432,7 +432,7 @@ func show_home() -> void:
 	vb.add_child(sub)
 	_rule(vb)
 	# bookmark tabs: Awards, Garage, Settings
-	var cup := _bookmark("trophy", Color("#d8e8f2"), "Awards", show_awards)
+	var cup := _bookmark("trophy", Color("#e6d9b8"), "Awards", show_awards)
 	if Awards.ready_count() > 0:   # awards waiting to be collected: the cup gives a little hop now and then
 		var ic: Control = cup.get_meta("icon")
 		ic.pivot_offset = ic.custom_minimum_size * 0.5
@@ -445,7 +445,7 @@ func show_home() -> void:
 		hop.tween_property(ic, "rotation", 0.0, 0.08)
 		hop.tween_property(ic, "scale", Vector2.ONE, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_bookmark("car", Paper.CARD, "Garage", show_garage)
-	_bookmark("gear", Color("#c9d1d6"), "Settings", func(): settings_pressed.emit())
+	_bookmark("gear", Color("#d4d1c9"), "Settings", func(): settings_pressed.emit())
 	# the three modes as numbered roadbook lines
 	var lines := VBoxContainer.new()
 	lines.add_theme_constant_override("separation", 0)
@@ -760,9 +760,9 @@ func _award_tile(a: Dictionary, header: HBoxContainer, coins: Button) -> Button:
 	v.add_child(foot)
 	b.add_child(v)
 	if ready:
-		# a slow amber breath so earned tiles catch the eye
+		# a slow breath (the card dims and comes back) so earned tiles catch the eye
 		var tw := b.create_tween().set_loops()
-		tw.tween_property(b, "self_modulate", Color(0.8, 0.92, 1.0), 0.7).set_trans(Tween.TRANS_SINE)
+		tw.tween_property(b, "self_modulate", Color(0.88, 0.88, 0.88), 0.7).set_trans(Tween.TRANS_SINE)
 		tw.tween_property(b, "self_modulate", Color.WHITE, 0.7).set_trans(Tween.TRANS_SINE)
 		b.pressed.connect(func():
 			var n := Awards.claim(id)
@@ -1003,7 +1003,7 @@ func _world_photo(c: int, playing: bool, tall: bool) -> Button:
 	elif done:
 		var st := Paper.Stamp.new()
 		st.text = "DONE"
-		st.col = Paper.ACCENT_INK
+		st.col = Paper.INK
 		st.font = ui.f_display
 		st.anchor_left = 1.0; st.anchor_right = 1.0
 		st.offset_left = -84; st.offset_right = -12; st.offset_top = 16; st.offset_bottom = 88
@@ -1089,7 +1089,7 @@ func _world_tab(c: int, tall: bool) -> Button:
 	if open and Campaign.chapter_done(c) and not tall:
 		var st := Paper.Stamp.new()   # a finished world: a small DONE stamp on its tab
 		st.text = "DONE"
-		st.col = Paper.ACCENT_INK
+		st.col = Paper.INK
 		st.font = ui.f_display
 		st.anchor_left = 1.0; st.anchor_right = 1.0
 		st.offset_left = -52; st.offset_right = -6; st.offset_top = 10; st.offset_bottom = 56
@@ -1375,7 +1375,7 @@ func show_event() -> void:
 	right.add_child(fill)
 	var go: Button = ui.icon_button("play", "START", "go", false, 58)
 	go.pressed.connect(func(): start_event.emit(ev.duplicate()))
-	# room for its ice-blue block shadow: the swipe pager clips at its edges
+	# room for its block shadow: the swipe pager clips at its edges
 	var gm := MarginContainer.new()
 	gm.add_theme_constant_override("margin_right", 5)
 	gm.add_theme_constant_override("margin_bottom", 5)
