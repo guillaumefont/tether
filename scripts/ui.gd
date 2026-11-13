@@ -464,6 +464,8 @@ var pause_ov: Control
 var pause_panel: PanelContainer
 var _pause_sub: Label
 var _pause_o: Dictionary
+var _pause_main: VBoxContainer   # the short page: where you are + Menu / Restart / Resume + Settings
+var _pause_set: VBoxContainer    # the Settings page, one tap away, with a Back button
 
 func _build_pause() -> void:
 	var r := _overlay()
@@ -472,19 +474,34 @@ func _build_pause() -> void:
 	pause_panel = r[2]
 	_frost_panel(pause_panel)
 	var vb: VBoxContainer = r[1]
-	_pause_sub = _panel_header(vb, "PAUSED")
+	_pause_main = VBoxContainer.new()
+	_pause_main.add_theme_constant_override("separation", 12)
+	vb.add_child(_pause_main)
+	_pause_sub = _panel_header(_pause_main, "PAUSED")
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
-	vb.add_child(row)
+	_pause_main.add_child(row)
 	for a in [["exit", "home", "MENU", "card"], ["restart", "retry", "RESTART", "card"], ["resume", "play", "RESUME", "go"]]:
 		var b := icon_button(a[1], a[2], a[3])
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var what: String = a[0]
 		b.pressed.connect(func(): pause_action.emit(what))
 		row.add_child(b)
+	var set_btn := icon_button("gear", "SETTINGS", "card", false, 50)
+	set_btn.focus_mode = Control.FOCUS_NONE
+	set_btn.pressed.connect(func(): show_pause_settings(true))
+	_pause_main.add_child(set_btn)
+
+	_pause_set = VBoxContainer.new()
+	_pause_set.add_theme_constant_override("separation", 12)
+	vb.add_child(_pause_set)
+	_panel_header(_pause_set, "SETTINGS").text = "Saved on this device"
 	_pause_o = _make_options()
-	vb.add_child(_pause_o["box"])
-	vb.add_child(_label("Esc or the back button also resumes.", 12, Paper.INK_SOFT))
+	_pause_set.add_child(_pause_o["box"])
+	var back := icon_button("back", "BACK", "go", false, 56)
+	back.pressed.connect(func(): show_pause_settings(false))
+	_pause_set.add_child(back)
+	_pause_set.visible = false
 	pause_ov.visible = false
 
 	pause_btn = Button.new()
@@ -511,7 +528,16 @@ func _build_pause() -> void:
 func show_pause(sub: String, opts: Dictionary) -> void:
 	_pause_sub.text = sub
 	set_options(_pause_o, opts)
+	show_pause_settings(false)   # always opens on the short page
 	pause_ov.visible = true
+
+# flip the pause panel between its short page and the Settings page
+func show_pause_settings(on: bool) -> void:
+	_pause_main.visible = not on
+	_pause_set.visible = on
+
+func pause_settings_open() -> bool:
+	return pause_ov.visible and _pause_set.visible
 
 func set_pause_opts(opts: Dictionary) -> void:
 	set_options(_pause_o, opts)
