@@ -48,6 +48,8 @@ jobs:
         run: ./godot --headless --path . --script tests/attack_unlock_test.gd
       - name: Time attack is Standard only, one world chip
         run: ./godot --headless --path . --script tests/time_attack_test.gd
+      - name: Off the Map custom run (hidden link, every pick open, nothing saved)
+        run: ./godot --headless --path . --script tests/custom_game_test.gd
       - name: No blue accent in the UI or icon (Ice Blue case)
         run: ./godot --headless --path . --script tests/colours_test.gd
       - name: Traveller names, no old arcade names

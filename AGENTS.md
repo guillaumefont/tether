@@ -57,6 +57,7 @@ godot --headless --path . --script tests/medals_test.gd     # medals saved and s
 godot --headless --path . --script tests/race_results_test.gd # race results = order over the line, medal from it
 godot --headless --path . --script tests/attack_unlock_test.gd # Time attack tracks open with the campaign
 godot --headless --path . --script tests/time_attack_test.gd  # Time attack: Standard only, world chip
+godot --headless --path . --script tests/custom_game_test.gd # Off the Map: hidden link, all picks open, saves nothing
 godot --headless --path . --script tests/colours_test.gd    # no blue accent in UI, icons, splash, web page
 godot --headless --path . --script tests/award_anim_test.gd # every award has a medallion scene that draws
 godot --headless --path . --script tests/names_test.gd       # Tether Rally + traveller mode names, no old names in UI text
@@ -150,6 +151,14 @@ Only redo the ones where the change is visible, and put before/after images in t
   chip in the track screen's header that steps through opened worlds (`_world_chip`), not a grid.
   Its list cards are the road and its name, with the Standard medal once won (`Menu.attack_medal()`).
   Covered by `tests/time_attack_test.gd`.
+- Off the Map (Guillaume, 2026-11-14): a custom run (any track, world, mode, layout, lap count,
+  rival level), reached from a small taped paper scrap on the home page ("off the map", under the
+  Track of the day photo in landscape, at the page foot in portrait), not a numbered line.
+  Nothing is locked there, and nothing is saved from it: no record, ghost, medal, coin, award or
+  Daily Detour (`main.gd` `free_run`; the event's `kind` is "custom"). Anything new that saves or
+  pays after a run must skip a free run too. Picks are kept in settings (`Menu.custom_picks()`).
+  Covered by `tests/custom_game_test.gd`. In `main.gd`, never name a member `free`: it shadows
+  `Object.free()` and the script fails to parse.
 - Race vs Time trial scoring: a Race is won by the first car over the line; time penalties (+1 s per
   post, +0.25 s per missed gem) only exist in Time trial (`Race.OBS_PEN`, `TOKEN_PEN`). Anything that
   says where the player finished (results title, HUD position, medal) reads `Race.result()` /

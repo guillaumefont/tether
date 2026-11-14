@@ -32,6 +32,10 @@ var variant := "standard"
 var mode := "trial"          # single player Time Trial is the default
 var humans := 1
 var rival_tier := Rivals.VERSUS_TIER  # campaign races: the tier of the event's world
+# Off the Map (a custom run from the menu): practice only. Nothing is saved (records, ghosts,
+# medals, coins, awards, the Daily Detour), so it can never open the Road Trip by the back door.
+var free_run := false
+var free_laps := 0   # Off the Map: laps picked, 0 = the track's own count
 var catch_up := false                 # campaign races only
 var track: TrackData
 var race: Race = null
@@ -151,6 +155,8 @@ func _make_track() -> TrackData:
 # ---------------------------------------------------------------- tutorial
 func start_tutorial() -> void:
 	tutorial = true
+	free_run = false
+	free_laps = 0
 	track_idx = 0
 	variant = "standard"
 	mode = "trial"
@@ -344,7 +350,11 @@ func _start_event(ev: Dictionary) -> void:
 	mode = ev["mode"]
 	humans = ev["humans"]
 	var camp: bool = ev.get("kind", "") == "campaign"
+	free_run = ev.get("kind", "") == "custom"
+	free_laps = int(ev.get("laps", 0)) if free_run else 0
 	rival_tier = Rivals.campaign_tier(Campaign.chapter_of(ev["idx"])) if camp else Rivals.VERSUS_TIER
+	if free_run:
+		rival_tier = clampi(int(ev.get("tier", Rivals.VERSUS_TIER)), 0, Rivals.TIERS.size() - 1)
 	catch_up = camp
 	view.theme_override = String(ev.get("theme", ""))
 	_load_race()
@@ -361,6 +371,8 @@ func new_race(built: TrackData = null) -> void:
 		view.build(track)
 	view.visible = true
 	race = Race.new(track, mode, humans)
+	if free_laps > 0:
+		race.laps_total = free_laps
 	race.set_rivals(rival_tier, catch_up)
 	themes_before = Themes.ORDER.filter(func(t): return Campaign.theme_unlocked(t))
 	worlds_before = range(Campaign.CHAPTERS.size()).filter(func(c): return Campaign.chapter_done(c))
@@ -391,6 +403,9 @@ func new_race(built: TrackData = null) -> void:
 		_sync_tutorial()
 	else:
 		medal_targets = Medals.targets(Defs.TRACKS[track_idx]["name"], variant) if mode == "trial" else []
+		# Collect targets are for the whole race: with another lap count they mean nothing
+		if free_run and track.tokens.size() > 0 and race.laps_total != int(cur_def().get("laps", 3)):
+			medal_targets = []
 		ui.build_hud(race, track.tokens.size(), medal_targets.any(func(t): return t > 0.0))
 		_update_hud()   # zeroes on screen from the countdown on
 	ui.minimap.race = race
@@ -660,7 +675,7 @@ func _trial_lap(c, lt: float, trace: Array) -> void:
 	var collect := track.tokens.size() > 0
 	var prev := Records.get_lap(rec_key()) if collect else Records.get_best(rec_key())
 	var has_prev := prev > 0.0
-	if not has_prev or lt < prev:
+	if not free_run and (not has_prev or lt < prev):   # Off the Map compares, never saves
 		if collect:
 			Records.set_lap(rec_key(), lt)
 		else:
@@ -683,6 +698,8 @@ func _trial_lap(c, lt: float, trace: Array) -> void:
 
 func _trial_run(c) -> void:
 	var prev := Records.get_best(rec_key())
+	if free_run:
+		return
 	if prev <= 0.0 or c.finish_time < prev:
 		Records.set_best(rec_key(), c.finish_time)
 		Records.award_medal(rec_key(), "trial", Medals.trial_tier(cur_def()["name"], variant, c.finish_time))
@@ -713,7 +730,11 @@ func _update_hud() -> void:
 			ui.set_hud("lap%d" % c.human, "%d/%d" % [clampi(c.lap, 1, race.laps_total), race.laps_total])
 			ui.set_hud("pos%d" % c.human, _ordinal(st.find(c) + 1))
 	ui.set_hud("time", UI.fmt_hud(race.clock))
-	if race.humans == 1:
+	if race.humans == 1 and free_run:   # no medal to race for: say who you're up against
+		ui.set_hud_tag("target", "Rivals", UI.C_MUTED)
+		ui.set_hud("target", Rivals.tier_name(rival_tier).to_upper())
+		ui.set_hud_color("target", UI.C_MUTED)
+	elif race.humans == 1:
 		var me = race.cars.filter(func(c): return c.human >= 0)[0]
 		var t := Medals.race_tier(st.find(me) + 1, 0.0)
 		var col: Color = Medals.COLORS[t - 1] if t > 0 else UI.C_MUTED
@@ -766,6 +787,9 @@ func _show_results() -> void:
 	phase = "results"
 	ui.hide_streak()
 	ui.hide_lap_note()
+	if free_run:
+		_show_free_results()
+		return
 	var name: String = Defs.TRACKS[track_idx]["name"]
 	if mode == "trial":
 		var c = race.cars[0]
@@ -832,6 +856,34 @@ func _show_results() -> void:
 	ui.show_results(title, rows2, _unlock_note() + rnote, not ui.menu.next_event().is_empty(), 3, rrewards)
 	_world_moment()
 	_award_moment()
+
+# Off the Map results: the run itself (fastest lap or the finishing order), compared with the
+# record, and nothing paid or saved
+func _show_free_results() -> void:
+	var name: String = Defs.TRACKS[track_idx]["name"]
+	var note := "Off the Map: a free run. Records, medals and coins come from the Road Trip and Special Stages."
+	if mode == "trial":
+		var c = race.cars[0]
+		var rows: Array = []
+		if c.best_lap > 0.0:
+			rows.append({ "cells": ["Fastest lap", "", UI.fmt2(c.best_lap)], "hl": true })
+		if track.obstacles.size() > 0:
+			rows.append({ "cells": ["Posts hit", "", "%d (+%d s)" % [c.hits, c.hits]] })
+		if track.tokens.size() > 0:
+			rows.append({ "cells": ["Gems", "", "%d/%d" % [c.gems, track.tokens.size()]] })
+			rows.append({ "cells": ["Score", "", UI.fmt2(c.finish_time)], "hl": true })
+		var rec := Records.get_best(rec_key())
+		if rec > 0.0 and track.tokens.size() == 0:
+			note = "Your record on %s: %s. " % [name, UI.fmt2(rec)] + note
+		ui.show_results("Free run", rows, note, false, 3, [])
+		return
+	var res := race.result()
+	var st: Array = res["standings"]
+	var rows2: Array = []
+	for k in st.size():
+		var c = st[k]
+		rows2.append({ "cells": [str(k + 1), c.name, ("best " + UI.fmt(c.best_lap) + "   " if c.best_lap > 0.0 else "") + (UI.fmt(c.finish_time) if c.finished else "DNF")], "hl": c.human >= 0, "color": c.color })
+	ui.show_results(res["title"], rows2, note, false, 3, [])
 
 # mirror the tutorial's card and big word onto the UI when they change
 func _sync_tutorial() -> void:
