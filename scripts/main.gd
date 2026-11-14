@@ -57,6 +57,8 @@ var attract: Race = null
 var attract_t := 0.0
 var attract_i := -1
 const ATTRACT_SECS := 45.0
+# the browser page's loading ring fills to this while the game downloads (web/shell_template.html)
+const WEB_HANDOFF := 0.5
 
 func _ready() -> void:
 	view = WorldView.new()
@@ -67,7 +69,6 @@ func _ready() -> void:
 	add_child(ui)
 	sfx.set_volumes(Settings.get_opt("music_vol"), Settings.get_opt("sfx_vol"))
 	view.set_quality(Settings.get_opt("quality"))
-	sfx.prewarm(_streak_notes() + _reward_notes() + _all_world_notes() + _all_award_notes())
 	ui.option_changed.connect(_option_changed)
 	ui.reward_popped.connect(_reward_popped)
 	ui.menu.settings_pressed.connect(func(): ui.show_settings(_options(true)))
@@ -86,7 +87,21 @@ func _ready() -> void:
 	ui.awards_pressed.connect(func(): _with_loading("", _to_awards))
 	ui.skip_pressed.connect(_leave_tutorial)
 	ui.tutorial_pressed.connect(start_tutorial)
-	ui.show_loading("")   # picks up from the boot splash, fades out once the menu scene is up
+	# There is no boot splash image (project.godot: boot_splash/show_image=false): the game
+	# opens straight onto the loading screen. When the app boots, draw it first and do the
+	# slow setup (sound synthesis, the menu's track) behind it; a test that instantiates
+	# main itself gets everything set up before _ready returns.
+	ui.show_loading("")
+	if booting():
+		if OS.has_feature("web"):
+			ui.set_loading_progress(WEB_HANDOFF, true)   # the page's ring stopped there
+		await get_tree().process_frame
+		await get_tree().process_frame
+		_loading_drawn()
+	sfx.prewarm(_streak_notes() + _reward_notes() + _all_world_notes() + _all_award_notes())
+	ui.set_loading_progress(0.75 if OS.has_feature("web") else 0.5)
+	if booting():
+		await get_tree().process_frame   # let the ring move before the menu's track is built
 	_to_menu()
 	# automation hooks for headless screenshots: --  --demo=<track>,<variant>,<seconds>[,<mode>,<players>,<theme>]
 	var scripted := false
@@ -108,6 +123,18 @@ func _ready() -> void:
 		start_tutorial()
 	else:
 		_fade_in_later()
+
+# true when this is the app starting up (main is the scene the engine launched), not a
+# test or tool that instantiated main.tscn itself
+func booting() -> bool:
+	return get_tree().current_scene == self
+
+# the in-game loading screen is on screen: in the browser, take down the page's own
+# loading screen (web/shell_template.html keeps it up until this call, so the player
+# goes from one loading screen to the other with nothing in between)
+func _loading_drawn() -> void:
+	if OS.has_feature("web"):
+		JavaScriptBridge.eval("window.tetherReady && window.tetherReady()", true)
 
 func rec_key() -> String:
 	return Records.key(cur_def()["name"], variant)

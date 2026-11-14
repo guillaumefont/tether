@@ -97,6 +97,14 @@ const engine = new Engine(GODOT_CONFIG);
   document.getElementById("tip").textContent = TIPS[Math.floor(Math.random() * TIPS.length)];
   status.style.visibility = "visible";
 
+  let handedOver = false;
+  window.tetherReady = function () {
+    if (handedOver) return;
+    handedOver = true;
+    status.style.opacity = "0";
+    setTimeout(function () { status.style.visibility = "hidden"; }, 450);
+  };
+
   function fail(err) {
     const msg = err && err.message ? err.message : String(err);
     console.error(msg);
@@ -117,15 +125,18 @@ const engine = new Engine(GODOT_CONFIG);
   engine.startGame({
     onProgress: function (current, total) {
       if (current > 0 && total > 0) {
-        progress(Math.max(0.04, Math.min(1, current / total)));
+        // the download fills the first half of the ring; the game's own loading screen
+        // picks up at half (main.gd WEB_HANDOFF) and fills the rest
+        progress(Math.max(0.04, Math.min(1, current / total)) * 0.5);
       } else {
         ring.classList.add("spin");
       }
     },
   }).then(function () {
-    progress(1);
-    status.style.opacity = "0";
-    setTimeout(function () { status.style.visibility = "hidden"; }, 450);
+    // the engine is up; keep this page until the game has drawn its own loading screen
+    // (main.gd calls window.tetherReady), so nothing shows in between the two
+    progress(0.5);
+    setTimeout(window.tetherReady, 15000);   // safety net if that call never comes
   }, fail);
 }());
 </script>

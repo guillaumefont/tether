@@ -47,6 +47,7 @@ godot --headless --path . --script tests/levels_test.gd  # bends stay level, med
 godot --headless --path . --script tests/hook_test.gd    # hooking picks the current bend's tower
 godot --headless --path . --script tests/swipe_test.gd   # menu lists scroll, event swipe flips, tap opens
 godot --headless --path . --script tests/home_tabs_test.gd # home bookmark tabs on screen and tappable on a phone
+godot --headless --path . --script tests/boot_test.gd    # launch: no splash picture, loading screen drawn first
 godot --headless --path . --script tests/pause_test.gd   # pause page stays short, options on its Settings page
 godot --headless --path . --script tests/wall_test.gd    # a car on the road edge always gets off it again
 godot --headless --path . --script tests/tutorial_test.gd  # the first-launch tutorial can be finished
@@ -113,6 +114,12 @@ Only redo the ones where the change is visible, and put before/after images in t
   bring back a blue (or any new) accent colour; `tests/colours_test.gd` checks it. Icons/splash PNGs
   and the logo PNG inside `web/shell.html` must follow `icon.svg` and `menu_art.gd` when these change
   (`tools/gen_splash.gd`, `tools/gen_web_shell.gd`; the icon PNGs are PIL edits of `icon.svg`'s look).
+- Launch (Guillaume, 2026-11-14): no static splash. The engine's boot splash shows no picture
+  (`boot_splash/show_image=false`), only the night colour `#06121b`, and `main.gd` draws the loading
+  screen before any slow setup (`booting()`); put new startup work after those frames, never before
+  `ui.show_loading`. In the browser, `web/shell_template.html` keeps its loading page up until the game
+  calls `window.tetherReady` (its ring fills to `WEB_HANDOFF`, the game's ring goes on from there).
+  `icons/splash.png` is kept for the store/icon set but no longer shows at launch.
 - Menu look ("Roadbook", chosen by Guillaume 2026-11-11): every menu screen, panel and overlay is a page
   of a rally co-driver's notebook, built from `scripts/paper.gd` (cream ruled `Sheet`, navy `INK`, white
   index cards, tape, stamps, tulip bend diagrams, grey marker). On paper, write in `Paper.INK` (the main
