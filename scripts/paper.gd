@@ -143,16 +143,17 @@ class Sheet extends PanelContainer:
 # a strip of tape holding a photo or a note onto the page (child of the thing it holds)
 class Tape extends Control:
 	var tilt := -0.08
+	var col := TAPE   # clear tape; a world's photo may be held by tape in that world's colour
 
 	func _init() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 		custom_minimum_size = Vector2(84, 22)
 
 	func _draw() -> void:
-		paint(self, size * 0.5, size.x, size.y, tilt)
+		paint(self, size * 0.5, size.x, size.y, tilt, col)
 
 	# torn ends, a little crooked
-	static func paint(ci: CanvasItem, c: Vector2, length: float, width: float, angle: float) -> void:
+	static func paint(ci: CanvasItem, c: Vector2, length: float, width: float, angle: float, col := TAPE) -> void:
 		var w := length * 0.5
 		var h := width * 0.5
 		var d := Vector2.from_angle(angle)
@@ -162,12 +163,12 @@ class Tape extends Control:
 			pts.append(c - d * (w - (2.0 if k % 2 else 0.0)) + n * lerpf(-h, h, k / 4.0))
 		for k in 5:
 			pts.append(c + d * (w - (2.0 if k % 2 else 0.0)) + n * lerpf(h, -h, k / 4.0))
-		ci.draw_colored_polygon(pts, TAPE)
+		ci.draw_colored_polygon(pts, col)
 
 # a strip of tape, drawn straight onto any canvas item (for containers, which would lay out
 # a Tape child)
-static func draw_tape(ci: CanvasItem, c: Vector2, length: float, width: float, tilt: float) -> void:
-	Tape.paint(ci, c, length, width, tilt)
+static func draw_tape(ci: CanvasItem, c: Vector2, length: float, width: float, tilt: float, col := TAPE) -> void:
+	Tape.paint(ci, c, length, width, tilt, col)
 
 # a steel paper clip over the top edge of a page (`at` = its top end)
 static func draw_clip(ci: CanvasItem, at: Vector2, angle: float) -> void:
@@ -185,6 +186,7 @@ class Stamp extends Control:
 			queue_redraw()
 	var font: Font
 	var tilt := -0.21
+	var fill := Color.TRANSPARENT   # a coloured stamp (a medal in its own metal): the disc inside the ring
 
 	func _init() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -205,7 +207,7 @@ class Stamp extends Control:
 	func _draw() -> void:
 		var c := size * 0.5
 		var r := minf(size.x, size.y) * 0.5 - 2.0
-		draw_circle(c, r, Color(col, 0.1))
+		draw_circle(c, r, fill if fill.a > 0.0 else Color(col, 0.1))
 		draw_arc(c, r, 0, TAU, 48, col, maxf(2.0, r * 0.07), true)
 		draw_arc(c, r * 0.82, 0, TAU, 48, Color(col, 0.7), maxf(1.0, r * 0.03), true)
 		if font == null:
@@ -249,6 +251,7 @@ class Tulip extends Control:
 		draw_circle(tw, s * 0.065, CARD)
 
 # a word with a highlighter stroke behind it: put the label inside, the band is drawn first
+# (grey marker; a world's name may set_meta("band", colour) for that world's own colour)
 static func highlight(l: Label) -> MarginContainer:
 	var m := MarginContainer.new()
 	m.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -260,7 +263,7 @@ static func highlight(l: Label) -> MarginContainer:
 	m.set_meta("t", 0.0)
 	m.draw.connect(func():
 		var h := m.size.y
-		m.draw_rect(Rect2(0, h * 0.42, m.size.x * float(m.get_meta("t")), h * 0.46), HL))
+		m.draw_rect(Rect2(0, h * 0.42, m.size.x * float(m.get_meta("t")), h * 0.46), m.get_meta("band", HL)))
 	m.tree_entered.connect(func():
 		var tw := m.create_tween()
 		tw.tween_interval(0.4)   # once the page has mostly landed, so the stroke is seen
