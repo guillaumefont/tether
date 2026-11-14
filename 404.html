@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tether Rally</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+         background: #10161f; color: #e8eef5; font: 16px/1.5 system-ui, sans-serif; text-align: center; }
+  main { max-width: 26rem; padding: 0 16px; }
+  a { color: #7cc4ff; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Tether Rally</h1>
+  <p id="msg">This page doesn't exist.</p>
+  <p><a id="go" href="./">Go to the latest build</a></p>
+</main>
+<script>
+// GitHub Pages serves this page for every missing path. PR previews (/pr/N/...) are
+// deleted when the PR is merged or closed, so an old preview link (web or APK) is sent
+// to the same file in the latest main build instead of a dead end.
+(function () {
+  var p = location.pathname;
+  var i = p.indexOf("/pr/");
+  var base = i >= 0 ? p.slice(0, i + 1) : p.replace(/[^/]*$/, "");
+  var rest = i >= 0 ? p.slice(i + 4).replace(/^[^/]*\/?/, "") : "";
+  var target = base + (rest === "tether-racing.apk" ? rest : "");
+  document.getElementById("go").href = target;
+  if (i >= 0) {
+    document.getElementById("msg").textContent =
+      "This preview was removed when its pull request was merged or closed. Opening the latest build instead…";
+    setTimeout(function () { location.replace(target); }, 1500);
+  }
+})();
+</script>
+</body>
+</html>
