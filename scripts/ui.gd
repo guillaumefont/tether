@@ -843,8 +843,10 @@ func show_loading(title: String, theme := "") -> void:
 	_load_art.progress = 0.08
 	_place_loading()
 
-func set_loading_progress(v: float) -> void:
+func set_loading_progress(v: float, snap := false) -> void:
 	_load_art.progress = v
+	if snap:
+		_load_art.shown = v   # drawn there at once, no easing up from empty
 
 func hide_loading() -> void:
 	if not loading.visible:
