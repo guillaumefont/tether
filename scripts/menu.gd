@@ -46,7 +46,7 @@ const MODE_NAMES := { "trial": "Time trial", "race": "Race" }
 
 var ui                      # the UI CanvasLayer (fonts, helpers)
 var screen := "home"
-var kind := "campaign"      # campaign | attack | versus
+var kind := "campaign"      # campaign | attack | versus | custom
 var focus := -1            # list item (track or campaign event) to bring into view on the next list
 var _list_scroll := {}     # list key -> how far that list was scrolled
 var world := -1            # campaign: the world (chapter) whose events are listed, -1 = the world picker
@@ -235,12 +235,15 @@ func _frame() -> VBoxContainer:
 		_tabs = VBoxContainer.new()
 		_tabs.add_theme_constant_override("separation", 6)
 		desk.add_child(_tabs)
+		var tabs_box := _tabs   # this page's tabs (the member moves on when the page is rebuilt)
 		var place_tabs := func():
+			if not is_instance_valid(tabs_box) or not is_instance_valid(sheet):
+				return
 			var r := Rect2(m.position + sheet.position, sheet.size)
 			# never past the screen's right edge, whatever width the page ends up with
 			var right: float = get_viewport_rect().size.x - ui.safe_insets()["r"]
-			_tabs.position = Vector2(minf(r.end.x - 10.0, right - (TAB_W + 8)), r.position.y + (110.0 if tall else 70.0))
-			_tabs.size = Vector2(TAB_W + 8, 0)
+			tabs_box.position = Vector2(minf(r.end.x - 10.0, right - (TAB_W + 8)), r.position.y + (110.0 if tall else 70.0))
+			tabs_box.size = Vector2(TAB_W + 8, 0)
 		sheet.item_rect_changed.connect(place_tabs)
 		m.item_rect_changed.connect(place_tabs)
 		sheet.margin_x = 26.0
@@ -274,7 +277,7 @@ var _page: Paper.Sheet
 var _last_screen := ""
 
 static func _depth(scr: String) -> int:
-	return { "home": 0, "worlds": 1, "list": 2, "garage": 1, "awards": 1, "event": 3 }.get(scr, 1)
+	return { "home": 0, "worlds": 1, "list": 2, "garage": 1, "awards": 1, "event": 3, "custom": 1 }.get(scr, 1)
 
 # the page slides onto the desk and settles (only when the screen changes, not on a rebuild)
 func _land(desk: Control) -> void:
@@ -493,6 +496,15 @@ func show_home() -> void:
 	tm.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tm.add_child(tip)
 	vb.add_child(tm)
+	# Off the Map: a custom run (any track, world, mode, layout, laps), kept a little out of
+	# the way on a scrap of paper rather than a numbered line
+	var off := _off_map_link(tall)
+	if tall:   # at the foot of the page, right-hand corner
+		var orow := HBoxContainer.new()
+		orow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		orow.alignment = BoxContainer.ALIGNMENT_END
+		orow.add_child(off)
+		vb.add_child(orow)
 	# a tick in the margin beside the line to play next
 	var tick := Paper.note("✓", 34, Paper.PEN, 0.0)
 	tick.position = Vector2(-34, 6)
@@ -510,6 +522,11 @@ func show_home() -> void:
 		daily.offset_right = -40 - int(ins["r"])
 		daily.offset_top = 112 + int(ins["t"]); daily.offset_bottom = -110 - int(ins["b"])
 	body.add_child(daily)
+	if not tall:   # landscape: the scrap lies on the desk under the photo
+		off.anchor_top = 1.0; off.anchor_bottom = 1.0
+		off.offset_top = -98 - int(ins["b"]) + (8 if _short() else 22)
+		off.offset_bottom = off.offset_top + off.custom_minimum_size.y
+		body.add_child(off)
 	# it lies clear of the page and its tabs: under the page (portrait) or right of the
 	# tabs (landscape), however big the page turned out
 	var page := _page
@@ -519,10 +536,39 @@ func show_home() -> void:
 			daily.offset_top = r.end.y + 22.0
 		else:
 			daily.offset_left = r.end.x + TAB_W + 30.0
+			off.offset_left = r.end.x + TAB_W + 46.0
+			off.offset_right = off.offset_left + off.custom_minimum_size.x
 	page.item_rect_changed.connect(place_daily)
 	place_daily.call()
 	daily.rotation = deg_to_rad(3.5 if not tall else 2.5)
 	daily.resized.connect(func(): daily.pivot_offset = daily.size * 0.5)
+
+# the discreet way into Off the Map: a scrap of paper taped down with "off the map ›"
+# pencilled on it, at the foot of the page (portrait) or on the desk under the Track of the
+# day photo (landscape, where the page has no room to spare). Not a numbered line: findable,
+# but out of the way.
+func _off_map_link(tall: bool) -> Button:
+	var b := Button.new()
+	b.focus_mode = Control.FOCUS_NONE
+	b.tooltip_text = "Off the Map: a custom run"
+	b.set_meta("off_map", true)
+	for st in ["normal", "hover", "pressed", "hover_pressed"]:
+		var sb := Paper.box(Paper.CARD.darkened(0.06) if st != "normal" else Paper.CARD, Paper.INK_FAINT, 1, 1 if st.contains("pressed") else 3)
+		sb.content_margin_left = 14; sb.content_margin_right = 14
+		b.add_theme_stylebox_override(st, sb)
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	var l := Paper.note("off the map  ›", 21 if tall or _short() else 23, Paper.PENCIL, 0.0)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	l.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	b.custom_minimum_size = Vector2(l.get_minimum_size().x + 28, maxf(l.get_minimum_size().y + 4, 38.0))
+	b.add_child(l)
+	b.draw.connect(func(): Paper.draw_tape(b, Vector2(b.size.x * 0.5, 1.0), 34.0, 11.0, 0.08))
+	b.rotation = deg_to_rad(-2.5)
+	b.resized.connect(func(): b.pivot_offset = b.size * 0.5)
+	b.pressed.connect(func(): kind = "custom"; _list_scroll.erase("custom"); show_custom())
+	return b
 
 # Track of the day: a photo of its world taped onto the page, its name and what it pays;
 # tap it for its Event screen
@@ -1673,6 +1719,7 @@ func refresh() -> void:
 		"event": show_event()
 		"garage": show_garage()
 		"awards": show_awards()
+		"custom": show_custom()
 
 # a campaign event short of Gold, with a next event in its world that Gold would open
 func gold_to_advance() -> bool:
@@ -1695,7 +1742,7 @@ func next_event() -> Dictionary:
 # back button: event -> list -> home; false on the home screen (the game may then quit)
 func go_back() -> bool:
 	match screen:
-		"garage", "awards":
+		"garage", "awards", "custom":
 			show_home()
 			return true
 		"event":
@@ -1746,3 +1793,171 @@ func chip_world(open: Array) -> String:
 	if attack_theme in open:
 		return attack_theme
 	return open[0]
+
+# ---------------------------------------------------------------- Off the Map (custom run)
+# A free run built from any track, world, mode, layout, lap count and rival level, with
+# nothing locked. It is practice: no records, ghosts, medals, coins or awards are saved,
+# so it never counts toward the Road Trip (main.gd `free_run`). The picks are kept in settings.
+const CUSTOM_MODES := [["trial", "watch", "Time trial"], ["race", "flag", "Race"], ["versus", "duel", "Two players"]]
+const CUSTOM_LAPS := [0, 1, 3, 5, 10]   # 0 = the track's usual count
+
+static func custom_defaults() -> Dictionary:
+	return { "track": 0, "theme": String(Defs.TRACKS[0].get("theme", "snow")), "variant": "standard",
+		"mode": "trial", "laps": 0, "tier": Rivals.VERSUS_TIER }
+
+# the saved picks, each checked against what exists now (a track or variant may be gone)
+static func custom_picks() -> Dictionary:
+	var c := custom_defaults()
+	var saved = preload("res://scripts/settings.gd").get_opt("custom", {})
+	if saved is Dictionary:
+		for k in c:
+			if saved.has(k) and typeof(saved[k]) == typeof(c[k]):
+				c[k] = saved[k]
+	c["track"] = clampi(c["track"], 0, Defs.TRACKS.size() - 1)
+	if not c["theme"] in Themes.ORDER: c["theme"] = custom_defaults()["theme"]
+	if not c["variant"] in Defs.VARIANTS.map(func(v): return v[0]): c["variant"] = "standard"
+	if not c["mode"] in CUSTOM_MODES.map(func(m): return m[0]): c["mode"] = "trial"
+	if not c["laps"] in CUSTOM_LAPS: c["laps"] = 0
+	c["tier"] = clampi(c["tier"], 0, Rivals.TIERS.size() - 1)
+	return c
+
+# the event a set of picks starts
+static func custom_event(c: Dictionary) -> Dictionary:
+	var versus: bool = c["mode"] == "versus"
+	return { "track": c["track"], "variant": c["variant"], "mode": "trial" if c["mode"] == "trial" else "race",
+		"humans": 2 if versus else 1, "kind": "custom", "idx": c["track"], "theme": c["theme"],
+		"laps": int(c["laps"]), "tier": int(c["tier"]) }
+
+static func custom_laps(c: Dictionary) -> int:
+	return int(c["laps"]) if int(c["laps"]) > 0 else int(Defs.TRACKS[c["track"]].get("laps", 3))
+
+var custom := {}
+
+func _custom_set(key: String, v) -> void:
+	custom[key] = v
+	preload("res://scripts/settings.gd").set_opt("custom", custom.duplicate())
+	show_custom()
+
+func show_custom() -> void:
+	screen = "custom"
+	kind = "custom"
+	if custom.is_empty():
+		custom = custom_picks()
+	var c := custom
+	var d: Dictionary = Defs.TRACKS[c["track"]]
+	var vb := _frame()
+	var tall: bool = ui.is_portrait()
+	_header(vb, "Off the Map", "Any road, any world, any way round  ·  a free run: nothing is scored", func(): go_back())
+	var row: BoxContainer = VBoxContainer.new() if tall else HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10 if tall else 18)
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vb.add_child(row)
+	# the road in ink on an index card, with the track's name between two arrows under it
+	var left := VBoxContainer.new()
+	left.add_theme_constant_override("separation", 8)
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left.size_flags_stretch_ratio = 0.8
+	left.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	row.add_child(left)
+	var mpanel := PanelContainer.new()
+	var ps := Paper.box(C_CARD, Paper.INK, 2, 3)
+	ps.set_content_margin_all(10)
+	mpanel.add_theme_stylebox_override("panel", ps)
+	mpanel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	mpanel.custom_minimum_size.y = 110 if tall else 0
+	mpanel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var mp := TrackMap.new()
+	mp.mini = true
+	mp.ink = true
+	mp.set_track(TrackData.new(d, c["variant"]))
+	mp.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mpanel.add_child(mp)
+	left.add_child(mpanel)
+	var nav := HBoxContainer.new()
+	nav.add_theme_constant_override("separation", 8)
+	var n := Defs.TRACKS.size()
+	var prev: Button = ui.icon_button("prev", "", "card", false, 46)
+	prev.tooltip_text = "Previous track"
+	prev.set_meta("custom_track", -1)
+	prev.pressed.connect(func(): _custom_set("track", (int(c["track"]) + n - 1) % n))
+	nav.add_child(prev)
+	var nv := VBoxContainer.new()
+	nv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	nv.add_theme_constant_override("separation", -2)
+	var tn: Label = ui._label(String(d["name"]).to_upper(), 20, C_FG, ui.f_display)
+	tn.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tn.autowrap_mode = TextServer.AUTOWRAP_OFF
+	tn.set_meta("custom_name", true)
+	nv.add_child(tn)
+	var tl: Label = ui._label("%d / %d  ·  %d laps" % [int(c["track"]) + 1, n, custom_laps(c)], 12, C_MUTED, ui.f_bold)
+	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	nv.add_child(tl)
+	nav.add_child(nv)
+	var nxt: Button = ui.icon_button("next", "", "card", false, 46)
+	nxt.tooltip_text = "Next track"
+	nxt.set_meta("custom_track", 1)
+	nxt.pressed.connect(func(): _custom_set("track", (int(c["track"]) + 1) % n))
+	nav.add_child(nxt)
+	left.add_child(nav)
+	# the picks, one row each, in a list that scrolls when the screen is short
+	var right := VBoxContainer.new()
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right.size_flags_vertical = Control.SIZE_FILL if tall else Control.SIZE_EXPAND_FILL
+	right.add_theme_constant_override("separation", 8)
+	row.add_child(right)
+	var opts := VBoxContainer.new()
+	opts.add_theme_constant_override("separation", 6)
+	var th := 50 if tall or _short() else 56
+	_pick_row(opts, "World", Themes.ORDER.map(func(t): return [t, t, String(Themes.get_theme(t)["name"])]), "theme", th)
+	_pick_row(opts, "Mode", CUSTOM_MODES, "mode", th)
+	_pick_row(opts, "Layout", Defs.VARIANTS.map(func(v): return [v[0], v[0], v[1]]), "variant", th)
+	var desc := ""
+	for v in Defs.VARIANTS:
+		if v[0] == c["variant"] and v[0] != "standard": desc = v[2]
+	if desc != "":   # only a layout with a rule of its own needs a word
+		var dl: Label = ui._label(desc, 13, C_MUTED)
+		dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		opts.add_child(dl)
+	_pick_row(opts, "Laps", CUSTOM_LAPS.map(func(k): return [k, "", "Usual" if k == 0 else str(k)]), "laps", 40)
+	if c["mode"] != "trial":
+		_pick_row(opts, "Rivals", range(Rivals.TIERS.size()).map(func(t): return [t, "", Rivals.tier_name(t)]), "tier", 40)
+	var pad := Control.new()
+	pad.custom_minimum_size.y = 4
+	opts.add_child(pad)
+	_scroller = Scroller.new()
+	_scroller.clip_contents = true
+	_scroller.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_scroller.hold(opts)
+	_scroller.set_meta("list", true)   # keeps its scroll while picks rebuild the page
+	if tall:   # portrait: the picks as tall as they are (scrolling only on a short screen), the road takes the rest
+		_scroller.custom_minimum_size.y = minf(opts.get_combined_minimum_size().y, maxf(200.0, get_viewport_rect().size.y - 440.0))
+	right.add_child(_scroller)
+	_scroller.scroll = _list_scroll.get("custom", 0.0)
+	var go: Button = ui.icon_button("play", "START", "go", false, 54 if tall or _short() else 58)
+	go.set_meta("custom_start", true)
+	go.pressed.connect(func(): ev = custom_event(custom); start_event.emit(ev.duplicate()))
+	var gm := MarginContainer.new()
+	gm.add_theme_constant_override("margin_right", 5)
+	gm.add_theme_constant_override("margin_bottom", 5)
+	gm.add_child(go)
+	right.add_child(gm)
+
+# one row of choices: its name in small capitals, then a tile per choice ([value, icon, name]);
+# the picked one is filled in ink like a ticked box
+func _pick_row(parent: VBoxContainer, title: String, choices: Array, key: String, h: int) -> void:
+	parent.add_child(ui._label(title.to_upper(), 12, C_MUTED, ui.f_bold))
+	var g := HBoxContainer.new()
+	g.add_theme_constant_override("separation", 6)
+	for ch in choices:
+		var b: Button = ui.icon_button(ch[1] if ch[1] != "" else "play", String(ch[2]).to_upper(), "card", true, h)
+		if ch[1] == "":   # a word only (laps, rivals)
+			b.get_meta("icon").visible = false
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size.x = 0
+		var lbl: Label = b.get_meta("label")
+		lbl.add_theme_font_size_override("font_size", 11 if ui.is_portrait() else 12)
+		b.set_meta("pick", [key, ch[0]])
+		ui.set_tile_on(b, custom[key] == ch[0])
+		b.pressed.connect(func(): _custom_set(key, ch[0]))
+		g.add_child(b)
+	parent.add_child(g)
