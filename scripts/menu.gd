@@ -923,8 +923,24 @@ func _track_order() -> Array:
 
 # The campaign is one roadbook: a tab per world down the side (across the top in portrait),
 # and the open world's 12 events as numbered lines, each with its track's outline and the
-# medal stamped on it.
+# medal stamped on it. Each world is a coloured divider in the notebook (Guillaume,
+# 2026-11-14: the page looked sad next to the others): the open tab and the page of events
+# behind it share the world's colour, its picture is taped by the title, and medals are
+# stamped in their own metal. The colour comes from the world, never a UI accent.
 const WORLD_TINT := { "snow": Color("#d8e8f2"), "forest": Color("#d3e6c8"), "sand": Color("#eedcb4"), "rock": Color("#d6d0c6") }
+# the world's own deep colour, dark enough to read on its tint (marker under its name)
+const WORLD_INK := { "snow": Color("#5b8fb3"), "forest": Color("#5d9447"), "sand": Color("#c98a3a"), "rock": Color("#8c7462") }
+
+# coloured masking tape in a world's colour, holding that world's photo
+static func world_tape(theme: String) -> Color:
+	return Color(WORLD_INK.get(theme, Paper.INK).lightened(0.2), 0.8)
+
+# a medal stamp on paper: the disc in the medal's metal, ring and letters inked darker
+static func medal_stamp(st: Paper.Stamp, medal: int) -> void:
+	var c: Color = Medals.COLORS[medal - 1]
+	st.text = MEDAL_STAMP[medal - 1]
+	st.col = Paper.ink_of(c).darkened(0.25)
+	st.fill = Color(c.lightened(0.15), 0.85)
 
 func _show_campaign() -> void:
 	if world < 0 or not Campaign.chapter_open(world):
@@ -937,40 +953,59 @@ func _show_campaign() -> void:
 	for i in Campaign.count():
 		if Campaign.cleared(i): cleared += 1
 	_header(vb, "Road Trip", "%d / %d stops cleared with Gold  ·  Gold opens the next stop" % [cleared, Campaign.count()] if not tall else "%d / %d stops cleared" % [cleared, Campaign.count()], func(): go_back())
+	var ch: Dictionary = Campaign.CHAPTERS[world]
+	var theme: String = ch["theme"]
+	var tint: Color = WORLD_TINT.get(theme, Paper.PAPER_DARK)
 	var split: BoxContainer = VBoxContainer.new() if tall else HBoxContainer.new()
-	split.add_theme_constant_override("separation", 0 if tall else 22)
+	split.add_theme_constant_override("separation", 0)
 	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vb.add_child(split)
 	var tabs: BoxContainer = HBoxContainer.new() if tall else VBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 4 if tall else 8)
+	var tm := MarginContainer.new()   # a gap between the shut tabs and the page; the open one bridges it
+	tm.add_theme_constant_override("margin_right" if not tall else "margin_bottom", TAB_GAP)
+	tm.z_index = 1   # the open tab lies over the page's edge, joined to it
 	if not tall:
-		tabs.custom_minimum_size.x = 230
-	split.add_child(tabs)
+		tabs.custom_minimum_size.x = 214
+	tm.add_child(tabs)
+	split.add_child(tm)
 	for c in Campaign.CHAPTERS.size():
 		tabs.add_child(_world_tab(c, tall))
+	# the world's page: its colour, outlined in ink, joined to the open tab
+	var folder := PanelContainer.new()
+	var fs := Paper.box(tint, Paper.INK, 3, 0, 0)
+	fs.content_margin_left = 14 if not tall else 10
+	fs.content_margin_right = 10
+	fs.content_margin_top = 8
+	fs.content_margin_bottom = 4
+	folder.add_theme_stylebox_override("panel", fs)
+	folder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	folder.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	folder.set_meta("world_page", theme)
+	split.add_child(folder)
 	var right := VBoxContainer.new()
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	right.add_theme_constant_override("separation", 4)
-	split.add_child(right)
-	if tall:   # the tabs sit on an ink line, the open one joined to the page under it
-		var ln := ColorRect.new()
-		ln.color = Paper.INK
-		ln.custom_minimum_size.y = 3
-		ln.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		right.add_child(ln)
-	var ch: Dictionary = Campaign.CHAPTERS[world]
+	folder.add_child(right)
 	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 12)
 	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if tall:   # the tabs carry no picture in portrait: a small photo of the world by its name
+		head.add_child(_world_snap(theme, 92, 58))
 	var hv := VBoxContainer.new()
 	hv.add_theme_constant_override("separation", -2)
 	hv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hv.alignment = BoxContainer.ALIGNMENT_CENTER
 	var cap: Label = ui._label("LEG %d  ·  %s" % [world + 1, String(ch["name"]).to_upper()], 12, C_MUTED, ui.f_bold)
 	cap.autowrap_mode = TextServer.AUTOWRAP_OFF
+	cap.clip_text = true
 	hv.add_child(cap)
-	var wt: Label = ui._label(String(Themes.get_theme(ch["theme"])["name"]).to_upper(), 22 if tall else 26, C_FG, ui.f_display)
+	var wt: Label = ui._label(String(Themes.get_theme(theme)["name"]).to_upper(), 22 if tall else 26, C_FG, ui.f_display)
 	wt.autowrap_mode = TextServer.AUTOWRAP_OFF
-	hv.add_child(Paper.highlight(wt))
+	var wh := Paper.highlight(wt)
+	wh.set_meta("band", Color(WORLD_INK.get(theme, Paper.INK), 0.45))   # the world's own marker
+	hv.add_child(wh)
 	head.add_child(hv)
 	var got := Campaign.chapter_golds(world)
 	var hn := Paper.note("%d / %d golds" % [got, Campaign.chapter_size(world)], 22 if tall else 26, Paper.PEN, -0.05)
@@ -978,7 +1013,9 @@ func _show_campaign() -> void:
 	head.add_child(hn)
 	right.add_child(head)
 	var g := GridContainer.new()
-	g.columns = 1 if tall else 2
+	# two columns only where a line keeps room for the longest stop name ("THREE FINGERS");
+	# a phone held sideways (about 800 logical pixels) gets one, roomier, column
+	g.columns = 1 if tall or get_viewport_rect().size.x < 1000.0 else 2
 	g.add_theme_constant_override("h_separation", 26)
 	g.add_theme_constant_override("v_separation", 0)
 	var lines := []
@@ -1084,6 +1121,7 @@ func _world_photo(c: int, playing: bool, tall: bool) -> Button:
 	# a strip of tape at the top, a padlock on a shut world, a stamp on a finished one
 	var tape := Paper.Tape.new()
 	tape.tilt = -0.1 if c % 2 == 0 else 0.08
+	tape.col = world_tape(theme) if open else Paper.TAPE
 	tape.anchor_left = 0.5; tape.anchor_right = 0.5
 	tape.offset_left = -40; tape.offset_right = 40; tape.offset_top = -12; tape.offset_bottom = 12
 	b.add_child(tape)
@@ -1125,8 +1163,30 @@ func _world_photo(c: int, playing: bool, tall: bool) -> Button:
 		_show_campaign())
 	return b
 
-# a world's tab: its picture, name and medals; the open one is joined to the page, a locked
-# one is greyed and can't be tapped
+const TAB_GAP := 8   # between the world tabs and the world's page
+
+# a small photo of a world taped by its name
+func _world_snap(theme: String, w: float, h: float) -> Control:
+	var ph := PanelContainer.new()
+	var ps := Paper.box(Color("#fdfcf8"), Color.TRANSPARENT, 0, 4)
+	ps.set_content_margin_all(4)
+	ph.add_theme_stylebox_override("panel", ps)
+	ph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ph.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var pic := TextureRect.new()
+	pic.texture = WORLD_ART.get(theme, WORLD_ART["snow"])
+	pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	pic.custom_minimum_size = Vector2(w, h)
+	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ph.add_child(pic)
+	ph.draw.connect(func(): Paper.draw_tape(ph, Vector2(ph.size.x * 0.5, 0), 40.0, 13.0, -0.08, world_tape(theme)))
+	ph.rotation = -0.035
+	ph.resized.connect(func(): ph.pivot_offset = ph.size * 0.5)
+	return ph
+
+# a world's tab: its picture, name and medals; the open one is joined to the world's page
+# (same colour, no ink line between them), a locked one is greyed and can't be tapped
 func _world_tab(c: int, tall: bool) -> Button:
 	var theme: String = Campaign.CHAPTERS[c]["theme"]
 	var open := Campaign.chapter_open(c)
@@ -1137,14 +1197,20 @@ func _world_tab(c: int, tall: bool) -> Button:
 	b.disabled = not open
 	var tint: Color = WORLD_TINT.get(theme, Paper.PAPER_DARK)
 	for st in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
-		var sb := Paper.box(tint.darkened(0.05) if st.begins_with("hover") else tint, Paper.INK, 0, 0)
+		var sb := Paper.box(tint.darkened(0.05) if st.begins_with("hover") and not on else tint, Paper.INK, 0, 0)
 		if on:
 			sb.border_color = Paper.INK
-			if tall:
-				sb.border_width_left = 3; sb.border_width_right = 3; sb.border_width_top = 3
-			else:   # outlined in ink and sticking out towards the events
-				sb.set_border_width_all(3)
-				sb.expand_margin_right = 12
+			sb.set_border_width_all(3)
+			if tall:   # open at the bottom, running down over the page's top edge
+				sb.border_width_bottom = 0
+				sb.expand_margin_bottom = TAB_GAP + 3
+			else:      # open on the right, running over the page's left edge
+				sb.border_width_right = 0
+				sb.expand_margin_right = TAB_GAP + 3
+		else:   # a shut tab: its colour a little faded, an ink hairline round it
+			sb.bg_color = tint.lerp(Paper.PAPER, 0.25) if not st.begins_with("hover") else tint
+			sb.border_color = Color(Paper.INK, 0.25)
+			sb.set_border_width_all(1)
 		b.add_theme_stylebox_override(st, sb)
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	if not open:
@@ -1168,7 +1234,7 @@ func _world_tab(c: int, tall: bool) -> Button:
 	v.alignment = BoxContainer.ALIGNMENT_CENTER
 	v.add_theme_constant_override("separation", -2)
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var nl: Label = ui._label(String(Themes.get_theme(theme)["name"]).to_upper(), 11 if tall else 17, C_FG, ui.f_display)
+	var nl: Label = ui._label(String(Themes.get_theme(theme)["name"]).to_upper(), 11 if tall else 16, C_FG, ui.f_display)
 	nl.autowrap_mode = TextServer.AUTOWRAP_OFF
 	if tall: nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(nl)
@@ -1184,7 +1250,7 @@ func _world_tab(c: int, tall: bool) -> Button:
 		st.col = Paper.INK
 		st.font = ui.f_display
 		st.anchor_left = 1.0; st.anchor_right = 1.0
-		st.offset_left = -52; st.offset_right = -6; st.offset_top = 10; st.offset_bottom = 56
+		st.offset_left = -40; st.offset_right = -4; st.offset_top = 26; st.offset_bottom = 62
 		b.add_child(st)
 	b.pressed.connect(func():
 		if c == world:
@@ -1248,8 +1314,7 @@ func _event_line(i: int, tall: bool) -> Button:
 	h.add_child(v)
 	if medal > 0:
 		var st := Paper.Stamp.new()
-		st.text = MEDAL_STAMP[medal - 1]
-		st.col = Paper.ink_of(Medals.COLORS[medal - 1])
+		medal_stamp(st, medal)
 		st.font = ui.f_display
 		st.custom_minimum_size = Vector2(48, 48)
 		st.size_flags_vertical = Control.SIZE_SHRINK_CENTER

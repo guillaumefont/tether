@@ -66,3 +66,5 @@ jobs:
         run: ./godot --headless --path . --script tests/engine_test.gd
       - name: Under a bridge the car stays in sight
         run: ./godot --headless --path . --script tests/underpass_test.gd
+      - name: Road Trip pages wear their world colour
+        run: ./godot --headless --path . --script tests/road_trip_colour_test.gd

@@ -66,6 +66,7 @@ godot --headless --path . --script tests/obstacles_test.gd # the AI's line never
 godot --headless --path . --script tests/camera_test.gd    # low camera shots: off while racing, never inside the land
 godot --headless --path . --script tests/engine_test.gd    # every vehicle has an engine sound that loops cleanly
 godot --headless --path . --script tests/underpass_test.gd # all deck over a lower lane is a see-through window
+godot --headless --path . --script tests/road_trip_colour_test.gd # Road Trip pages in their world's colour, stop names fit
 ```
 
 After changing a track layout, rerun `tools/gen_obstacles.gd` (posts placed off the AI's racing line,
@@ -139,6 +140,12 @@ Only redo the ones where the change is visible, and put before/after images in t
   Gold on all 12 events finishes a world (`Campaign.cleared`, `Campaign.GOLD`). Finished worlds are
   saved as `done_<theme>` flags, so a stricter rule never re-locks a world; an event that already
   has a medal stays playable. Covered by `tests/economy_test.gd`.
+- World colour on paper (Guillaume, 2026-11-14: the Road Trip page "looked sad"): colour on the
+  menus comes from content, never from a UI accent. A world's own colours are `Menu.WORLD_TINT`
+  (pale page/tab) and `Menu.WORLD_INK` (its marker band and its photo tape, `Menu.world_tape()`);
+  medals are stamped filled in their metal (`Menu.medal_stamp()`, `Stamp.fill`). The Road Trip
+  events lie on a page in the open world's tint, joined to its tab like a notebook divider.
+  Landscape on a phone (~800 logical px wide) gets one column of stops: two cut the names.
 - Time attack tracks (Guillaume, 2026-11-13): a track is open in Time attack once a campaign event on
   it is unlocked (`Campaign.attack_tracks()`); shut ones are greyed with a padlock and skipped by the
   swipe. Tracks raced before the rule were kept as `[attack]` flags (`attack_gate`). So every track
